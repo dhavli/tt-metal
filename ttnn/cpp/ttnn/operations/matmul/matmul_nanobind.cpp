@@ -561,13 +561,14 @@ void py_module(nb::module_& mod) {
 
     matmul_multi_core_reuse_multicast_dram_sharded_program_config
         .def(
-            nb::init<std::size_t, std::size_t, std::size_t, std::optional<UnaryWithParam>, std::size_t>(),
+            nb::init<std::size_t, std::size_t, std::size_t, std::optional<UnaryWithParam>, std::size_t, std::size_t>(),
             nb::kw_only(),
             nb::arg("in0_block_w").noconvert(),
             nb::arg("per_core_M").noconvert(),
             nb::arg("per_core_N").noconvert(),
             nb::arg("fused_activation") = nb::none(),
-            nb::arg("num_workers_per_dram_bank") = 1)
+            nb::arg("num_workers_per_dram_bank") = 1,
+            nb::arg("cores_per_bank") = 0)
         .def_rw("in0_block_w", &MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig::in0_block_w, R"doc(
             Block width for both input tensors along the K dimension (shared inner dimension).
 
@@ -608,18 +609,32 @@ void py_module(nb::module_& mod) {
             for one bank use NOC0 and the same allocator-selected DRAM endpoint. The per-bank shard
             width in tiles must equal this value times the reader width.
         )doc")
+        .def_rw(
+            "cores_per_bank",
+            &MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig::cores_per_bank,
+            R"doc(
+            tt-stack 0040 (lift of tt-metal #58922). Number of compute cores per DRAM bank for the multi-core
+            decode variant (0, the default, keeps the single/multi-reader factory). With N > 0 the bank's
+            weight columns are split over N cores placed next to the bank; every core reads the activation
+            straight from its L1 shards, keeps its whole K in fp32 Dest at full-sync capacity, and writes its
+            output columns straight into the width-sharded output. On Blackhole both data-movement RISCs
+            stream the weight (one per NoC). in0_block_w is the number of K tiles per streamed weight block.
+            Requires per_core_M = 1, num_workers_per_dram_bank = 1, no bias, no fused activation, and
+            N <= the per-bank shard width (no K row groups in this lift).
+        )doc")
         .def("__repr__", [](const MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig& config) {
             // Include fused_activation in the repr for full visibility during tracing/debugging.
             std::string fused_activation_repr =
                 config.fused_activation.has_value() ? fmt::format("{}", config.fused_activation.value()) : "None";
             return fmt::format(
                 "MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig(in0_block_w={}, per_core_M={}, per_core_N={}, "
-                "fused_activation={}, num_workers_per_dram_bank={})",
+                "fused_activation={}, num_workers_per_dram_bank={}, cores_per_bank={})",
                 config.in0_block_w,
                 config.per_core_M,
                 config.per_core_N,
                 fused_activation_repr,
-                config.num_workers_per_dram_bank);
+                config.num_workers_per_dram_bank,
+                config.cores_per_bank);
         });
 
     auto matmul_multi_core_reuse_multicast_batched_dram_sharded_program_config =
@@ -1321,6 +1336,10 @@ void py_module(nb::module_& mod) {
             nb::arg("tensor_args"),
             nb::arg("tensor_return_value"),
             nb::arg("core_range_set") = std::nullopt);
+
+    // tt-stack 0040: the multi-core DRAM-sharded decode variant is a Metal 2.0 ProgramSpec factory (no
+    // create_descriptor); bound as a bare class so matmul_select_program_factory can return it.
+    nb::class_<ttnn::prim::MatmulDRAMShardedMulticoreProgramFactory>(mod, "MatmulDRAMShardedMulticoreProgramFactory");
 
     // Bind MatmulMultiCoreReuseBatchedHSDRAMShardedProgramFactory for descriptor creation
     nb::class_<ttnn::prim::MatmulMultiCoreReuseBatchedHSDRAMShardedProgramFactory>(

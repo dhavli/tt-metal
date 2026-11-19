@@ -10,6 +10,7 @@ registries, traces, and paged KV allocation.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -19,7 +20,7 @@ import torch
 
 import ttnn
 
-if os.environ.get("MESH_DEVICE", "").strip() != "T3K":
+if _tt_public_getenv("MESH_DEVICE", "").strip() != "T3K":
     pytest.skip("W6 requires MESH_DEVICE=T3K", allow_module_level=True)
 
 from huggingface_hub import snapshot_download
@@ -38,15 +39,15 @@ _RESIDENT_SLOT = _MAX_BATCH_SIZE - 1
 _RESUME_SLOT = _MAX_BATCH_SIZE - 2
 _RESIDENT_BLOCK_START = _RESIDENT_SLOT * (_MAX_SEQ_LEN // _BLOCK_SIZE)
 _STALE_BLOCK = 750
-_LOGITS_MIN_ROW_PCC = float(os.environ.get("W6_LOGITS_MIN_ROW_PCC", "0.997"))
-_LOGITS_MAX_ABS = float(os.environ.get("W6_LOGITS_MAX_ABS", "1.0"))
-_LOGITS_TOPK = int(os.environ.get("W6_LOGITS_TOPK", "5"))
-_LOGITS_MIN_TOPK_OVERLAP = int(os.environ.get("W6_LOGITS_MIN_TOPK_OVERLAP", "4"))
-_LOGITS_MAX_TOP1_MISMATCHES = int(os.environ.get("W6_LOGITS_MAX_TOP1_MISMATCHES", "1"))
-_LOGITS_MAX_ISCLOSE_FAILURE_FRACTION = float(os.environ.get("W6_LOGITS_MAX_ISCLOSE_FAILURE_FRACTION", "0.005"))
-_LOGITS_ATOL = float(os.environ.get("W6_LOGITS_ATOL", "0.25"))
-_DECODE_MIN_ROW_PCC = float(os.environ.get("W6_DECODE_MIN_ROW_PCC", "0.99"))
-_DECODE_MAX_ABS = float(os.environ.get("W6_DECODE_MAX_ABS", "1.25"))
+_LOGITS_MIN_ROW_PCC = float(_tt_public_getenv("W6_LOGITS_MIN_ROW_PCC", "0.997"))
+_LOGITS_MAX_ABS = float(_tt_public_getenv("W6_LOGITS_MAX_ABS", "1.0"))
+_LOGITS_TOPK = int(_tt_public_getenv("W6_LOGITS_TOPK", "5"))
+_LOGITS_MIN_TOPK_OVERLAP = int(_tt_public_getenv("W6_LOGITS_MIN_TOPK_OVERLAP", "4"))
+_LOGITS_MAX_TOP1_MISMATCHES = int(_tt_public_getenv("W6_LOGITS_MAX_TOP1_MISMATCHES", "1"))
+_LOGITS_MAX_ISCLOSE_FAILURE_FRACTION = float(_tt_public_getenv("W6_LOGITS_MAX_ISCLOSE_FAILURE_FRACTION", "0.005"))
+_LOGITS_ATOL = float(_tt_public_getenv("W6_LOGITS_ATOL", "0.25"))
+_DECODE_MIN_ROW_PCC = float(_tt_public_getenv("W6_DECODE_MIN_ROW_PCC", "0.99"))
+_DECODE_MAX_ABS = float(_tt_public_getenv("W6_DECODE_MAX_ABS", "1.25"))
 
 
 def _mesh_parameter() -> dict:
@@ -72,7 +73,7 @@ pytestmark = pytest.mark.parametrize(
 
 @pytest.fixture(scope="module")
 def local_hf_model(model_location_generator) -> str:
-    requested = os.environ.get("HF_MODEL", _HF_MODEL)
+    requested = _tt_public_getenv("HF_MODEL", _HF_MODEL)
     located = model_location_generator(requested)
     if Path(str(located)).exists():
         return str(located)
@@ -84,7 +85,7 @@ def local_hf_model(model_location_generator) -> str:
 
 @pytest.fixture(scope="module")
 def production_model(local_hf_model, ttnn_mesh_device):
-    previous = os.environ.get("HF_MODEL")
+    previous = _tt_public_getenv("HF_MODEL")
     os.environ["HF_MODEL"] = local_hf_model
     cache_dir = lazy_weight_cache_dir_for_demo(ttnn_mesh_device, _HF_MODEL)
     try:

@@ -9,6 +9,7 @@ Tests that TTNN TtMoe produces matching outputs to TorchMoe reference.
 This validates the full MoE pipeline:
 Gate → Dispatch → Routed Experts → Combine → Split → Add Shared.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import os
@@ -210,7 +211,7 @@ def run_model(
     weights_type = "realistic" if run_pcc_check else "dummy"
     # Base dir is env-overridable so concurrent users don't collide on a single shared /tmp path
     # (the default /tmp/{variant}_moe_cache is world-visible but owner-writable → cross-user EACCES).
-    _moe_cache_base = os.environ.get("DS_MOE_CACHE_DIR", f"/tmp/{variant.name}_moe_cache")
+    _moe_cache_base = _tt_public_getenv("DS_MOE_CACHE_DIR", f"/tmp/{variant.name}_moe_cache")
     # Every dim that shapes a cached tensor goes in the key unconditionally: filenames carry dtype
     # and layout but not shape, so a colliding key is a silent wrong-weights load.
     moe_cache_dir = Path(

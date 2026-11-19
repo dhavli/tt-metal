@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import functools
 import itertools
 import math
@@ -68,7 +69,7 @@ def _ltx_checkpoint_cached(filename: str) -> bool:
 )
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), True)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), True)],
 )
 @pytest.mark.parametrize(
     "mesh_device, sp_axis, tp_axis, num_links, device_params, topology, is_fsdp, dynamic_load",
@@ -102,22 +103,22 @@ def test_pipeline_distilled(
     #   - num_frames must satisfy (num_frames - 1) % 8 == 0 so the VAE decoder maps
     #     latent_frames → num_frames frames exactly. 144 (== 6s × 24fps) doesn't
     #     satisfy this; 145 does (19 latent frames → 145 decoded frames ≈ 6.04s).
-    num_frames = int(os.environ.get("NUM_FRAMES", "145"))
-    height = int(os.environ.get("HEIGHT", "1088"))
-    width = int(os.environ.get("WIDTH", "1920"))
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "145"))
+    height = int(_tt_public_getenv("HEIGHT", "1088"))
+    width = int(_tt_public_getenv("WIDTH", "1920"))
 
-    run_warmup = os.environ.get("RUN_WARMUP", "0") in ("1", "true", "True")
-    traced = os.environ.get("LTX_TRACED", "0") in ("1", "true", "True")
+    run_warmup = _tt_public_getenv("RUN_WARMUP", "0") in ("1", "true", "True")
+    traced = _tt_public_getenv("LTX_TRACED", "0") in ("1", "true", "True")
 
     # Conditioning image (I2V). Its mere presence drives image_conditioning: with a path the
     # transformer builds the per-token video-timestep (I2V) modulation; without one pure T2V keeps
     # the fast scalar-AdaLN path. Resolved before create_pipeline so the bool can gate the build.
-    image_path = os.environ.get("LTX_I2V_IMAGE")
+    image_path = _tt_public_getenv("LTX_I2V_IMAGE")
     images = None
     if image_path:
         if not os.path.exists(image_path):
             pytest.skip(f"LTX_I2V_IMAGE set but file not found: {image_path}")
-        strength = float(os.environ.get("LTX_I2V_STRENGTH", "1.0"))
+        strength = float(_tt_public_getenv("LTX_I2V_STRENGTH", "1.0"))
         images = [(image_path, 0, strength)]
 
     pipeline = LTXDistilledPipeline.create_pipeline(
@@ -138,16 +139,16 @@ def test_pipeline_distilled(
         image_conditioning=bool(image_path),
     )
 
-    prompt = os.environ.get("PROMPT", DEFAULT_LTX_PROMPT)
+    prompt = _tt_public_getenv("PROMPT", DEFAULT_LTX_PROMPT)
     # Gen #1 is the steady-state measurement, and on console every request encodes a prompt the
     # cache has never seen — so it gets its own prompt to keep the encoder in the measured path.
     # Under dynamic_load the encoder is coresident-excluded with the DiT: a second encode would
     # evict the DiT and clobber the captured traces, so that path reuses the cached embedding.
-    steady_state_prompt = prompt if dynamic_load else os.environ.get("PROMPT_STEADY_STATE", STEADY_STATE_LTX_PROMPT)
+    steady_state_prompt = prompt if dynamic_load else _tt_public_getenv("PROMPT_STEADY_STATE", STEADY_STATE_LTX_PROMPT)
     replay_prompt = prompt if dynamic_load else STEADY_STATE_REPLAY_LTX_PROMPT
 
     def run(*, prompt, number, seed):
-        output_filename = os.environ.get("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
+        output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
         logger.info(f"Running LTX AV Fast: '{prompt[:80]}...'")
         logger.info(f"Config: {height}x{width}, {num_frames} frames")
         if images:
@@ -194,9 +195,9 @@ def test_pipeline_distilled(
     }
 
     # RUN_VBENCH=0 skips the quality gate (e.g. perf-only iteration); defaults on so CI gates.
-    run_vbench = os.environ.get("RUN_VBENCH", "1") in ("1", "true", "True")
+    run_vbench = _tt_public_getenv("RUN_VBENCH", "1") in ("1", "true", "True")
     # RUN_CLIP=0 skips the CLIP prompt-alignment gate; defaults on (mirrors the wan2.2 test).
-    run_clip = os.environ.get("RUN_CLIP", "1") in ("1", "true", "True")
+    run_clip = _tt_public_getenv("RUN_CLIP", "1") in ("1", "true", "True")
 
     # An enabled quality gate whose deps are absent must report SKIPPED (visible), never a silent
     # green pass. Unguarded by rank on purpose: dep availability is per-process (same venv on every
@@ -221,9 +222,9 @@ def test_pipeline_distilled(
         # (VBench averages over a directory). The primary clip (`number`, `seed`) is already rendered;
         # the rest are cheap warm replays. A single-clip caller (no seed) or OUTPUT_PATH (one pinned
         # filename) keeps the one-clip path.
-        num_seeds = int(os.environ.get("VBENCH_SEEDS", "5"))
-        if seed is None or num_seeds <= 1 or os.environ.get("OUTPUT_PATH"):
-            output_filename = os.environ.get("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
+        num_seeds = int(_tt_public_getenv("VBENCH_SEEDS", "5"))
+        if seed is None or num_seeds <= 1 or _tt_public_getenv("OUTPUT_PATH"):
+            output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
             assert_vbench_quality(output_filename, prompt=prompt, thresholds=thresholds)
             return
 
@@ -267,8 +268,8 @@ def test_pipeline_distilled(
         # LTX baseline mean ~31.3 (vs wan2.2's ~37): the LTX prompt exceeds CLIP's 77-token limit
         # so only its head is scored, and frames are read back re-encoded (CRF=25). 28.0 leaves
         # ~3pt headroom for run-to-run variance. Override with CLIP_THRESHOLD.
-        threshold = float(os.environ.get("CLIP_THRESHOLD", "28.0")) if clip_threshold is None else clip_threshold
-        output_filename = os.environ.get("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
+        threshold = float(_tt_public_getenv("CLIP_THRESHOLD", "28.0")) if clip_threshold is None else clip_threshold
+        output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_av_fast_{width}x{height}_{number}.mp4")
 
         vr = VideoReader(output_filename)
         total_frames = len(vr)
@@ -293,7 +294,7 @@ def test_pipeline_distilled(
         )
 
     if no_prompt:
-        seed = int(os.environ.get("SEED", "10"))
+        seed = int(_tt_public_getenv("SEED", "10"))
         run(prompt=prompt, number=0, seed=seed)
         # Traced: gen #0 captures the denoise/VAE/audio traces (lazily, on first step of each stage).
         if traced:
@@ -430,12 +431,12 @@ def test_pipeline_distilled_i2v(mesh_device, sp_axis, tp_axis, num_links, dynami
     mesh_shape = tuple(parent_mesh.shape)
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    num_frames = int(os.environ.get("NUM_FRAMES", "145"))
-    height = int(os.environ.get("HEIGHT", "1088"))  # 1088x1920 -> s1 latent 17x30 (uneven, the fixed case)
-    width = int(os.environ.get("WIDTH", "1920"))
-    traced = os.environ.get("LTX_TRACED", "0") in ("1", "true", "True")
-    seed = int(os.environ.get("SEED", "10"))
-    prompt = os.environ.get("PROMPT", DEFAULT_LTX_PROMPT)
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "145"))
+    height = int(_tt_public_getenv("HEIGHT", "1088"))  # 1088x1920 -> s1 latent 17x30 (uneven, the fixed case)
+    width = int(_tt_public_getenv("WIDTH", "1920"))
+    traced = _tt_public_getenv("LTX_TRACED", "0") in ("1", "true", "True")
+    seed = int(_tt_public_getenv("SEED", "10"))
+    prompt = _tt_public_getenv("PROMPT", DEFAULT_LTX_PROMPT)
 
     pipeline = LTXDistilledPipeline.create_pipeline(
         mesh_device=mesh_device,
@@ -468,8 +469,8 @@ def test_pipeline_distilled_i2v(mesh_device, sp_axis, tp_axis, num_links, dynami
     # Conditioning image: an explicit LTX_I2V_IMAGE conditions directly on it and SKIPS the t2v
     # pre-gen (an external/user image, or a t2v last frame produced by a prior process). Else this
     # generates a t2v clip and conditions on its LAST FRAME so the i2v continues the shot.
-    cond_override = os.environ.get("LTX_I2V_IMAGE")
-    strength = float(os.environ.get("LTX_I2V_STRENGTH", "1.0"))
+    cond_override = _tt_public_getenv("LTX_I2V_IMAGE")
+    strength = float(_tt_public_getenv("LTX_I2V_STRENGTH", "1.0"))
     t2v = None
     if cond_override:
         cond = cond_override
@@ -483,16 +484,16 @@ def test_pipeline_distilled_i2v(mesh_device, sp_axis, tp_axis, num_links, dynami
             [_ffmpeg(), "-v", "error", "-sseof", "-3", "-i", str(t2v), "-update", "1", "-y", str(cond)],
             check=True,
         )
-        if os.environ.get("LTX_T2V_OUT"):
-            shutil.copy(str(t2v), os.environ["LTX_T2V_OUT"])
-        if os.environ.get("LTX_COND_OUT"):
-            shutil.copy(str(cond), os.environ["LTX_COND_OUT"])
+        if _tt_public_getenv("LTX_T2V_OUT"):
+            shutil.copy(str(t2v), _tt_public_getitem('LTX_T2V_OUT'))
+        if _tt_public_getenv("LTX_COND_OUT"):
+            shutil.copy(str(cond), _tt_public_getitem('LTX_COND_OUT'))
         # On a 4x8 mesh the image encoder and DiT coresident-evict, so a t2v->i2v chain in one
         # process reloads the encoder over t2v's captured traces and wedges. LTX_T2V_ONLY stops
         # here so a fresh process runs i2v on LTX_COND_OUT (via LTX_I2V_IMAGE) and host-splices.
-        if os.environ.get("LTX_T2V_ONLY"):
+        if _tt_public_getenv("LTX_T2V_ONLY"):
             print(
-                f"I2V_E2E t2v-only -> clip={os.environ.get('LTX_T2V_OUT')} cond={os.environ.get('LTX_COND_OUT')}",
+                f"I2V_E2E t2v-only -> clip={_tt_public_getenv('LTX_T2V_OUT')} cond={_tt_public_getenv('LTX_COND_OUT')}",
                 flush=True,
             )
             if traced:
@@ -502,14 +503,14 @@ def test_pipeline_distilled_i2v(mesh_device, sp_axis, tp_axis, num_links, dynami
     # i2v conditioned on that frame
     i2v = tmp_path / "i2v.mp4"
     _gen(i2v, [(str(cond), 0, strength)])
-    if os.environ.get("LTX_I2V_OUT"):
-        shutil.copy(str(i2v), os.environ["LTX_I2V_OUT"])
+    if _tt_public_getenv("LTX_I2V_OUT"):
+        shutil.copy(str(i2v), _tt_public_getitem('LTX_I2V_OUT'))
 
     # In-process splice of t2v + i2v into one continuous clip (each gen is 145f@24fps -> ~12s).
     # Only reached where encoder+DiT+traces fit one process (not the 4x8 mesh — use LTX_T2V_ONLY
     # plus a second i2v process there). An external LTX_I2V_IMAGE has no preceding t2v to splice.
     if t2v is not None:
-        chained = os.environ.get("LTX_CHAINED_OUT") or str(tmp_path / "chained.mp4")
+        chained = _tt_public_getenv("LTX_CHAINED_OUT") or str(tmp_path / "chained.mp4")
         subprocess.run(
             [
                 _ffmpeg(),
@@ -602,10 +603,10 @@ def test_audio_decode_girl(mesh_device, sp_axis, tp_axis, num_links, dynamic_loa
     mesh_shape = tuple(parent_mesh.shape)
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    num_frames = int(os.environ.get("NUM_FRAMES", "145"))  # ~6.04s @ 24fps
-    height = int(os.environ.get("HEIGHT", "1088"))
-    width = int(os.environ.get("WIDTH", "1920"))
-    traced = os.environ.get("LTX_TRACED", "0") in ("1", "true", "True")
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "145"))  # ~6.04s @ 24fps
+    height = int(_tt_public_getenv("HEIGHT", "1088"))
+    width = int(_tt_public_getenv("WIDTH", "1920"))
+    traced = _tt_public_getenv("LTX_TRACED", "0") in ("1", "true", "True")
 
     ckpt = default_ltx_checkpoint("ltx-2.3-22b-distilled-1.1.safetensors")
     # Audio-only build: create the pipeline WITHOUT a checkpoint so __init__ builds/primes
@@ -645,7 +646,7 @@ def test_audio_decode_girl(mesh_device, sp_axis, tp_axis, num_links, dynamic_loa
     # std≈0.92). The PCC gate below is TT-vs-torch with both legs fed the same mel, so the input
     # need not be "real" content — only AUDIO_OUT .wav listening would differ. AUDIO_LATENT
     # (.npy or .pt) still overrides for anyone who wants to decode a real dumped latent.
-    _lat = os.environ.get("AUDIO_LATENT")
+    _lat = _tt_public_getenv("AUDIO_LATENT")
     if _lat and os.path.exists(_lat):
         latent = (torch.from_numpy(np.load(_lat)) if _lat.endswith(".npy") else torch.load(_lat)).float()
     else:
@@ -661,14 +662,14 @@ def test_audio_decode_girl(mesh_device, sp_axis, tp_axis, num_links, dynamic_loa
     pipeline.decode_audio(latent, num_frames, fps=24.0)
     # WARM_REPS shrinks the steady-state loop for fast dev iteration (the PCC oracle below is
     # unaffected); default 5 keeps warm_ms a stable average for reported timings.
-    N = int(os.environ.get("WARM_REPS", "5"))
+    N = int(_tt_public_getenv("WARM_REPS", "5"))
     t0 = time.perf_counter()
     for _ in range(N):
         audio = pipeline.decode_audio(latent, num_frames, fps=24.0)
     warm_ms = (time.perf_counter() - t0) * 1000 / N
     wav = audio.waveform
     sr = audio.sampling_rate
-    out_dir = os.environ.get("AUDIO_OUT")
+    out_dir = _tt_public_getenv("AUDIO_OUT")
 
     def _save(w, name):
         if not out_dir:

@@ -5,6 +5,7 @@
 """LTX-2 Video VAE decoder for tt_dit; reuses the Wan VAE Conv3D infra (blocking, weight prep)."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -186,7 +187,7 @@ class LTXCausalConv3d(Module):
             self._needs_halo
             and self.internal_padding[1] == 0
             and self.internal_padding[2] == 0
-            and os.environ.get("NP_NO_HALO_CONV") is None
+            and _tt_public_getenv("NP_NO_HALO_CONV") is None
         )
 
         from models.common.utility_functions import is_blackhole
@@ -208,7 +209,7 @@ class LTXCausalConv3d(Module):
         self._w_mask_cache: dict[tuple, ttnn.Tensor] = {}
         self._pad_offset_cache: dict[tuple, ttnn.Tensor] = {}
         # Persistent-padded path (default on): neighbor_pad_halo -> compact -> halo_scatter into a padded buffer ->
-        self._persist_pad = os.environ.get("TT_LTX_NO_PERSIST_PAD") is None
+        self._persist_pad = _tt_public_getenv("TT_LTX_NO_PERSIST_PAD") is None
 
     def _prepare_torch_state(self, state: dict[str, torch.Tensor]) -> None:
         # LTX-2 stores weights under "conv.weight" and "conv.bias"
@@ -974,7 +975,7 @@ class LTXVideoDecoder(Module):
             dtype=ttnn.bfloat16,
         )
 
-        _time = os.environ.get("LTX_VAE_TIME")
+        _time = _tt_public_getenv("LTX_VAE_TIME")
         if _time:
             ttnn.synchronize_device(self.mesh_device)
             _t0 = time.time()

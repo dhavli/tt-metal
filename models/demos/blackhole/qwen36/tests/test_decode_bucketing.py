@@ -6,6 +6,7 @@
 2. ``test_bucketed_decode_matches_full_width`` (device): width-B matches full-width rows.
 3. ``test_decode_width_scaling_traced`` (device): traced step time vs decode width.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import statistics
@@ -26,7 +27,7 @@ N_LAYERS = 8
 BLOCK = 64
 # ISL under test. Override with QWEN36_BUCKET_TEST_CTX to compare against a server run at a
 # different ISL (the benchmark sweep was trimmed to 4096).
-CTX = int(os.environ.get("QWEN36_BUCKET_TEST_CTX", "8192"))
+CTX = int(_tt_public_getenv("QWEN36_BUCKET_TEST_CTX", "8192"))
 BPU = CTX // BLOCK  # blocks per user
 
 
@@ -361,9 +362,9 @@ def test_gdn_prefix_write_trace(mesh_device, reset_seeds, ensure_gc):
     the supplied interleaved TILE output.
     """
     BMAX, NV, DK, DV = 8, 12, 128, 128
-    B = int(os.environ.get("QWEN36_PREFIX_WRITE_WIDTH", "1"))
+    B = int(_tt_public_getenv("QWEN36_PREFIX_WRITE_WIDTH", "1"))
     assert B in (1, 2, 4, 8), f"QWEN36_PREFIX_WRITE_WIDTH must be 1, 2, 4, or 8; got {B}"
-    iters = int(os.environ.get("QWEN36_PREFIX_WRITE_ITERS", "100"))
+    iters = int(_tt_public_getenv("QWEN36_PREFIX_WRITE_ITERS", "100"))
     assert iters > 0
 
     # 48 cores make every supported width tile-aligned:
@@ -478,7 +479,7 @@ def test_decode_width_scaling_traced(mesh_device, n_layers, reset_seeds, ensure_
     # tree WITHOUT the bucketing change, whose decode graph only accepts the full width: width 1
     # there dies in reshape (new_volume == old_volume). "8" then yields the full-width baseline the
     # bucketing saving must be measured against.
-    widths = tuple(int(w) for w in os.environ.get("QWEN36_BUCKET_TEST_WIDTHS", "1,8").split(","))
+    widths = tuple(int(w) for w in _tt_public_getenv("QWEN36_BUCKET_TEST_WIDTHS", "1,8").split(","))
     for width in widths:
         model.reset_tp()
         tokens = torch.tensor([[100 + u] for u in range(width)], dtype=torch.int32)
@@ -531,12 +532,12 @@ def test_decode_capacity_width1_traced(mesh_device, reset_seeds, ensure_gc):
 
     from models.tt_transformers.tt.common import copy_host_to_device
 
-    bmax = int(os.environ.get("QWEN36_CAPACITY_TEST_BMAX", "8"))
+    bmax = int(_tt_public_getenv("QWEN36_CAPACITY_TEST_BMAX", "8"))
     assert bmax in (1, 8), f"QWEN36_CAPACITY_TEST_BMAX must be 1 or 8, got {bmax}"
-    n_layers_env = os.environ.get("QWEN36_CAPACITY_TEST_N_LAYERS")
+    n_layers_env = _tt_public_getenv("QWEN36_CAPACITY_TEST_N_LAYERS")
     n_layers = int(n_layers_env) if n_layers_env is not None else None
     assert n_layers is None or 1 <= n_layers <= 64, f"QWEN36_CAPACITY_TEST_N_LAYERS must be in [1,64], got {n_layers}"
-    layer_index_env = os.environ.get("QWEN36_CAPACITY_TEST_LAYER_INDEX")
+    layer_index_env = _tt_public_getenv("QWEN36_CAPACITY_TEST_LAYER_INDEX")
     layer_indices = [int(layer_index_env)] if layer_index_env is not None else None
     assert not (n_layers is not None and layer_indices is not None), (
         "Set only one of QWEN36_CAPACITY_TEST_N_LAYERS or " "QWEN36_CAPACITY_TEST_LAYER_INDEX"
@@ -544,10 +545,10 @@ def test_decode_capacity_width1_traced(mesh_device, reset_seeds, ensure_gc):
     assert (
         layer_indices is None or 0 <= layer_indices[0] < 64
     ), f"QWEN36_CAPACITY_TEST_LAYER_INDEX must be in [0,63], got {layer_indices}"
-    trials = int(os.environ.get("QWEN36_CAPACITY_TEST_TRIALS", "5"))
-    iters = int(os.environ.get("QWEN36_CAPACITY_TEST_ITERS", "20"))
-    warmup = int(os.environ.get("QWEN36_CAPACITY_TEST_WARMUP", "3"))
-    eager_profile = os.environ.get("QWEN36_CAPACITY_TEST_EAGER_PROFILE") == "1"
+    trials = int(_tt_public_getenv("QWEN36_CAPACITY_TEST_TRIALS", "5"))
+    iters = int(_tt_public_getenv("QWEN36_CAPACITY_TEST_ITERS", "20"))
+    warmup = int(_tt_public_getenv("QWEN36_CAPACITY_TEST_WARMUP", "3"))
+    eager_profile = _tt_public_getenv("QWEN36_CAPACITY_TEST_EAGER_PROFILE") == "1"
     assert trials > 0 and iters > 0 and warmup >= 0
 
     # Start decode at CTX and leave enough RoPE/KV capacity for every captured,

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -35,13 +36,13 @@ def _trace_dir(trace_root: Path, model_id: str, prompt_id: str) -> Path:
 
 
 def _trace_root() -> Path:
-    return Path(os.environ.get(run_host_io_decoder_sweep.TRACE_ROOT_ENV, str(DEFAULT_TRACE_ROOT)))
+    return Path(_tt_public_getenv(run_host_io_decoder_sweep.TRACE_ROOT_ENV, str(DEFAULT_TRACE_ROOT)))
 
 
 def _require_host_io_sweep_env() -> None:
     if not is_slow_dispatch():
         pytest.skip("HostIoDecoderStage sweep requires TT_METAL_SLOW_DISPATCH_MODE=1")
-    if os.environ.get("TT_METAL_ALLOCATOR_MODE_HYBRID") != "1":
+    if _tt_public_getenv("TT_METAL_ALLOCATOR_MODE_HYBRID") != "1":
         pytest.skip("HostIoDecoderStage sweep requires TT_METAL_ALLOCATOR_MODE_HYBRID=1")
 
 
@@ -279,8 +280,8 @@ def test_run_host_io_decoder_sweep_chunked_trace_world_size_4(model_id: str, pro
     if ttnn.get_num_devices() < 8:
         pytest.skip("HostIoDecoderStage sweep requires 8 devices per rank (4x2 mesh)")
 
-    hf_model_path = os.environ.get("HF_MODEL", str(run_host_io_decoder_sweep.DEFAULT_HF_MODEL_PATH))
-    cache_path = os.environ.get("TT_MDDEL_CACHE", str(run_host_io_decoder_sweep.DEFAULT_CACHE_PATH))
+    hf_model_path = _tt_public_getenv("HF_MODEL", str(run_host_io_decoder_sweep.DEFAULT_HF_MODEL_PATH))
+    cache_path = _tt_public_getenv("TT_MDDEL_CACHE", str(run_host_io_decoder_sweep.DEFAULT_CACHE_PATH))
     exit_code = run_host_io_decoder_sweep.main(
         [
             "--decoder-layer-indices",
@@ -324,8 +325,8 @@ def test_run_host_io_decoder_sweep_chunked_trace_multi_slot_stress(model_id: str
     if ttnn.get_num_devices() < 8:
         pytest.skip("HostIoDecoderStage sweep requires 8 devices per rank (4x2 mesh)")
 
-    hf_model_path = os.environ.get("HF_MODEL", str(run_host_io_decoder_sweep.DEFAULT_HF_MODEL_PATH))
-    cache_path = os.environ.get("TT_MDDEL_CACHE", str(run_host_io_decoder_sweep.DEFAULT_CACHE_PATH))
+    hf_model_path = _tt_public_getenv("HF_MODEL", str(run_host_io_decoder_sweep.DEFAULT_HF_MODEL_PATH))
+    cache_path = _tt_public_getenv("TT_MDDEL_CACHE", str(run_host_io_decoder_sweep.DEFAULT_CACHE_PATH))
     exit_code = run_host_io_decoder_sweep.main(
         [
             "--decoder-layer-indices",

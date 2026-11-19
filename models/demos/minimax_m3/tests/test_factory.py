@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 
@@ -28,7 +29,7 @@ def minimax_config_dims() -> dict:
         return json.load(f)
 
 
-_HF_MODEL = os.getenv("HF_MODEL")
+_HF_MODEL = _tt_public_getenv("HF_MODEL")
 # Tests that compare against the HuggingFace reference need the model's modeling code,
 # which ships WITH the checkpoint (loaded at runtime via trust_remote_code) — we do NOT
 # vendor it into the repo. Point HF_MODEL at a downloaded MiniMax-M3 checkpoint to run them.
@@ -134,7 +135,7 @@ def parametrize_mesh_with_fabric(mesh_shapes=None, linear_fabric=False):
 
     # CI mode: pick only the largest fitting shape so that one yaml entry can
     # target multiple SKUs and let each runner select the appropriate mesh.
-    if os.getenv("CI") == "true" and len(mesh_shapes) > 1:
+    if _tt_public_getenv("CI") == "true" and len(mesh_shapes) > 1:
         mesh_shapes = [max(mesh_shapes, key=lambda s: s[0] * s[1])]
 
     if not mesh_shapes:

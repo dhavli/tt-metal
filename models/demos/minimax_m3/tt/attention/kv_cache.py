@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from dataclasses import dataclass
 
@@ -99,7 +100,7 @@ def allocate_kv_caches(
     # ~2-3 mantissa bits perturb the block scores enough to flip many picks -> chunked vs one-shot
     # selection diverges (~7/16 overlap) -> residual drift compounding over MSA layers. Cache it in bf16
     # (M3_INDEX_CACHE_BF16=1) to keep selection stable; it's tiny (1 head) and only the indexer reads it.
-    index_dtype = ttnn.bfloat16 if os.getenv("M3_INDEX_CACHE_BF16") == "1" else cache_dtype
+    index_dtype = ttnn.bfloat16 if _tt_public_getenv("M3_INDEX_CACHE_BF16") == "1" else cache_dtype
 
     return MiniMaxKVCache(
         k=_alloc(),

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import pytest
 from loguru import logger
 from models.perf.benchmarking_utils import BenchmarkData, BenchmarkProfiler
@@ -23,7 +24,7 @@ def galaxy_type():
     import os
 
     # Use environment variable if set, otherwise default to "4U"
-    return os.environ.get("GALAXY_TYPE", "6U")
+    return _tt_public_getenv("GALAXY_TYPE", "6U")
 
 
 @pytest.mark.parametrize(

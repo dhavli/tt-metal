@@ -61,6 +61,13 @@ void kernel_main() {
     // before page_table lookup. Value is in TILE rows (= cache_position_modulo /
     // TILE_HEIGHT). Validated to be a multiple of block_size_t at op level.
     constexpr uint32_t capacity_t = get_compile_time_arg_val(36);
+    // cfx (tt-stack 0034): speculative-verify fold (rt_args_common.hpp). 0 = the legacy program.
+    constexpr uint32_t spec_fold_T = SDPA_SPEC_FOLD_T;
+    constexpr uint32_t spec_fold_pnht_cand = SDPA_SPEC_FOLD_PNHT_CAND;
+    static_assert(spec_fold_T == 0 || (is_paged_attention && !is_q_sharded && !tilize_q && !use_attention_mask &&
+                                       !use_attention_sink && q_heads_parallel_factor == 1 && !has_block_padding),
+                  "SDPA_SPEC_FOLD_T: paged, DRAM TILE Q, no mask/sink/q-parallel/block padding");
+    static_assert(spec_fold_T == 0 || PNHt == spec_fold_T * spec_fold_pnht_cand, "SDPA_SPEC_FOLD_T: PNHt = T*PNHt_cand");
 
     constexpr auto q_args = TensorAccessorArgs<37>();
     constexpr auto k_args = TensorAccessorArgs<q_args.next_compile_time_args_offset()>();
@@ -114,6 +121,7 @@ void kernel_main() {
     constexpr uint32_t cur_pos_base = St * 32 - 1;
     uint32_t cur_pos = cur_pos_base;  // default to non-causal, which we do attention on the entire kv cache. In this
                                       // case we set cur_pos to the last position
+    uint32_t spec_fold_pos_min = 0;   // fold: the group's smallest valid candidate position (workload split)
     if constexpr (is_causal) {
         // using UINT32_MAX as a flag to indicate that cur_pos is not provided as a list
         if (cur_pos_arg != UINT32_MAX) {
@@ -148,7 +156,15 @@ void kernel_main() {
             cb_writer.push_back(1);
             cb_compute.push_back(1);
             volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_wr_ptr);
-            cur_pos = index_ptr[cur_batch / q_heads_parallel_factor];
+            if constexpr (spec_fold_T > 0) {
+                // cur_pos holds T*B entries, candidate-major (j*B + b): scan to the group's largest valid position.
+                const SpecFoldPositions fp = spec_fold_positions<spec_fold_T>(
+                    cur_batch, B, [&](uint32_t i) -> uint32_t { return index_ptr[i]; });
+                cur_pos = fp.skip ? UINT32_MAX : fp.pos_max;
+                spec_fold_pos_min = fp.pos_min;
+            } else {
+                cur_pos = index_ptr[cur_batch / q_heads_parallel_factor];
+            }
         }
         if (cur_pos == UINT32_MAX) {
             // cur_pos of -1 indicates that the user should be skipped
@@ -169,8 +185,9 @@ void kernel_main() {
 
     // Sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end, window_start_unaligned, window_start_chunk] =
-        get_workload_for_core(
+        get_workload_for_core_spec_fold<spec_fold_T>(
             cur_pos,
+            spec_fold_pos_min,
             cur_batch,
             core_num_in_reduce,
             num_cores_per_head,
@@ -208,16 +225,41 @@ void kernel_main() {
     const uint32_t q_batch_offset = cur_batch * q_chunk_tiles;
 
     // Read Q
-    read_q<cb_q_in, cb_q_rm, q_tile_bytes, q_chunk_tiles, is_q_sharded, tilize_q, use_half_tile, barrier_threshold>(
-        q_locally_available,
-        is_output_core,
-        q_addr,
-        output_core_noc_x,
-        output_core_noc_y,
-        q_chunk_size_bytes,
-        q_args,
-        q_page_size_bytes,
-        q_batch_offset);
+    if constexpr (spec_fold_T > 0) {
+        // Fold: candidate j of this batch row is Q row j*B + cur_batch; its PNHt_cand*DHt tiles land at row-tile
+        // j*PNHt_cand of cb_q_in (the same per-tile reads read_q issues, strided by candidate).
+        constexpr uint32_t cand_tiles = spec_fold_pnht_cand * DHt;
+        const auto q_reader = TensorAccessor(q_args, q_addr, q_page_size_bytes);
+        CircularBuffer cb_q(cb_q_in);
+        cb_q.reserve_back(q_chunk_tiles);
+        uint32_t q_write_ptr = cb_q.get_write_ptr();
+        uint32_t q_barrier_count = 0;
+        for (uint32_t j = 0; j < spec_fold_T; ++j) {
+            uint32_t q_tile_id = (j * B + cur_batch) * cand_tiles;
+            for (uint32_t tile = 0; tile < cand_tiles; ++tile) {
+                noc.async_read(q_reader, CoreLocalMem<uint32_t>(q_write_ptr), q_tile_bytes, {.page_id = q_tile_id}, {});
+                q_tile_id += 1;
+                q_write_ptr += q_tile_bytes;
+                if (++q_barrier_count == barrier_threshold) {
+                    noc.async_read_barrier();
+                    q_barrier_count = 0;
+                }
+            }
+        }
+        noc.async_read_barrier();
+        cb_q.push_back(q_chunk_tiles);
+    } else {
+        read_q<cb_q_in, cb_q_rm, q_tile_bytes, q_chunk_tiles, is_q_sharded, tilize_q, use_half_tile, barrier_threshold>(
+            q_locally_available,
+            is_output_core,
+            q_addr,
+            output_core_noc_x,
+            output_core_noc_y,
+            q_chunk_size_bytes,
+            q_args,
+            q_page_size_bytes,
+            q_batch_offset);
+    }
 
     const auto k_reader = TensorAccessor(k_args, k_addr);
 

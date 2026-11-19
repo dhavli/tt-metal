@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import contextlib
 import os
@@ -68,7 +69,7 @@ def _needs_extended_worker_l1(num_procs: int, num_mtp_levels: int) -> bool:
     if not target_ranks:
         return False
 
-    mesh_id = os.environ.get("TT_MESH_ID")
+    mesh_id = _tt_public_getenv("TT_MESH_ID")
     if mesh_id is None:
         raise RuntimeError("TT_MESH_ID must be set for 16/64-process runs to select worker_l1_size")
 
@@ -88,7 +89,7 @@ def _worker_l1_size_for_rank(num_procs: int, num_mtp_levels: int) -> int:
 @contextlib.contextmanager
 def open_mesh_device(*, num_mtp_levels: int = 1):
     """Open mesh device for pod demos with shared fabric and worker L1 settings."""
-    if not os.environ.get("TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"):
+    if not _tt_public_getenv("TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"):
         os.environ["TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"] = TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS_DEFAULT
 
     num_procs = int(ttnn.distributed_context_get_size())

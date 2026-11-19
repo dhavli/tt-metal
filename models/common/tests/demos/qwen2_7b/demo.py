@@ -54,6 +54,7 @@ Qwen2-7B via ``generate_controlled_refpt.py`` (CPU greedy teacher-forcing, top1/
 self-consistent) — TTTv1 has no Qwen2-7B token-matching reference. The loader supports both
 the metadata-rich format (``prompt_len``) and the book half-split format.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import dataclasses
 import json
@@ -203,7 +204,7 @@ _BATCH32_CI_MAX_SEQ_LEN: dict[str, int] = {
 def _sampling_bucket() -> str:
     """Map SAMPLING_MODE to a perf-gate bucket. Non-topk on-device modes (e.g. force-argmax)
     fall into ``on_device_topk`` so they stay gated, never silently un-gated."""
-    return "host" if os.environ.get("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
+    return "host" if _tt_public_getenv("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
 
 
 # Qwen2-7B requires at least this many devices of tensor parallelism. The unsharded 7B prefill/decode
@@ -241,7 +242,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 
 def _ttnn_mesh_device_param_from_env() -> dict:
-    env = os.environ.get("MESH_DEVICE", "").strip()
+    env = _tt_public_getenv("MESH_DEVICE", "").strip()
     if not env:
         pytest.skip(
             "MESH_DEVICE must be set (e.g. N300). See module docstring.",
@@ -271,7 +272,7 @@ pytestmark = [
         "ttnn_mesh_device",
         [_ttnn_mesh_device_param_from_env()],
         indirect=True,
-        ids=[os.environ.get("MESH_DEVICE", "mesh").strip() or "mesh"],
+        ids=[_tt_public_getenv("MESH_DEVICE", "mesh").strip() or "mesh"],
     ),
 ]
 
@@ -321,7 +322,7 @@ def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: st
     """
     device_name = get_device_name(mesh_device)
     hf = hf_model_id.strip("/")
-    tt_cache = os.getenv("TT_CACHE_PATH")
+    tt_cache = _tt_public_getenv("TT_CACHE_PATH")
     if tt_cache:
         root = Path(tt_cache) / device_name
     else:
@@ -494,7 +495,7 @@ def create_model(
     token-accuracy path passes ``False`` even under ``optimizations="performance"``
     to keep teacher-forcing parity off aggressive decode math.
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     _skip_below_min_tp_devices(mesh_device.get_num_devices())
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
 
@@ -725,10 +726,10 @@ def _run_dp_smoke(
     mesh_device.quiesce_devices()
     submeshes = _create_dp_submeshes(mesh_device, data_parallel, tensor_parallel)
     lane_cache_dir = _dp_lane_cache_dir(cache_dir, tensor_parallel)
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     precision = QWEN2_7B_PERFORMANCE if optimizations == "performance" else QWEN2_7B_ACCURACY
     prompts = load_input_prompts(data_parallel)
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -829,7 +830,7 @@ def test_qwen2_7b(test_config, mesh_device, optimizations):
     device_name = get_device_name(mesh_device)
     expected = EXPECTED_METRICS.get(optimizations, {}).get(device_name, {})
     model = None
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     cache_dir = lazy_weight_cache_dir_for_demo(mesh_device, hf_model)
 
     try:
@@ -939,7 +940,7 @@ def test_qwen2_7b(test_config, mesh_device, optimizations):
 
 def _run_token_accuracy(model, mesh_device, expected):
     """Teacher-forcing token accuracy vs ``.refpt`` (HF-generated)."""
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     reference_tokens, top5_tokens, prompt_len, metadata = load_reference_data(hf_model)
     tokenizer = model.demo_tokenizer
 
@@ -979,7 +980,7 @@ def _run_token_accuracy(model, mesh_device, expected):
         prompt_len,
         metadata_aligned=has_prompt_len_metadata,
     )
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     profiler = BenchmarkProfiler()
     try:
         profiler.start("run")
@@ -1088,7 +1089,7 @@ def _run_perf_benchmark(
     ``effective = min(requested, max_seq_len - prompt_bucket - margin)`` so the high-water decode
     position never overruns the page table (the ``batch-32-ci`` leg requests 1024).
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # On-device sampling toggle (see sampling handoff docs):
@@ -1096,7 +1097,7 @@ def _run_perf_benchmark(
     #   on_device       -> greedy temp=0,k=1,p=0 => trace-captured FORCE-ARGMAX full-vocab path
     #   on_device_topk  -> temp=0,k=32,p=0.08    => trace-captured TOP-K op path (gathers only
     #                      the [*,32] tuples; PERF.md-parity recipe, faster than force-argmax)
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -1106,7 +1107,7 @@ def _run_perf_benchmark(
         if sampling_mode in _on_device_params and getattr(model, "supports_on_device_sampling", False)
         else None
     )
-    pipeline_readback = os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
+    pipeline_readback = _tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
     logger.info(f"[{case_name}] SAMPLING_MODE={sampling_mode} -> sampling_params={sampling_params}")
     logger.info(f"[{case_name}] PIPELINE_READBACK={pipeline_readback}")
 
@@ -1144,7 +1145,7 @@ def _run_perf_benchmark(
 
         # BenchmarkProfiler brackets the timed prefill/decode regions inside run_perf_benchmark
         # (default-None ⇒ byte-inert for every other caller) so we can emit CI perf telemetry.
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_perf_benchmark(
@@ -1228,7 +1229,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
     ``SAMPLING_MODE`` knob as ``_run_perf_benchmark`` (default host argmax — deterministic and
     mesh-agnostic, the recommended default for the determinism assert).
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2-7B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # Qwen2 chat generation ends at <|im_end|>; the model opening a NEW turn (<|im_start|>) is a
@@ -1279,7 +1280,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
     def tokenize_fn(ps):
         return tokenize_prompts(ps, tokenizer)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),

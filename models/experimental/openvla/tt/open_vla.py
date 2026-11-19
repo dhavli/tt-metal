@@ -15,6 +15,7 @@ References [LLaVa, IDEFICS-2]:
     => https://github.com/huggingface/transformers/blob/main/src/transformers/models/idefics2/modeling_idefics2.py
     => https://huggingface.co/openvla/openvla-7b/blob/main/modeling_prismatic.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import logging
@@ -246,7 +247,7 @@ def get_LLama2OpenVLAArgs(state_dict, use_bf16_lm_head=True):
         lm_head_dtype = ttnn.bfloat16 if use_bf16_lm_head else ttnn.bfloat8_b
 
         def __init__(self, *args, **kwargs):
-            HF_MODEL = os.getenv("HF_MODEL")
+            HF_MODEL = _tt_public_getenv("HF_MODEL")
             assert (
                 HF_MODEL == "meta-llama/Llama-2-7b-hf"
             ), f"When LLama2OpenVLAArgs is used, HF_MODEL must be meta-llama/Llama-2-7b-hf"
@@ -1674,7 +1675,7 @@ class TTOpenVLAForActionPrediction(PrismaticForConditionalGeneration, Generation
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -1715,13 +1716,13 @@ def test_language_model(mesh_device, prompt):
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
 @pytest.mark.parametrize(
     "iterations",
-    [int(os.getenv("OPENVLA_TEST_ITERATIONS", 1))],  # Set via env var or default 1
+    [int(_tt_public_getenv("OPENVLA_TEST_ITERATIONS", 1))],  # Set via env var or default 1
 )
 def test_openvla_model(mesh_device, iterations):
     """
@@ -1736,7 +1737,7 @@ def test_openvla_model(mesh_device, iterations):
     print("=" * 60)
 
     # Load weights
-    weight_path = os.getenv("OPENVLA_WEIGHTS", None)
+    weight_path = _tt_public_getenv("OPENVLA_WEIGHTS", None)
     merged_tensors = None
     if weight_path is not None and os.path.exists(weight_path):
         print(f"📦 Loading weights from: {weight_path}")

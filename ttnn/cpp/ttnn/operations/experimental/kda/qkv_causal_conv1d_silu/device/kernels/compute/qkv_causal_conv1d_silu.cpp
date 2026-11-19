@@ -63,7 +63,8 @@ TT_KERNEL void compute(uint32_t wi_count) {
                     reconfig_data_format_srca(dfb::act_tile);
                 }
                 if (is_final_tap) {
-                    silu_tile(0);
+                    // cfx c98: bf16-accuracy sigmoid (exp_21f + 1 reciprocal step), as the AGMM SwiGLU fs lever.
+                    silu_tile<false>(0);
                 }
                 tile_regs_commit();
 

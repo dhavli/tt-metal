@@ -25,6 +25,7 @@ transformer-core tensors (gpt.gpt.h.*, gpt.gpt.ln_f.*, gpt.final_norm.*).
 Run to (re)generate goldens:
     python models/experimental/xtts_v2/reference/xtts_gpt_ref.py --ckpt {path-to-model.pth}
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import functools
@@ -50,7 +51,7 @@ GPT_CONFIG = dict(
 # checkpoint-dir convention), otherwise coqui/XTTS-v2 is pulled from the HF hub (and cached
 # by huggingface_hub). Resolved lazily at load time -- importing this module never
 # downloads. Override the repo id with $XTTS_HF_MODEL.
-XTTS_HF_REPO = os.getenv("XTTS_HF_MODEL", "coqui/XTTS-v2")
+XTTS_HF_REPO = _tt_public_getenv("XTTS_HF_MODEL", "coqui/XTTS-v2")
 DEFAULT_CKPT = None  # sentinel: resolve_ckpt() selects the source at load time
 
 
@@ -64,10 +65,10 @@ def resolve_ckpt(ckpt_path=None):
     same snapshot dir — otherwise the 1.9 GB download succeeds and the tokenizer load crashes."""
     if ckpt_path:
         return ckpt_path
-    env = os.getenv("XTTS_CKPT")
+    env = _tt_public_getenv("XTTS_CKPT")
     if env:
         return env
-    env_dir = os.getenv("XTTS_CKPT_DIR")
+    env_dir = _tt_public_getenv("XTTS_CKPT_DIR")
     if env_dir:
         return os.path.join(env_dir, "model.pth")
     from huggingface_hub import hf_hub_download

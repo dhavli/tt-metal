@@ -24,6 +24,7 @@ Run (craq-sim / emulator, slow dispatch + forced JIT, DPRINT on):
   TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_FORCE_JIT_COMPILE=1 TT_METAL_DPRINT_CORES=all \
   pytest -s models/demos/vision/classification/resnet50/quasar/tests/ops/test_conv2d_unpack_tilize_probe.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -82,7 +83,7 @@ def test_quasar_conv2d_unpack_tilize_probe(mesh_device):
         packer_l1_acc=True,
     )
 
-    prev = os.environ.get("TT_METAL_QSR_CONV_UNPACK_TILIZE")
+    prev = _tt_public_getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE")
     os.environ["TT_METAL_QSR_CONV_UNPACK_TILIZE"] = "1"
     try:
         out, [out_h, out_w], _weights_bias = ttnn.experimental.quasar.conv2d(

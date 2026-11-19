@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -298,7 +299,7 @@ MinimalMatmulFabricBoundProgramFactory::shared_variables_t minimal_matmul_fabric
     // Sub-chunk (M-row band) count for the fused AG in0 delivery
     uint32_t in0_sub_chunks = 1;
     if (fuse_op) {
-        if (const char* e = std::getenv("IN0_SUB_CHUNKS")) {
+        if (const char* e = tt_stack_public::getenv("IN0_SUB_CHUNKS")) {
             long v = std::strtol(e, nullptr, 10);
             if (v > 1) {
                 in0_sub_chunks = static_cast<uint32_t>(v);

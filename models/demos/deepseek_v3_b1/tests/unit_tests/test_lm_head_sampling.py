@@ -13,6 +13,7 @@ Output stays width-sharded across matmul cores.
 
 In single-device mode (skip_ccl=True): CCL is skipped and the input is used directly.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import struct
 import time
@@ -161,11 +162,11 @@ def compute_lm_head_sampling_golden(iterations: int, num_mtp_levels: int = 1):
 
 
 def _is_lm_head_sampling_perf_enabled():
-    return os.getenv("RUN_LM_HEAD_SAMPLING_PERF", "0") == "1"
+    return _tt_public_getenv("RUN_LM_HEAD_SAMPLING_PERF", "0") == "1"
 
 
 def _is_persistent_mode_enabled():
-    return os.getenv("TT_RUN_PERSISTENT_MODE", "0") == "1"
+    return _tt_public_getenv("TT_RUN_PERSISTENT_MODE", "0") == "1"
 
 
 @pytest.mark.skipif(not _is_lm_head_sampling_perf_enabled(), reason="Set RUN_LM_HEAD_SAMPLING_PERF=1 to run perf test")

@@ -46,6 +46,7 @@ Usage:
         --prompt "The capital of France is" \\
         --out /tmp/minimax_m3_golden
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -197,7 +198,7 @@ def main():
     _raise_cpu_time_limit()  # fp32 CPU golden burns CPU-time × nthreads; avoid SIGXCPU mid-run (see fn)
 
     # Setup
-    model_path = args.model_path or os.environ.get("HF_MODEL")
+    model_path = args.model_path or _tt_public_getenv("HF_MODEL")
     if not model_path:
         print("ERROR: Must provide --model-path or set $HF_MODEL", file=sys.stderr)
         return 1

@@ -4,6 +4,7 @@
 """Reusable teacher-forcing and benchmark run helpers for demos and tests."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -610,7 +611,7 @@ def assert_no_special_tokens(
 ) -> None:
     """Warn locally; fail under CI or ``TT_DEMO_STRICT_SPECIAL_TOKENS=1``."""
     if is_ci_env is None:
-        is_ci_env = os.environ.get("CI") == "true" or os.environ.get("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1"
+        is_ci_env = _tt_public_getenv("CI") == "true" or _tt_public_getenv("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1"
 
     special_ids = set(getattr(tokenizer, "all_special_ids", []) or [])
     stop_ids = _stop_token_ids(tokenizer)

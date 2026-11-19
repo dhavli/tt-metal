@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Critical device regressions for commit-time KV writes and traced fresh-tail reads."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from contextlib import contextmanager
@@ -14,7 +15,7 @@ from models.experimental.diffusion_gemma.tt.commit_batched import _write_canvas_
 
 
 _needs_device = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run on a Tenstorrent device",
 )
 TRACE_REGION = 64 << 20
@@ -23,7 +24,7 @@ TRACE_REGION = 64 << 20
 @pytest.fixture(scope="module")
 def mesh():
     """Use one session so trace-region configuration is consistent on every chip."""
-    shape = os.environ.get("MESH_DEVICE", "P150x4")
+    shape = _tt_public_getenv("MESH_DEVICE", "P150x4")
     rows, columns = (1, 4) if shape == "P150x4" else (int(shape.split("x")[0]), int(shape.split("x")[1]))
     device = ttnn.open_mesh_device(
         mesh_shape=ttnn.MeshShape(rows, columns),

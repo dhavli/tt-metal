@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import re
 
@@ -55,7 +56,7 @@ def two_layers_of_90B(partial_state_dict):
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -81,7 +82,7 @@ def test_cross_attention_transformer_text_inference(
     decode_pcc_required = 0.965
 
     model_args = ModelArgs(mesh_device, max_batch_size=batch)
-    model_repo_name = os.getenv("HF_MODEL")
+    model_repo_name = _tt_public_getenv("HF_MODEL")
     # config contains parameters for the whole multimodal network the subset of vision branch is chosen instead
     config = AutoConfig.from_pretrained(model_repo_name)
     config._attn_implementation = "sdpa"

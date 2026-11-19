@@ -17,6 +17,7 @@ Op time definition:
   interleaved cycle means after dropping the single highest and lowest means.
   Its per-sample grouping uses `trace id counter`.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import csv
@@ -551,7 +552,7 @@ def write_text_sync(path: Path, text: str) -> None:
 
 
 def get_repo_root() -> Path:
-    tt_metal_home = os.environ.get("TT_METAL_HOME")
+    tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
     if not tt_metal_home:
         raise RuntimeError("TT_METAL_HOME must be set")
 

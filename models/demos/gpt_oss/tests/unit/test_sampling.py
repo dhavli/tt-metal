@@ -12,6 +12,7 @@ vocab dimensions (201088, TP=8) to verify:
 - Log probabilities are correctly computed
 - Sampled token IDs are always < vocab_size (no padding tokens leak through)
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from collections import Counter
@@ -92,7 +93,7 @@ BATCH_SIZE = 32
 
 
 def _gpt_oss_trace_model_key() -> str:
-    hf = os.getenv("HF_MODEL", "").lower()
+    hf = _tt_public_getenv("HF_MODEL", "").lower()
     return "gpt-oss-120b" if "120b" in hf else "gpt-oss-20b"
 
 

@@ -12,6 +12,7 @@ Tests prefill and decode for both sliding and global layers, across all TP facto
     pytest -k "prefill"          # prefill only
     pytest -k "decode"           # decode only
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -381,7 +382,7 @@ def _kv_fill_to_tt(k_torch, mesh_device, *, num_kv_heads, num_attention_heads, t
 
 
 @pytest.mark.skipif(
-    os.environ.get("CI") == "true",
+    _tt_public_getenv("CI") == "true",
     reason="Batched decode PCC test is slow; excluded from CI (run locally for coverage).",
 )
 @parametrize_mesh_with_fabric(mesh_shapes=[(1, 1), (1, 4)])

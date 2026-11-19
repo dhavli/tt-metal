@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 from dataclasses import dataclass
@@ -256,7 +257,7 @@ class TtPrefillRuntime:
 
         Each rank taps only the target layers it owns; the last rank also builds the KV tail and allocates
         the caller-owned context K/V caches. Checkpoint (config + weights) comes from ``$DFLASH_HF_MODEL``."""
-        path = os.environ.get("DFLASH_HF_MODEL")
+        path = _tt_public_getenv("DFLASH_HF_MODEL")
         assert path, (
             "DFlash drafter build requires DFLASH_HF_MODEL=/path/to/Kimi-K2.x-DFlash "
             "(a dir with config.json + model.safetensors)"
@@ -1073,7 +1074,7 @@ class TtPrefillRuntime:
             slot_id=slot_id,
             out_len=out_len,
             golden_dir=golden_dir,
-            record_only=os.environ.get("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1",
+            record_only=_tt_public_getenv("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1",
             rope_convention=dcfg.rope_convention,
         )
 

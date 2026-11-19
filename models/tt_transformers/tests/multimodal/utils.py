@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch.nn.functional as F
@@ -8,7 +9,7 @@ import torch.nn.functional as F
 
 def load_partial_weights(auto_model, weights_path, layer_prefix):
     partial_state_dict = {}
-    model = auto_model.from_pretrained(weights_path, torch_dtype="auto", local_files_only=os.getenv("CI") == "true")
+    model = auto_model.from_pretrained(weights_path, torch_dtype="auto", local_files_only=_tt_public_getenv("CI") == "true")
     weights = model.state_dict()
     keys = weights.keys()
     for key in keys:

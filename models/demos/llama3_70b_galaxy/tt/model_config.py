@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import json
@@ -627,11 +628,11 @@ class TtModelArgs:
         self.start_core = ttnn.CoreCoord(1, 0)
 
         # Galaxy Llama 3.3-70B is HuggingFace-only (Meta / LLAMA_DIR support was removed, Issue #42139).
-        HF_MODEL = os.getenv("HF_MODEL")
+        HF_MODEL = _tt_public_getenv("HF_MODEL")
         assert HF_MODEL, "Please set HF_MODEL to a HuggingFace model name, e.g. meta-llama/Llama-3.3-70B-Instruct"
         self.CKPT_DIR = HF_MODEL
         self.TOKENIZER_PATH = HF_MODEL
-        self.CACHE_PATH = os.getenv("TT_CACHE_PATH")
+        self.CACHE_PATH = _tt_public_getenv("TT_CACHE_PATH")
         if not self.CACHE_PATH:
             self.CACHE_PATH = os.path.join("model_cache", HF_MODEL, self.device_name)
         else:  # For HF models, always append the device name (e.g. N150/N300/T3K/TG) to the cache path
@@ -671,7 +672,7 @@ class TtModelArgs:
         self.tile_padded_batch_rows = self.tile_size * int(math.ceil(self.max_batch_size / self.tile_size))
 
         # Enable workarounds by default until di/dt issues are fixed
-        self.di_dt_workaround = os.getenv("DISABLE_DI_DT_WORKAROUND") != "1"
+        self.di_dt_workaround = _tt_public_getenv("DISABLE_DI_DT_WORKAROUND") != "1"
         if not self.di_dt_workaround:
             logger.info("Disabling di/dt workaround, re-enable if you see hangs")
 
@@ -713,7 +714,7 @@ class TtModelArgs:
         if self.is_blackhole:
             # Blackhole galaxy physically exposes 2 inter-chip links (Wormhole 6U exposes 4); the
             # ring/line CCLs index eth channels by link, so 4 overruns the available channels.
-            self.model_config["GALAXY_NUM_LINKS"] = int(os.getenv("GALAXY_NUM_LINKS", "2"))
+            self.model_config["GALAXY_NUM_LINKS"] = int(_tt_public_getenv("GALAXY_NUM_LINKS", "2"))
         else:
             self.model_config["GALAXY_NUM_LINKS"] = {"6U": 4, "4U": 3}.get(self.galaxy_type)
         self.model_config["CCL_TOPOLOGY"] = {"6U": ttnn.Topology.Ring, "4U": ttnn.Topology.Linear}.get(self.galaxy_type)
@@ -2057,7 +2058,7 @@ class TtModelArgs:
         return False
 
     def ccl_topology(self):
-        if self.num_devices == 8 and os.getenv("ACTUAL_DEVICE", "") != "TG":  # T3K
+        if self.num_devices == 8 and _tt_public_getenv("ACTUAL_DEVICE", "") != "TG":  # T3K
             return ttnn.Topology.Ring
         elif self.num_devices > 1:  # All other multi chip devices
             return ttnn.Topology.Linear
@@ -2192,7 +2193,7 @@ class TtModelArgs:
             }.get(self.base_model_name, 0)
 
             # Override MLP padding cores from env var
-            mlp_padded_cores = int(os.environ.get("PAD_MLP_CORES", default_padded_cores))
+            mlp_padded_cores = int(_tt_public_getenv("PAD_MLP_CORES", default_padded_cores))
 
             # Only pad if MLP_PADDED_CORES is non-zero
             if mlp_padded_cores > 0:
@@ -2428,7 +2429,7 @@ class TtModelArgs:
                     self.CKPT_DIR,
                     torch_dtype="auto",
                     trust_remote_code=self.trust_remote_code_hf,
-                    local_files_only=os.getenv("CI") == "true",
+                    local_files_only=_tt_public_getenv("CI") == "true",
                 )
                 if self.cache_hf_flag:
                     self.cached_hf_model = model
@@ -2509,7 +2510,7 @@ class TtModelArgs:
                     self.CKPT_DIR,
                     torch_dtype="auto",
                     trust_remote_code=self.trust_remote_code_hf,
-                    local_files_only=os.getenv("CI") == "true",
+                    local_files_only=_tt_public_getenv("CI") == "true",
                 )
                 state_dict = model.state_dict()
             else:

@@ -15,6 +15,7 @@ Model-owned executor contract: pre-embedded forwards, ``set_kv_cache``,
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -349,7 +350,7 @@ def _resolve_qwen3_32b_wh_tuning(*, num_dev: int, max_batch_size: int) -> _Qwen3
         mlp_prefill_len_cutoff=1024,
         mlp_decode_spill_w1_to_dram=False,
     )
-    t.prefill_minimal_matmul = not os.environ.get("DISABLE_MINIMAL_MATMUL")
+    t.prefill_minimal_matmul = not _tt_public_getenv("DISABLE_MINIMAL_MATMUL")
     logger.info(
         f"L1 tuning for Qwen3-32B on {num_dev} device(s): "
         f"prefill_len_cutoff={t.mlp_prefill_len_cutoff}, "
@@ -744,7 +745,7 @@ class Qwen3_32B(LightweightModule):
         topology = default_topology(mesh_device)
 
         local_files_only = any(
-            os.getenv(name, "").lower() in {"1", "true", "yes"}
+            _tt_public_getenv(name, "").lower() in {"1", "true", "yes"}
             for name in ("CI", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
         )
         hf_cfg = AutoConfig.from_pretrained(hf_model_id, revision=revision, local_files_only=local_files_only)
@@ -891,7 +892,7 @@ class Qwen3_32B(LightweightModule):
                 # A/B escape hatch: DISABLE_BATCHED_EXTRACT=1 forces the per-slot last-token extract
                 # (one lm_head per user, bit-identical to the sequential path) instead of the default
                 # gathered extract (one lm_head over the whole group).
-                batched_prefill_batched_extract=not os.environ.get("DISABLE_BATCHED_EXTRACT"),
+                batched_prefill_batched_extract=not _tt_public_getenv("DISABLE_BATCHED_EXTRACT"),
             )
         return model
 

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import errno
 import hashlib
 import os
@@ -65,7 +66,7 @@ def _build_model_test_cases_and_ids(users_per_row: int, prefill_seq_len: int):
     """
     base_cases = [("decode", 1, users_per_row, None)]
 
-    max_seq_len_env = os.getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
+    max_seq_len_env = _tt_public_getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
     if max_seq_len_env is None:
         base_cases.append(("prefill", prefill_seq_len, 1, None))
     else:
@@ -79,7 +80,7 @@ def _build_model_test_cases_and_ids(users_per_row: int, prefill_seq_len: int):
         )
 
     expanded_cases = expand_test_cases_with_position_ids_ranges(base_cases)
-    if os.getenv("MESH_DEVICE", "").upper() == "TG":
+    if _tt_public_getenv("MESH_DEVICE", "").upper() == "TG":
         expanded_cases = [
             (
                 pytest.param(*case, marks=pytest.mark.skip(reason=TG_MODEL_DECODE_SKIP_REASON))

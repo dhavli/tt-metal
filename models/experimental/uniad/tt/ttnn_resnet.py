@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 import torch
@@ -23,7 +24,7 @@ from models.experimental.uniad.tt.ttnn_modulated_deform_conv import TtModulatedD
 #   back:     host->device write of the result tensor
 # This is the diagnostic we used to confirm CPU compute (not PCIe) is
 # the dominant cost of the modulated deformable conv path.
-_DCN_TIMING = os.environ.get("TT_DCN_TIMING") == "1"
+_DCN_TIMING = _tt_public_getenv("TT_DCN_TIMING") == "1"
 _dcn_accum = {"transfer": 0.0, "cpu": 0.0, "back": 0.0, "device": 0.0, "n": 0}
 
 # Route TtModulatedDeformConv2dPack through the device-side
@@ -33,7 +34,7 @@ _dcn_accum = {"transfer": 0.0, "cpu": 0.0, "back": 0.0, "device": 0.0, "n": 0}
 # img_backbone wall time on Blackhole (CPU ~3.57 s → device ~0.35 s
 # across 26 DCN blocks in ResNet101 layer3/layer4). Set TT_DCN_DEVICE=0
 # to fall back to the host path for debugging or numerical bisection.
-_USE_DEVICE_DCN = os.environ.get("TT_DCN_DEVICE", "1") == "1"
+_USE_DEVICE_DCN = _tt_public_getenv("TT_DCN_DEVICE", "1") == "1"
 
 
 def modulated_deform_conv2d(

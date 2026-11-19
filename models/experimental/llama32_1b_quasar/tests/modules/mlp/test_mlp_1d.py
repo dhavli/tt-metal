@@ -9,6 +9,7 @@ This test suite verifies:
 2. MLP1D class matches HuggingFace/Meta reference model
 3. MLP1D correctly rejects TG/Galaxy devices
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -565,7 +566,7 @@ def test_mlp_1d_vs_reference(
 
     # Create LazyWeights
     ttnn.SetDefaultDevice(ttnn_mesh_device)
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/mlp_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/mlp_1d"))
     lazy_w1 = LazyWeight(source=w1_torch, dtype=w1_dtype, cache_dir_weight_name=(cache_dir, "w1"))
     lazy_w2 = LazyWeight(source=w2_torch, dtype=w2_dtype, cache_dir_weight_name=(cache_dir, "w2"))
     lazy_w3 = LazyWeight(source=w3_torch, dtype=w3_dtype, cache_dir_weight_name=(cache_dir, "w3"))

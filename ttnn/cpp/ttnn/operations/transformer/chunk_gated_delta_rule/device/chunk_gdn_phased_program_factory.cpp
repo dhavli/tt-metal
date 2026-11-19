@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -13,6 +14,7 @@
 #include "chunk_gdn_phased.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -112,7 +114,7 @@ PrepWorkDist distribute_prep(CoreCoord grid, uint32_t total, uint32_t core_cap) 
         crs.insert(CoreRange{core, core});
         off += cnt;
     }
-    d.core_set = CoreRangeSet{crs};
+    d.core_set = CoreRangeSet{crs}.merge_ranges();  // cfx 0030
     return d;
 }
 
@@ -136,7 +138,7 @@ ScanWorkDist distribute_scan(CoreCoord grid, uint32_t BH, uint32_t Vt) {
     const uint32_t ncores = grid.x * grid.y;
     TT_FATAL(BH <= ncores, "num_heads {} exceeds compute cores {}", BH, ncores);
     // QWEN_GDN_SCAN_SERIAL=1 forces NV=1 (full V on 1 core/head, the old layout) for perf A/B only.
-    const char* serial_env = std::getenv("QWEN_GDN_SCAN_SERIAL");
+    const char* serial_env = tt_stack_public::getenv("QWEN_GDN_SCAN_SERIAL");
     const bool force_serial = serial_env && serial_env[0] == '1';
     uint32_t NV = 1;
     for (uint32_t cand = force_serial ? 1u : Vt; cand >= 1; cand--) {  // cand==1 always satisfies
@@ -160,8 +162,64 @@ ScanWorkDist distribute_scan(CoreCoord grid, uint32_t BH, uint32_t Vt) {
         d.vblk.push_back(i % NV);
         crs.insert(CoreRange{core, core});
     }
-    d.core_set = CoreRangeSet{crs};
+    d.core_set = CoreRangeSet{crs}.merge_ranges();  // cfx 0030
     return d;
+}
+
+// cfx (tt-stack 0028): placement for the scan's shared-tile multicast (upstream 5f02a6718f4).
+// Upstream forces each head's NV v-block cores into one 1xNV ROW and lowers NV until BH such rows
+// fit: on an 11x10 grid at BH=24 that is NV=2 (48 cores, half the V parallelism). Here NV is the
+// DEFAULT schedule's (distribute_scan: largest NV | Vt with BH*NV <= cores, so every core keeps the
+// default's per-core V-slice and arithmetic) and only the placement changes: each head's NV cores
+// form a w x h rectangle (w*h == NV) -- a 1xNV row when BH rows fit (upstream's layout), else the
+// most square shape that does (2x2 for NV=4: 5x5 = 25 blocks >= 24 heads on 11x10). v-block vb sits
+// at (x0 + vb % w, y0 + vb / w), so v-block 0 (the sender) is the rectangle's top-left core.
+// Returns false (the caller FATALs: a requested multicast never falls back silently) when NV < 2 or
+// no rectangle shape fits.
+bool distribute_scan_mcast(CoreCoord grid, uint32_t BH, uint32_t Vt, ScanWorkDist& d, uint32_t& rw, uint32_t& rh) {
+    d = distribute_scan(grid, BH, Vt);  // the default NV / Vtl (and its env handling)
+    const uint32_t NV = d.NV;
+    if (NV < 2) {
+        return false;
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> shapes;  // (w, h): the 1xNV row first, then most square
+    shapes.emplace_back(NV, 1u);
+    std::vector<std::pair<uint32_t, uint32_t>> rest;
+    for (uint32_t h = 2; h <= NV; ++h) {
+        if (NV % h == 0) {
+            rest.emplace_back(NV / h, h);
+        }
+    }
+    std::stable_sort(rest.begin(), rest.end(), [](const auto& a, const auto& b) {
+        const int da = std::abs(static_cast<int>(a.first) - static_cast<int>(a.second));
+        const int db = std::abs(static_cast<int>(b.first) - static_cast<int>(b.second));
+        return (da != db) ? da < db : a.first > b.first;
+    });
+    shapes.insert(shapes.end(), rest.begin(), rest.end());
+    for (const auto& [w, h] : shapes) {
+        if (w > grid.x || h > grid.y) {
+            continue;
+        }
+        const uint32_t per_row = grid.x / w;
+        if (BH > per_row * (grid.y / h)) {
+            continue;
+        }
+        rw = w;
+        rh = h;
+        std::set<CoreRange> crs;
+        for (uint32_t i = 0; i < BH * NV; i++) {
+            const uint32_t hd = i / NV;
+            const uint32_t vb = i % NV;
+            const CoreCoord core{(hd % per_row) * w + vb % w, (hd / per_row) * h + vb / w};
+            d.cores[i] = core;
+            d.head[i] = hd;
+            d.vblk[i] = vb;
+            crs.insert(CoreRange{core, core});
+        }
+        d.core_set = CoreRangeSet{crs}.merge_ranges();  // cfx 0030
+        return true;
+    }
+    return false;
 }
 
 }  // namespace
@@ -186,7 +244,7 @@ tt::tt_metal::ProgramDescriptor ChunkGdnPrepProgramFactory::create_descriptor(
     // Fan the BH*NC independent (head, chunk) prep work-items across the whole grid.
     // QWEN_GDN_PREP_SERIAL=1 caps to BH cores (old 1-core/head layout) for perf A/B only.
     const uint32_t total_work = BH * NC;
-    const char* serial_env = std::getenv("QWEN_GDN_PREP_SERIAL");
+    const char* serial_env = tt_stack_public::getenv("QWEN_GDN_PREP_SERIAL");
     const uint32_t core_cap = (serial_env && serial_env[0] == '1') ? BH : ~0u;
     auto dist = distribute_prep(device->compute_with_storage_grid_size(), total_work, core_cap);
     const CoreRangeSet& cores = dist.core_set;
@@ -363,7 +421,36 @@ tt::tt_metal::ProgramDescriptor ChunkGdnScanProgramFactory::create_descriptor(
 
     auto* device = in.v_beta.device();
     // Value-parallel fan-out: each core runs one (head, v-block) sequential scan.
-    auto sdist = distribute_scan(device->compute_with_storage_grid_size(), BH, Vt_full);
+    // cfx (tt-stack 0028): with use_mcast the same NV / per-core V-slice is kept and each head's NV
+    // cores are re-placed on a rectangle (see distribute_scan_mcast); without it this is the image's
+    // placement and program, byte for byte.
+    const bool do_mcast = attrs.use_mcast;
+    uint32_t mc_w = 0, mc_h = 0;
+    ScanWorkDist sdist;
+    if (do_mcast) {
+        // TT_GDN_SCAN_MCAST_GRID=WxH (test only, multicast path only): place on at most a WxH corner of the
+        // grid. ttsim's Blackhole grid is 13x10, where BH=24 fits 1x4 rows; 11x10 reproduces the cards' 2x2
+        // placement there. The default phased path never reads it.
+        CoreCoord mc_grid = device->compute_with_storage_grid_size();
+        if (const char* e = tt_stack_public::getenv("TT_GDN_SCAN_MCAST_GRID"); e != nullptr && e[0] != '\0') {
+            unsigned gx = 0, gy = 0;
+            TT_FATAL(std::sscanf(e, "%ux%u", &gx, &gy) == 2 && gx > 0 && gy > 0,
+                     "TT_GDN_SCAN_MCAST_GRID must be WxH, got '{}'", e);
+            mc_grid = CoreCoord{std::min<std::size_t>(mc_grid.x, gx), std::min<std::size_t>(mc_grid.y, gy)};
+        }
+        const bool placed = distribute_scan_mcast(mc_grid, BH, Vt_full, sdist, mc_w, mc_h);
+        TT_FATAL(
+            placed,
+            "chunk_gdn_scan: use_mcast requested but not applicable: BH={} Vt={} grid={}x{} NV={} (needs NV >= 2 and "
+            "BH rectangles of NV cores on the grid)",
+            BH,
+            Vt_full,
+            mc_grid.x,
+            mc_grid.y,
+            sdist.NV);
+    } else {
+        sdist = distribute_scan(device->compute_with_storage_grid_size(), BH, Vt_full);
+    }
     const CoreRangeSet& cores = sdist.core_set;
     const uint32_t Vt = sdist.Vtl;  // per-core V-block width; CBs/compute use this
     const uint32_t n_used = static_cast<uint32_t>(sdist.cores.size());
@@ -405,6 +492,74 @@ tt::tt_metal::ProgramDescriptor ChunkGdnScanProgramFactory::create_descriptor(
     add_cb(pcb::stmp, kv);
     add_cb(pcb::scr1, scr);
 
+    // cfx (tt-stack 0028): per-head multicast of the six shared V-independent inputs (kd, q_decay,
+    // intra, k_dec_t, dl, t_inv) -- upstream 5f02a6718f4. The head's v-block-0 core reads them from
+    // DRAM once per chunk and multicasts them into its NV-1 siblings' CBs, which would otherwise
+    // re-read the identical DRAM pages. Receivers get the same bytes into the same CB slots and the
+    // compute kernel is unchanged, so the result is bit-identical by construction.
+    CoreRangeSet sender_set, receiver_set;
+    std::vector<CoreCoord> head_rect_start(BH), head_rect_end(BH), head_sender(BH);
+    if (do_mcast) {
+        std::set<CoreRange> s_crs, r_crs;
+        for (uint32_t i = 0; i < n_used; i++) {
+            (sdist.vblk[i] == 0 ? s_crs : r_crs).insert(CoreRange{sdist.cores[i], sdist.cores[i]});
+        }
+        sender_set = CoreRangeSet{s_crs};
+        receiver_set = CoreRangeSet{r_crs};
+        // Handshake semaphores on ALL scan cores so each id resolves to the same L1 address on sender
+        // and receivers. Ids 0 (ready) / 1 (valid) are mirrored as SEM_READY / SEM_VALID constants in
+        // kernels_scan_mcast/dataflow/reader_chunk_gdn_scan_mcast.cpp -- keep in sync.
+        desc.semaphores.push_back(
+            SemaphoreDescriptor{.id = 0, .core_type = tt::CoreType::WORKER, .core_ranges = cores, .initial_value = 0});
+        desc.semaphores.push_back(
+            SemaphoreDescriptor{.id = 1, .core_type = tt::CoreType::WORKER, .core_ranges = cores, .initial_value = 0});
+        // Multicast rectangle per head, in virtual worker coords (the reader runs on NOC_0: top-left ->
+        // bottom-right, unswapped). The whole w x h block including the sender: a non-loopback multicast
+        // never writes the sending core, and num_dests = NV-1 counts only the siblings. Tightness (as the
+        // SDPA GQA packer): every worker core whose NoC coords fall inside must belong to this head.
+        const CoreCoord full_grid = device->logical_grid_size();
+        for (uint32_t hd = 0; hd < BH; hd++) {
+            const CoreCoord tl = sdist.cores[hd * sdist.NV];
+            const CoreCoord br = sdist.cores[hd * sdist.NV + sdist.NV - 1];
+            const CoreCoord p0 = device->worker_core_from_logical_core(tl);
+            const CoreCoord p1 = device->worker_core_from_logical_core(br);
+            const uint32_t min_x = std::min<uint32_t>(p0.x, p1.x), max_x = std::max<uint32_t>(p0.x, p1.x);
+            const uint32_t min_y = std::min<uint32_t>(p0.y, p1.y), max_y = std::max<uint32_t>(p0.y, p1.y);
+            uint32_t inside = 0;
+            for (uint32_t y = 0; y < full_grid.y; ++y) {
+                for (uint32_t x = 0; x < full_grid.x; ++x) {
+                    const CoreCoord p = device->worker_core_from_logical_core(CoreCoord{x, y});
+                    if (p.x >= min_x && p.x <= max_x && p.y >= min_y && p.y <= max_y) {
+                        ++inside;
+                    }
+                }
+            }
+            TT_FATAL(
+                inside == sdist.NV,
+                "chunk_gdn_scan: use_mcast head {} rectangle ({},{})-({},{}) holds {} worker cores, expected NV={}",
+                hd,
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                inside,
+                sdist.NV);
+            head_rect_start[hd] = CoreCoord{min_x, min_y};
+            head_rect_end[hd] = CoreCoord{max_x, max_y};
+            head_sender[hd] = p0;
+        }
+        log_info(
+            tt::LogOp,
+            "chunk_gdn_scan: shared-tile multicast ENABLED (BH={}, NV={}, Vtl={}, rect={}x{}, cores={}, NC={})",
+            BH,
+            sdist.NV,
+            sdist.Vtl,
+            mc_w,
+            mc_h,
+            n_used,
+            NC);
+    }
+
     const std::string kdir = "ttnn/cpp/ttnn/operations/transformer/chunk_gated_delta_rule/device/kernels/";
     // ct arg 2 = per-core Vt(=Vtl); arg 4 = Vt_full (full V in tiles) for the readers'/writer's
     // V-slice row stride. Compute reads only args 0..2 (Ct, Kt, Vt) so the extra arg is harmless.
@@ -420,17 +575,44 @@ tt::tt_metal::ProgramDescriptor ChunkGdnScanProgramFactory::create_descriptor(
     TensorAccessorArgs(*in.t_inv.buffer()).append_to(reader_ct);
     TensorAccessorArgs(in.initial_state.has_value() ? in.initial_state->buffer() : nullptr).append_to(reader_ct);
 
+    // Mcast receivers read only their private V-sliced tensors (v_beta, s0) from DRAM.
+    std::vector<uint32_t> receiver_ct;
+    if (do_mcast) {
+        receiver_ct = ct_args;
+        TensorAccessorArgs(*in.v_beta.buffer()).append_to(receiver_ct);
+        TensorAccessorArgs(in.initial_state.has_value() ? in.initial_state->buffer() : nullptr).append_to(receiver_ct);
+    }
+
     std::vector<uint32_t> writer_ct = ct_args;
     TensorAccessorArgs(*outputs[0].buffer()).append_to(writer_ct);
     TensorAccessorArgs(*outputs[1].buffer()).append_to(writer_ct);
 
+    // Plain reader (the image's file) or, with use_mcast, the sender variant of 5f02a6718f4's reader. The
+    // multicast reader lives in its own directory so kernels/ stays the image's file set, byte for byte.
+    const std::string kdir_mcast =
+        "ttnn/cpp/ttnn/operations/transformer/chunk_gated_delta_rule/device/kernels_scan_mcast/";
     KernelDescriptor reader;
-    reader.kernel_source = kdir + "dataflow/reader_chunk_gdn_scan.cpp";
+    reader.kernel_source = do_mcast ? kdir_mcast + "dataflow/reader_chunk_gdn_scan_mcast.cpp"
+                                    : kdir + "dataflow/reader_chunk_gdn_scan.cpp";
     reader.source_type = KernelDescriptor::SourceType::FILE_PATH;
-    reader.core_ranges = cores;
+    reader.core_ranges = do_mcast ? sender_set : cores;
     reader.compile_time_args = reader_ct;
+    if (do_mcast) {
+        reader.defines = {{"GDN_MCAST_SENDER", "1"}};
+    }
     reader.config = ReaderConfigDescriptor{};
-    reader.runtime_args.reserve(n_used);
+    reader.runtime_args.reserve(do_mcast ? BH : n_used);
+
+    KernelDescriptor receiver;  // used only with use_mcast
+    if (do_mcast) {
+        receiver.kernel_source = kdir_mcast + "dataflow/reader_chunk_gdn_scan_mcast.cpp";
+        receiver.source_type = KernelDescriptor::SourceType::FILE_PATH;
+        receiver.core_ranges = receiver_set;
+        receiver.compile_time_args = receiver_ct;
+        receiver.defines = {{"GDN_MCAST_RECEIVER", "1"}};
+        receiver.config = ReaderConfigDescriptor{};
+        receiver.runtime_args.reserve(n_used - BH);
+    }
 
     KernelDescriptor writer;
     writer.kernel_source = kdir + "dataflow/writer_chunk_gdn_scan.cpp";
@@ -463,13 +645,47 @@ tt::tt_metal::ProgramDescriptor ChunkGdnScanProgramFactory::create_descriptor(
         const auto& core = sdist.cores[i];
         const uint32_t h = sdist.head[i];
         const uint32_t vb = sdist.vblk[i];
-        reader.emplace_runtime_args(
-            core, {h, vb, NC, vb_buf, kd_buf, qd_buf, it_buf, kdec_buf, dl_buf, ti_buf, s0_buf});
+        if (!do_mcast) {
+            reader.emplace_runtime_args(
+                core, {h, vb, NC, vb_buf, kd_buf, qd_buf, it_buf, kdec_buf, dl_buf, ti_buf, s0_buf});
+        } else if (vb == 0) {
+            reader.emplace_runtime_args(
+                core,
+                {h,
+                 vb,
+                 NC,
+                 vb_buf,
+                 kd_buf,
+                 qd_buf,
+                 it_buf,
+                 kdec_buf,
+                 dl_buf,
+                 ti_buf,
+                 s0_buf,
+                 static_cast<uint32_t>(head_rect_start[h].x),
+                 static_cast<uint32_t>(head_rect_start[h].y),
+                 static_cast<uint32_t>(head_rect_end[h].x),
+                 static_cast<uint32_t>(head_rect_end[h].y),
+                 sdist.NV - 1});
+        } else {
+            receiver.emplace_runtime_args(
+                core,
+                {h,
+                 vb,
+                 NC,
+                 vb_buf,
+                 s0_buf,
+                 static_cast<uint32_t>(head_sender[h].x),
+                 static_cast<uint32_t>(head_sender[h].y)});
+        }
         writer.emplace_runtime_args(core, {h, vb, NC, o_buf, fs_buf});
         compute.emplace_runtime_args(core, {NC});
     }
 
     desc.kernels.push_back(std::move(reader));
+    if (do_mcast) {
+        desc.kernels.push_back(std::move(receiver));
+    }
     desc.kernels.push_back(std::move(writer));
     desc.kernels.push_back(std::move(compute));
     return desc;

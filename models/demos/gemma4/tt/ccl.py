@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 from loguru import logger
@@ -20,7 +21,7 @@ def default_num_links():
 
     Override with ``GEMMA4_CCL_NUM_LINKS``.
     """
-    env = os.environ.get("GEMMA4_CCL_NUM_LINKS")
+    env = _tt_public_getenv("GEMMA4_CCL_NUM_LINKS")
     if env is not None:
         return max(1, int(env))
     return 2 if is_blackhole() else 1
@@ -28,17 +29,17 @@ def default_num_links():
 
 def ccl_chunks_per_sync() -> int:
     """Async RS/AG ``chunks_per_sync`` (fabric packet grouping). Default 10."""
-    return max(1, int(os.environ.get("GEMMA4_CCL_CHUNKS_PER_SYNC", "10")))
+    return max(1, int(_tt_public_getenv("GEMMA4_CCL_CHUNKS_PER_SYNC", "10")))
 
 
 def ccl_num_workers_per_link() -> int:
     """Async RS/AG workers per link. Default 2."""
-    return max(1, int(os.environ.get("GEMMA4_CCL_NUM_WORKERS", "2")))
+    return max(1, int(_tt_public_getenv("GEMMA4_CCL_NUM_WORKERS", "2")))
 
 
 def ccl_num_buffers_per_channel() -> int:
     """Async RS/AG ``num_buffers_per_channel``. Default 2."""
-    return max(1, int(os.environ.get("GEMMA4_CCL_NUM_BUFFERS", "2")))
+    return max(1, int(_tt_public_getenv("GEMMA4_CCL_NUM_BUFFERS", "2")))
 
 
 def ccl_persistent_buffers_enabled() -> bool:
@@ -47,7 +48,7 @@ def ccl_persistent_buffers_enabled() -> bool:
     Default on for async path; disable with ``GEMMA4_CCL_PERSISTENT_BUF=0``.
     Sync ``ttnn.all_reduce`` ignores this (no persistent buffer API).
     """
-    return os.environ.get("GEMMA4_CCL_PERSISTENT_BUF", "1").lower() not in ("0", "false", "no")
+    return _tt_public_getenv("GEMMA4_CCL_PERSISTENT_BUF", "1").lower() not in ("0", "false", "no")
 
 
 def default_ccl_topology(mesh_device=None):
@@ -66,7 +67,7 @@ def default_ccl_topology(mesh_device=None):
     Async RS+AG is correct but slower than sync on P150x8 — keep
     ``GEMMA4_CCL_ASYNC=0`` unless re-swept.
     """
-    override = os.environ.get("GEMMA4_CCL_TOPOLOGY", "").strip().lower()
+    override = _tt_public_getenv("GEMMA4_CCL_TOPOLOGY", "").strip().lower()
     if override in ("ring", "r"):
         return ttnn.Topology.Ring
     if override in ("linear", "line", "l"):
@@ -102,7 +103,7 @@ def ccl_async_enabled() -> bool:
     Default off until measured green on the target board; enable with
     ``GEMMA4_CCL_ASYNC=1``.
     """
-    return os.environ.get("GEMMA4_CCL_ASYNC", "0").lower() in ("1", "true", "yes")
+    return _tt_public_getenv("GEMMA4_CCL_ASYNC", "0").lower() in ("1", "true", "yes")
 
 
 class CCLManager:

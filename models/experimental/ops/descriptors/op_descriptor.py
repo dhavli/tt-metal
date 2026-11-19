@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import functools
 import inspect
 import os
@@ -23,7 +24,7 @@ import ttnn
 #   Hashable     → hash(obj)               (content-based, no pinning)
 #   id()-based   → id(obj) + strong ref    (pinned until LRU eviction)
 
-_PROGRAM_KEY_CACHE_MAX = int(os.environ.get("TT_METAL_FUSION_PROGRAM_KEY_CACHE_MAX_ENTRIES", "128"))
+_PROGRAM_KEY_CACHE_MAX = int(_tt_public_getenv("TT_METAL_FUSION_PROGRAM_KEY_CACHE_MAX_ENTRIES", "128"))
 
 _PROGRAM_KEY_CACHE_REGISTRY: list = []
 

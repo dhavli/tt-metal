@@ -11,6 +11,7 @@ so a sweep does not overwrite itself.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -94,7 +95,7 @@ def test_t2va_end_to_end(mesh_device, reset_seeds, aspect_ratio, duration_s):
     # A missing dependency must report SKIPPED before the long generation, never silently pass as green.
     pytest.importorskip("open_clip", reason="the CLIP gate needs open_clip, which is not installed")
 
-    if not os.environ.get("TT_DIT_CACHE_DIR"):
+    if not _tt_public_getenv("TT_DIT_CACHE_DIR"):
         logger.warning(
             "TT_DIT_CACHE_DIR is unset, so every weight load reads safetensors. Prepares are excluded "
             "from the total either way, but the run will take far longer than the reported compute."
@@ -174,7 +175,7 @@ def test_t2va_end_to_end(mesh_device, reset_seeds, aspect_ratio, duration_s):
             # numpy<2 / transformers 4.33), and without one `run_vbench` skips -- which marks the whole
             # test SKIPPED *after* the full generation, hiding the perf and A/V results behind a
             # non-result. Off means "not measured": everything above still gates.
-            if os.environ.get("RUN_VBENCH", "1") not in ("0", "false", "False"):
+            if _tt_public_getenv("RUN_VBENCH", "1") not in ("0", "false", "False"):
                 gate_vbench(paths, prompt, VBENCH_THRESHOLDS, stem)
             else:
                 logger.warning("RUN_VBENCH=0, so the VBench gate did not run; generative quality is UNMEASURED")

@@ -106,3 +106,86 @@ inline uint32_t get_dynamic_Sk_chunk_t(int cur_pos) {
     }
     return Sk_chunk_t;
 }
+
+/******************************************************************************
+ * cfx (tt-stack 0034): speculative-verify multi-position fold (SDPA_SPEC_FOLD_T)
+ *
+ * One program serves T candidate positions of each of B users, reading each user's KV once. Layout is candidate-major,
+ * exactly the concatenation of the T legacy per-candidate calls: Q [1, T*B, NQH, DH] (row u = j*B + b), cur_pos
+ * [T*B] (entry j*B + b), page table [B, ...], output [1, T*B, NQH, vDH]. Candidate j of user b attends [0, pos(j,b)].
+ * Inside a core, row-tile r of the Q block belongs to candidate r / PNHt_cand.
+ *
+ * Workload: the KV scan runs to the group's LARGEST valid position (pos_max), but the chunk split across the
+ * cores_per_head is the legacy split of the SMALLEST valid position (pos_min), with the chunks past it (at most one:
+ * T-1 < 32 <= chunk positions) appended to core 0, which always holds that split's last chunk. So every core's range
+ * starts at or before pos_min: no row of any core is masked over its whole range (a fully masked row would give
+ * max = -inf and exp(-inf - -inf) = NaN), and a candidate whose bound lies in the pos_min chunk sees exactly the
+ * legacy partial softmaxes plus, on core 0, one chunk that contributes exp(-inf) = 0 to its sum and output.
+ * Entries of UINT32_MAX (skip) are ignored; a group with no valid entry is skipped like a legacy skip row.
+ ******************************************************************************/
+// Program defines set by the factory only on a fold program; every other program compiles the legacy code.
+#ifndef SDPA_SPEC_FOLD_T
+#define SDPA_SPEC_FOLD_T 0
+#endif
+#ifndef SDPA_SPEC_FOLD_B
+#define SDPA_SPEC_FOLD_B 1
+#endif
+#ifndef SDPA_SPEC_FOLD_PNHT_CAND
+#define SDPA_SPEC_FOLD_PNHT_CAND 1
+#endif
+#ifndef SDPA_SPEC_FOLD_MUSTFAIL
+#define SDPA_SPEC_FOLD_MUSTFAIL 0
+#endif
+
+struct SpecFoldPositions {
+    uint32_t pos_min;
+    uint32_t pos_max;
+    bool skip;
+};
+
+template <uint32_t T, typename GetPos>
+inline SpecFoldPositions spec_fold_positions(uint32_t cur_batch, uint32_t B, GetPos get_pos) {
+    SpecFoldPositions p{UINT32_MAX, 0, true};
+    for (uint32_t j = 0; j < T; ++j) {
+        const uint32_t v = get_pos(j * B + cur_batch);
+        if (v == UINT32_MAX) {
+            continue;
+        }
+        p.skip = false;
+        p.pos_min = v < p.pos_min ? v : p.pos_min;
+        p.pos_max = v > p.pos_max ? v : p.pos_max;
+    }
+    return p;
+}
+
+// get_workload_for_core, or (T > 0) its fold form: legacy split of pos_min's chunks, core 0 extended to pos_max's.
+// k_num_chunks stays pos_min's count (the "core has data" predicate the tree reduction uses on every RISC).
+template <uint32_t T>
+inline std::tuple<uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t> get_workload_for_core_spec_fold(
+    uint32_t cur_pos,
+    uint32_t pos_min,
+    int cur_batch,
+    int core_num,
+    int num_cores_per_batch,
+    uint32_t k_chunk_size,
+    std::optional<uint32_t> sliding_window_size = std::nullopt) {
+    if constexpr (T == 0) {
+        return get_workload_for_core(cur_pos, cur_batch, core_num, num_cores_per_batch, k_chunk_size, sliding_window_size);
+    } else {
+        auto [pst, n_min, start, end, wsu, wsc] =
+            get_workload_for_core(pos_min, cur_batch, core_num, num_cores_per_batch, k_chunk_size, std::nullopt);
+        const uint32_t n_max = nearest_n(cur_pos + 1, k_chunk_size) / k_chunk_size;
+        if (core_num == 0 && n_max > n_min) {
+            end = n_max;
+            pst = n_max * k_chunk_size / tt::constants::TILE_HEIGHT;
+        }
+        return {pst, n_min, start, end, wsu, wsc};
+    }
+}
+
+// A chunk needs the per-candidate causal mask iff its last position is past the smallest candidate bound. With the
+// fold workload only core 0 can own such chunks (at most two). Writer and compute evaluate this same predicate in
+// the same ascending chunk order: one mask block per qualifying chunk, pushed by the writer, popped by compute.
+inline bool spec_fold_chunk_needs_mask(uint32_t k_chunk, uint32_t k_chunk_size, uint32_t pos_min) {
+    return (k_chunk * k_chunk_size + k_chunk_size - 1) > pos_min;
+}

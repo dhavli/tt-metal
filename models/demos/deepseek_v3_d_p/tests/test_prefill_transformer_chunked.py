@@ -21,6 +21,7 @@ Requires an 8x4 Blackhole mesh and (env from the task):
     TT_DS_PREFILL_HOST_REF_CACHE=/mnt/models/deepseek-prefill-cache/goldened
 Override the trace dir with PREFILL_TRACE_DIR.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import json
@@ -83,7 +84,7 @@ def _resolve_trace_dir(variant) -> Path:
     overrides the variant's prefill_trace_default. A vllm trace nests metadata.json + kv_cache under
     one run-hash subdir, so if the dir itself has no metadata.json, descend into the sole subdir that
     does."""
-    path = Path(os.environ.get("PREFILL_TRACE_DIR", variant.test_prefill_trace_default))
+    path = Path(_tt_public_getenv("PREFILL_TRACE_DIR", variant.test_prefill_trace_default))
     if (path / "metadata.json").exists():
         return path
     subs = [d for d in sorted(path.iterdir()) if d.is_dir() and (d / "metadata.json").exists()]
@@ -1451,7 +1452,7 @@ def run_chunked_transformer_updated(
     # normal runs are unaffected. Bracketed by PROFILE_WARMUP_START / PROFILE_MEASURE_START signposts;
     # the per-layer post-processor keeps only ops AFTER PROFILE_MEASURE_START, so this compile pass is
     # excluded from the device-time / op2op breakdown.
-    if os.environ.get("TT_PREFILL_PROFILE_WARMUP", "0") == "1":
+    if _tt_public_getenv("TT_PREFILL_PROFILE_WARMUP", "0") == "1":
         signpost("PROFILE_WARMUP_START")
         warm_tokens = ttnn.from_torch(
             chunk_tok_host[0],

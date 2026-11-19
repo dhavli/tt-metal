@@ -10,6 +10,7 @@ in a per-kind subdir (PREFILL_SUMMARIES/pcc, PREFILL_SUMMARIES/perf), one file p
 sweep never clobbers itself. A CI publish step globs a subdir and concatenates the files into
 $GITHUB_STEP_SUMMARY.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import getpass
 import os
@@ -21,7 +22,7 @@ from loguru import logger
 def summaries_root() -> Path:
     """Root for all prefill CI summaries. A shared fixed dir is owned by whoever creates it first and
     raises PermissionError for everyone else, so the default is per-user."""
-    return Path(os.getenv("PREFILL_SUMMARIES", f"/tmp/prefill_summaries_{getpass.getuser()}"))
+    return Path(_tt_public_getenv("PREFILL_SUMMARIES", f"/tmp/prefill_summaries_{getpass.getuser()}"))
 
 
 def summary_dir(kind: str) -> Path:
@@ -50,7 +51,7 @@ def is_primary_rank() -> bool:
     """True on MPI rank 0 (or a non-MPI run). Under `mpirun --pernode` every node runs the whole test,
     so without this every rank would race-write the same file on the shared volume."""
     for var in ("OMPI_COMM_WORLD_RANK", "PMIX_RANK", "PMI_RANK"):
-        rank = os.environ.get(var)
+        rank = _tt_public_getenv(var)
         if rank is not None:
             return rank == "0"
     return True

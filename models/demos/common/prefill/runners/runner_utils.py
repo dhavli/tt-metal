@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def open_mesh_device(
     mesh_shape: tuple, model_cfg: type, l1_small_size: int = 0, trace_region_size: int = 0
 ) -> ttnn.MeshDevice:
     sp = mesh_shape[0]
-    fabric_mode = os.environ.get("PREFILL_FABRIC_MODE", "").strip().lower()
+    fabric_mode = _tt_public_getenv("PREFILL_FABRIC_MODE", "").strip().lower()
     fabric_mode_map = {
         "1d": ttnn.FabricConfig.FABRIC_1D,
         "2d": ttnn.FabricConfig.FABRIC_2D,
@@ -151,7 +152,7 @@ def _snap_counts_to_starts(counts, valid_starts, num_layers):
 
 
 def compute_layer_split(num_layers: int, num_ranks: int, valid_starts=None) -> list[tuple[int, int]]:
-    override = os.environ.get("PREFILL_PP_LAYER_COUNTS")
+    override = _tt_public_getenv("PREFILL_PP_LAYER_COUNTS")
     if override:
         counts = [int(x) for x in override.split(",")]
         if len(counts) != num_ranks or sum(counts) != num_layers:

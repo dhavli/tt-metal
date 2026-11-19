@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -7,7 +8,19 @@
 #include "ttnn/operations/matmul/device/config/matmul_program_config.hpp"
 
 #include <algorithm>
+#include <cstdlib>
+#include <mutex>
+#include <string_view>
 #include <utility>
+#include <set>
+#include <tuple>
+#include <map>
+#include <string>
+#include "ttnn/metal_v2_artifacts.hpp"
+#include <tt-metalium/experimental/metal2_host_api/program_spec.hpp>
+#include <tt-metalium/experimental/metal2_host_api/program_run_args.hpp>
+
+#include <tt-logger/tt-logger.hpp>
 
 #include "hostdevcommon/common_values.hpp"
 #include <tt-metalium/tt_metal.hpp>
@@ -40,6 +53,36 @@ using dram_sharded_helpers::get_dram_bank_reader_assignments;
 using dram_sharded_helpers::get_max_page_size_and_num_pages;
 using dram_sharded_helpers::move_common_entries;
 using dram_sharded_helpers::validate_num_workers_per_dram_bank;
+
+// TT_MR_IN1_DUAL_NOC (read once per process): split each multi-reader (num_workers_per_dram_bank > 1)
+// bank's in1 stream across NOC0 and NOC1 by reader, not by k-row (rev 3). Every reader whose
+// worker_index is odd and which is a pure in0 mcast receiver (never an in0 storage core) runs the
+// unchanged in1 kernel on NOC1 and its in0 receiver kernel on NOC0; the RISC assignment and
+// DM_DEDICATED_NOC are unchanged everywhere, so no kernel shares a NoC with the other RISC.
+//   unset / "" / "0"  off: byte-identical programs to the single-NoC factory
+//   "1"               on
+//   "mustfail"        on, and every k-row of a NOC1 reader is read twice (same numerics, slower) to
+//                     prove the NOC1 ELF ran
+// Anything else is an error, so a typo cannot silently run the default arm.
+enum class MrIn1DualNoc { OFF, ON, MUSTFAIL };
+
+static MrIn1DualNoc mr_in1_dual_noc_mode() {
+    static const MrIn1DualNoc mode = [] {
+        const char* raw = tt_stack_public::getenv("TT_MR_IN1_DUAL_NOC");
+        const std::string_view v = raw == nullptr ? std::string_view{} : std::string_view{raw};
+        if (v.empty() || v == "0") {
+            return MrIn1DualNoc::OFF;
+        }
+        if (v == "1") {
+            return MrIn1DualNoc::ON;
+        }
+        if (v == "mustfail") {
+            return MrIn1DualNoc::MUSTFAIL;
+        }
+        TT_THROW("TT_MR_IN1_DUAL_NOC must be unset, 0, 1 or mustfail; got '{}'", v);
+    }();
+    return mode;
+}
 
 static ProgramDescriptor create_program_dram_sharded_descriptor(
     tt::tt_metal::IDevice* device,
@@ -119,6 +162,20 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
     TT_FATAL(
         workers_per_bank == 1 || in1_noc == tt::tt_metal::NOC::NOC_0,
         "Multiple workers per DRAM bank currently require a NOC0 data-movement kernel");
+
+    // Dual-NoC in1 (TT_MR_IN1_DUAL_NOC, rev 3): reader placement and the NOC0 requirement above are
+    // unchanged; the odd-indexed secondary readers of each bank are moved to NOC1 below, once the
+    // in0 mcast receivers are known. Everything stays in DM_DEDICATED_NOC (rev 1/2 used DM_DYNAMIC_NOC
+    // and hung on hardware; see the patch header).
+    const MrIn1DualNoc in1_dual_noc_mode = workers_per_bank > 1 ? mr_in1_dual_noc_mode() : MrIn1DualNoc::OFF;
+    const bool in1_dual_noc = in1_dual_noc_mode != MrIn1DualNoc::OFF;
+    if (in1_dual_noc) {
+        TT_FATAL(
+            device->arch() == tt::ARCH::BLACKHOLE && in1_noc == tt::tt_metal::NOC::NOC_0 &&
+                in0_noc == tt::tt_metal::NOC::NOC_1,
+            "TT_MR_IN1_DUAL_NOC needs Blackhole with in1 on NOC0 and in0 on NOC1");
+    }
+    const tt_metal::NOC_MODE dm_noc_mode = tt_metal::NOC_MODE::DM_DEDICATED_NOC;
 
     auto reader_assignments =
         get_dram_bank_reader_assignments(device, in1_noc, workers_per_bank, input_all_storage_cores);
@@ -302,6 +359,39 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
     CoreRangeSet all_cores_in_rect_grid(bounding_box_set);
     std::vector<CoreCoord> all_cores_in_rect_grid_vec = corerange_to_cores(all_cores_in_rect_grid);
 
+    // TT_MR_IN1_DUAL_NOC: readers that move to NOC1. all_worker_cores_vec now holds only the workers that
+    // are not in0 storage cores (move_common_entries above), i.e. the in0 type-3 receivers, whose in0
+    // kernel issues no multicast and so may run on NOC0.
+    std::set<CoreCoord> in1_noc1_cores;
+    if (in1_dual_noc) {
+        const std::set<CoreCoord> receiver_cores(all_worker_cores_vec.begin(), all_worker_cores_vec.end());
+        for (const auto& assignment : reader_assignments) {
+            if ((assignment.worker_index & 1) != 0 && receiver_cores.contains(assignment.worker_core)) {
+                in1_noc1_cores.insert(assignment.worker_core);
+            }
+        }
+        static std::once_flag engaged_banner;
+        std::call_once(engaged_banner, [&] {
+            log_info(
+                tt::LogOp,
+                "TT_MR_IN1_DUAL_NOC engaged mode={} rev=3 (DRAM-sharded multi-reader in1: odd-indexed readers "
+                "run in1 on NOC1 and in0 on NOC0, DM_DEDICATED_NOC; first program workers_per_bank={} readers={} "
+                "on_noc1={})",
+                in1_dual_noc_mode == MrIn1DualNoc::MUSTFAIL ? "mustfail" : "1",
+                workers_per_bank,
+                reader_assignments.size(),
+                in1_noc1_cores.size());
+        });
+    }
+    std::set<CoreRange> in1_noc1_ranges;
+    for (const auto& core : in1_noc1_cores) {
+        in1_noc1_ranges.insert(CoreRange(core));
+    }
+    const CoreRangeSet in1_noc1_grid(in1_noc1_ranges);
+    const CoreRangeSet in1_noc0_grid =
+        in1_noc1_cores.empty() ? all_cores_in_rect_grid : all_cores_in_rect_grid.subtract(in1_noc1_grid);
+    auto on_noc1 = [&](const CoreCoord& core) { return in1_noc1_cores.contains(core); };
+
     // Semaphore IDs (manually assigned, matching CreateSemaphore sequential allocation)
     uint32_t in0_mcast_sender_semaphore_id = 0;
     uint32_t in0_mcast_receiver_semaphore_id = 1;
@@ -428,23 +518,22 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
     in0_sender_kernel_desc.kernel_source =
         "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in0_sender_dram_sharded.cpp";
     in0_sender_kernel_desc.source_type = KernelDescriptor::SourceType::FILE_PATH;
-    in0_sender_kernel_desc.core_ranges = all_cores_in_rect_grid;
+    in0_sender_kernel_desc.core_ranges = in1_noc0_grid;
     in0_sender_kernel_desc.compile_time_args = in0_sender_compile_time_args;
     in0_sender_kernel_desc.defines = map_to_defines(mm_kernel_in0_sender_define);
     in0_sender_kernel_desc.named_compile_time_args = {
         {"cb_in0", tt::CBIndex::c_0},
         {"cb_in0_sharded", tt::CBIndex::c_2},
     };
-    in0_sender_kernel_desc.config =
-        DataMovementConfigDescriptor{.processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc};
+    in0_sender_kernel_desc.config = DataMovementConfigDescriptor{
+        .processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in0_noc, .noc_mode = dm_noc_mode};
 
     // in1 sender/writer kernel (writer - RISCV_0)
     KernelDescriptor in1_sender_writer_kernel_desc;
     in1_sender_writer_kernel_desc.kernel_source =
-        "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/"
-        "reader_bmm_tile_layout_in1_sender_dram_sharded.cpp";
+        "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_bmm_tile_layout_in1_sender_dram_sharded.cpp";
     in1_sender_writer_kernel_desc.source_type = KernelDescriptor::SourceType::FILE_PATH;
-    in1_sender_writer_kernel_desc.core_ranges = all_cores_in_rect_grid;
+    in1_sender_writer_kernel_desc.core_ranges = in1_noc0_grid;
     in1_sender_writer_kernel_desc.compile_time_args = in1_sender_writer_compile_time_args;
     in1_sender_writer_kernel_desc.defines = map_to_defines(mm_kernel_in1_sender_writer_defines);
     in1_sender_writer_kernel_desc.named_compile_time_args = {
@@ -453,8 +542,28 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
         {"cb_out", tt::CBIndex::c_4},
         {"cb_out_reshard", tt::CBIndex::c_6},
     };
-    in1_sender_writer_kernel_desc.config =
-        DataMovementConfigDescriptor{.processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc};
+    in1_sender_writer_kernel_desc.config = DataMovementConfigDescriptor{
+        .processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in1_noc, .noc_mode = dm_noc_mode};
+
+    // TT_MR_IN1_DUAL_NOC: the same two kernels on the NOC1 readers, with the NoCs swapped (same RISCs).
+    // Only the in0 receiver path (worker_core_type 3: semaphore wait and a semaphore up to the sender)
+    // runs there, and it does not use the NoC-ordered mcast rectangle compile args.
+    KernelDescriptor in0_noc0_kernel_desc = in0_sender_kernel_desc;
+    in0_noc0_kernel_desc.core_ranges = in1_noc1_grid;
+    in0_noc0_kernel_desc.config = DataMovementConfigDescriptor{
+        .processor = tt_metal::DataMovementProcessor::RISCV_1, .noc = in1_noc, .noc_mode = dm_noc_mode};
+    KernelDescriptor in1_noc1_kernel_desc = in1_sender_writer_kernel_desc;
+    in1_noc1_kernel_desc.core_ranges = in1_noc1_grid;
+    if (in1_dual_noc_mode == MrIn1DualNoc::MUSTFAIL) {
+        in1_noc1_kernel_desc.kernel_source =
+            "ttnn/cpp/ttnn/operations/matmul/device/kernels_mr_dual_noc/dataflow/"
+            "reader_bmm_tile_layout_in1_sender_dram_sharded_dual_noc.cpp";
+        auto mustfail_defines = mm_kernel_in1_sender_writer_defines;
+        mustfail_defines["MR_IN1_DUAL_NOC_MUSTFAIL"] = "1";
+        in1_noc1_kernel_desc.defines = map_to_defines(mustfail_defines);
+    }
+    in1_noc1_kernel_desc.config = DataMovementConfigDescriptor{
+        .processor = tt_metal::DataMovementProcessor::RISCV_0, .noc = in0_noc, .noc_mode = dm_noc_mode};
 
     // Compute kernel
     uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
@@ -719,7 +828,8 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
         mm_in0_receiver_args.insert(
             mm_in0_receiver_args.end(), in0_mcast_sender_noc_y.begin(), in0_mcast_sender_noc_y.end());
 
-        in0_sender_kernel_desc.runtime_args.emplace_back(core, std::move(mm_in0_receiver_args));
+        (on_noc1(core) ? in0_noc0_kernel_desc : in0_sender_kernel_desc)
+            .runtime_args.emplace_back(core, std::move(mm_in0_receiver_args));
     }
 
     // in0 sender runtime args (idle cores in rect grid)
@@ -913,7 +1023,8 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
         if (bias.has_value()) {
             in1_writer_args[2] = *bias;
         }
-        in1_sender_writer_kernel_desc.emplace_runtime_args(core, in1_writer_args);
+        (on_noc1(core) ? in1_noc1_kernel_desc : in1_sender_writer_kernel_desc)
+            .emplace_runtime_args(core, in1_writer_args);
     }
 
     TT_FATAL(
@@ -928,8 +1039,397 @@ static ProgramDescriptor create_program_dram_sharded_descriptor(
     desc.kernels.push_back(std::move(in0_sender_kernel_desc));
     desc.kernels.push_back(std::move(in1_sender_writer_kernel_desc));
     desc.kernels.push_back(std::move(compute_kernel_desc));
+    if (!in1_noc1_cores.empty()) {
+        desc.kernels.push_back(std::move(in0_noc0_kernel_desc));
+        desc.kernels.push_back(std::move(in1_noc1_kernel_desc));
+    }
 
     return desc;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// tt-stack 0040: lift of tenstorrent/tt-metal #58922 (head 5e6d4950, "matmul: multi-core DRAM-sharded decode
+// variant (cores_per_bank)") onto our pin. Selected only by MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig::
+// cores_per_bank > 0 (its own program factory struct, MatmulDRAMShardedMulticoreProgramFactory); with 0 every
+// program above is byte-identical. Differences from upstream: our Metal 2.0 host API spells the hardware configs as
+// DataMovementGen1Config / ComputeGen1Config variants; only CK == 1 (cores_per_bank <= the per-bank shard width) is
+// carried, so the in-group reduce-scatter (which needs api/semaphore.h, absent on our pin) is TT_FATAL'd instead;
+// the bank anchors come from the same IDevice query the multi-reader path already uses on the 1x2 mesh.
+//
+// The single-reader program above runs one compute core per DRAM bank, issues its weight reads on one NoC, and
+// accumulates in0_block_w-wide blocks through L1. At M = one tile a core cannot retire tiles as fast as its bank
+// delivers them. This variant:
+//   - places cores_per_bank cores next to each bank's NOC_0-optimal worker and splits the bank's columns over them
+//     (Nbt * c / C .. Nbt * (c + 1) / C, so C need not divide the shard width);
+//   - streams the weight on both data-movement RISCs (alternate K blocks, one per NoC, each with its own
+//     transaction-id ring);
+//   - reads the activation rows a core needs straight from their L1 shards with lookahead;
+//   - keeps each column pass's whole K in fp32 Dest (full sync, <= 8 tiles, P passes);
+//   - writes the output tiles straight into the caller's width-sharded output.
+//
+// TT_MM_DSMC_MUSTFAIL (read once per process): unset / "" / "0" off; "1" compiles DSMC_MUSTFAIL into the compute
+// kernel, which skips the matmul of the last streamed K block (a specific wrong result: the output misses one K
+// slice) while keeping every wait/pop, so the program still completes. Anything else is an error.
+static bool dsmc_mustfail() {
+    static const bool mf = [] {
+        const char* raw = tt_stack_public::getenv("TT_MM_DSMC_MUSTFAIL");
+        const std::string_view v = raw == nullptr ? std::string_view{} : std::string_view{raw};
+        if (v.empty() || v == "0") {
+            return false;
+        }
+        if (v == "1") {
+            return true;
+        }
+        TT_THROW("TT_MM_DSMC_MUSTFAIL must be unset, 0 or 1; got '{}'", v);
+    }();
+    return mf;
+}
+
+static ttnn::device_operation::ProgramArtifacts create_program_dram_sharded_multicore_spec(
+    tt::tt_metal::IDevice* device,
+    const tt::tt_metal::MeshTensor& in0_tensor,
+    const tt::tt_metal::MeshTensor& in1_tensor,
+    const tt::tt_metal::MeshTensor& out_tensor,
+    tt::tt_metal::experimental::ComputeHardwareConfig compute_hw,
+    ttnn::operations::compute_throttle_utils::ThrottleLevel throttle_level,
+    uint32_t Kt,
+    uint32_t Nt,
+    uint32_t k_block,
+    uint32_t cores_per_bank,
+    const tt::tt_metal::Tile& in0_tile,
+    const tt::tt_metal::Tile& in1_tile,
+    const tt::tt_metal::Tile& output_tile,
+    tt::DataFormat in0_data_format,
+    tt::DataFormat in1_data_format,
+    tt::DataFormat output_data_format) {
+    using namespace tt::tt_metal::experimental;
+    using tt::tt_metal::CoreCoord;
+    using tt::tt_metal::CoreRange;
+    using tt::tt_metal::CoreRangeSet;
+    using tt::tt_metal::ShardOrientation;
+
+    const auto arch = device->arch();
+    TT_FATAL(arch == tt::ARCH::BLACKHOLE, "cores_per_bank (tt-stack 0040) is lifted for Blackhole only");
+    // Blackhole: both data-movement RISCs read the weight.
+    const bool two_streams = true;
+    constexpr uint32_t dst_tiles = 8;  // fp32 Dest, full sync
+    const uint32_t depth = 3;          // weight blocks in flight per stream
+    constexpr uint32_t x_lookahead = 6;  // activation blocks in flight ahead of the weight stream
+    const bool mustfail = dsmc_mustfail();
+
+    const auto in1_shard_spec = in1_tensor.shard_spec().value();
+    TT_FATAL(in1_shard_spec.orientation == ShardOrientation::ROW_MAJOR, "Only ROW_MAJOR sharding is supported");
+    const uint32_t Nbt = in1_shard_spec.shape[1] / in1_tile.get_tile_shape()[1];
+    TT_FATAL(
+        in1_shard_spec.shape[0] == Kt * in1_tile.get_tile_shape()[0],
+        "cores_per_bank: the weight shard must hold the whole K ({} rows), got {}",
+        Kt * in1_tile.get_tile_shape()[0],
+        in1_shard_spec.shape[0]);
+    const auto anchors = device->get_optimal_dram_bank_to_logical_worker_assignment(tt::tt_metal::NOC::NOC_0);
+    const uint32_t num_dram_banks = anchors.size();
+    TT_FATAL(
+        in1_shard_spec.grid.num_cores() == num_dram_banks,
+        "cores_per_bank: the weight must be width-sharded over all {} DRAM banks, got {} shards",
+        num_dram_banks,
+        in1_shard_spec.grid.num_cores());
+    const uint32_t num_banks = tt::div_up(Nt, Nbt);  // banks holding real columns
+    TT_FATAL(
+        num_banks <= num_dram_banks, "cores_per_bank: N ({} tiles) exceeds {} DRAM shards of {} tiles", Nt,
+        num_dram_banks, Nbt);
+
+    // Layout: CN column groups per bank, P column passes per core. CK (K row groups) is fixed at 1 in this lift.
+    TT_FATAL(
+        cores_per_bank <= Nbt,
+        "cores_per_bank {} exceeds the per-bank shard width {} tiles; K row groups (#58922 CK > 1) are not lifted",
+        cores_per_bank,
+        Nbt);
+    const uint32_t CN = cores_per_bank;
+    const uint32_t CK = 1;
+    const uint32_t ncmax = tt::div_up(Nbt, CN);
+    const uint32_t P = tt::div_up(ncmax, dst_tiles);
+    const uint32_t ncp = tt::div_up(ncmax, P);
+    // Every core needs work in every pass, or the pass waits on a weight block nobody streams.
+    TT_FATAL(
+        Nbt / CN >= P,
+        "cores_per_bank {}: {} columns per bank leave a core with fewer columns than its {} passes",
+        cores_per_bank,
+        Nbt,
+        P);
+    TT_FATAL(k_block >= 1, "cores_per_bank: in0_block_w must be at least 1");
+    const uint32_t KB = std::min(k_block, Kt);
+    const uint32_t max_blocks = tt::div_up(Kt, KB);
+
+    // Cores and work items: wi = (bank * CN + cn) * CK + kidx; role = wi + 1 (0 = idle).
+    const auto cores =
+        dram_sharded_helpers::get_dram_bank_adjacent_workers(device, tt::tt_metal::NOC::NOC_0, CN * CK, num_banks);
+    const auto grid = device->compute_with_storage_grid_size();
+    std::vector<uint32_t> role(grid.x * grid.y, 0);
+    std::vector<CoreCoord> work_cores;
+    uint32_t max_own = 0;
+    for (uint32_t bank = 0; bank < num_banks; ++bank) {
+        for (uint32_t cn = 0; cn < CN; ++cn) {
+            const uint32_t n0 = Nbt * cn / CN, n1 = Nbt * (cn + 1) / CN;
+            for (uint32_t kidx = 0; kidx < CK; ++kidx) {
+                const CoreCoord core = cores[bank][(cn * CK) + kidx];
+                role[(core.y * grid.x) + core.x] = work_cores.size() + 1;
+                work_cores.push_back(core);
+                max_own = std::max(max_own, ((n1 - n0) * (kidx + 1) / CK) - ((n1 - n0) * kidx / CK));
+            }
+        }
+    }
+    TT_FATAL(work_cores.size() < 256, "cores_per_bank: {} work items exceed the one-byte role table", work_cores.size());
+    std::set<CoreRange> work_ranges;
+    for (const auto& core : work_cores) {
+        work_ranges.insert(CoreRange(core));
+    }
+    const CoreRangeSet rect(CoreRangeSet(work_ranges).bounding_box());
+
+    auto virt = [&](const CoreCoord& c) {
+        const auto v = device->worker_core_from_logical_core(c);
+        return static_cast<uint32_t>((v.y << 16) | v.x);
+    };
+    auto join = [](const std::vector<uint32_t>& v) {
+        std::string s;
+        for (std::size_t i = 0; i < v.size(); ++i) {
+            s += (i ? "," : "") + std::to_string(v[i]);
+        }
+        return s;
+    };
+    const auto in0_shard_spec = in0_tensor.shard_spec().value();
+    const auto out_shard_spec = out_tensor.shard_spec().value();
+    TT_FATAL(
+        in0_shard_spec.orientation == ShardOrientation::ROW_MAJOR &&
+            out_shard_spec.orientation == ShardOrientation::ROW_MAJOR,
+        "cores_per_bank: activation and output shards must be ROW_MAJOR");
+    std::vector<uint32_t> x_cores, out_cores;
+    for (const auto& c : corerange_to_cores(in0_shard_spec.grid, std::nullopt, true)) {
+        x_cores.push_back(virt(c));
+    }
+    for (const auto& c : corerange_to_cores(out_shard_spec.grid, std::nullopt, true)) {
+        out_cores.push_back(virt(c));
+    }
+    const uint32_t x_shard_w = in0_shard_spec.shape[1] / in0_tile.get_tile_shape()[1];
+    const uint32_t out_shard_w = out_shard_spec.shape[1] / output_tile.get_tile_shape()[1];
+    TT_FATAL(
+        x_shard_w * x_cores.size() >= Kt,
+        "cores_per_bank: the activation shards ({} x {} tiles) do not cover K ({} tiles)",
+        x_cores.size(),
+        x_shard_w,
+        Kt);
+
+    const uint32_t x_tile_size = in0_tile.get_tile_size(in0_data_format);
+    const uint32_t w_tile_size =
+        tt::align(in1_tile.get_tile_size(in1_data_format), tt::tt_metal::hal::get_dram_alignment());
+    const uint32_t out_tile_size = output_tile.get_tile_size(output_data_format);
+
+    {
+        // Banner, once per distinct program shape (a handful per model: one per MR role).
+        static std::mutex mu;
+        static std::set<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>> seen;
+        std::lock_guard<std::mutex> lock(mu);
+        if (seen.insert({Kt, Nt, cores_per_bank, KB}).second) {
+            log_info(
+                tt::LogOp,
+                "TT_MM_DSMC engaged cores_per_bank={} mode={} (tt-stack 0040 / tt-metal #58922 multi-core DRAM-sharded "
+                "decode matmul; Kt={} Nt={} Nbt={} banks={} CN={} P={} KB={} depth={} work_cores={} rect={} "
+                "x_shards={}x{} out_shards={}x{} two_streams={})",
+                cores_per_bank,
+                mustfail ? "mustfail" : "1",
+                Kt,
+                Nt,
+                Nbt,
+                num_banks,
+                CN,
+                P,
+                KB,
+                depth,
+                work_cores.size(),
+                rect.str(),
+                x_cores.size(),
+                x_shard_w,
+                out_cores.size(),
+                out_shard_w,
+                two_streams);
+        }
+    }
+
+    const KernelSpecName STREAM0{"stream0"};
+    const KernelSpecName STREAM1{"stream1"};
+    const KernelSpecName COMPUTE{"compute"};
+    const DFBSpecName X_DFB{"x"};
+    const DFBSpecName W0_DFB{"w0"};
+    const DFBSpecName W1_DFB{"w1"};
+    const DFBSpecName OUT_DFB{"out"};
+    const TensorParamName IN0{"in0"};
+    const TensorParamName IN1{"in1"};
+    const TensorParamName OUTPUT{"output"};
+
+    Group<DataflowBufferSpec> dataflow_buffers;
+    dataflow_buffers.push_back(DataflowBufferSpec{
+        .unique_id = X_DFB,
+        .entry_size = x_tile_size,
+        .num_entries = max_blocks * KB,
+        .data_format_metadata = in0_data_format,
+        .tile_format_metadata = in0_tile,
+    });
+    for (const auto& name : std::vector<DFBSpecName>{W0_DFB, W1_DFB}) {
+        dataflow_buffers.push_back(DataflowBufferSpec{
+            .unique_id = name,
+            .entry_size = w_tile_size,
+            .num_entries = depth * KB * ncp,
+            .data_format_metadata = in1_data_format,
+            .tile_format_metadata = in1_tile,
+        });
+    }
+    dataflow_buffers.push_back(DataflowBufferSpec{
+        .unique_id = OUT_DFB,
+        .entry_size = out_tile_size,
+        .num_entries = max_own,
+        .data_format_metadata = output_data_format,
+        .tile_format_metadata = output_tile,
+    });
+
+    // Shared compile-time layout; every kernel derives its work item from these.
+    const std::vector<std::pair<std::string, uint32_t>> layout_args = {
+        {"Nbt", Nbt},
+        {"KT", Kt},
+        {"KB", KB},
+        {"CN", CN},
+        {"CK", CK},
+        {"P", P},
+        {"NCP", ncp},
+        {"NGRP", num_banks * CN},
+        {"ROT", 1u},
+        {"GX", static_cast<uint32_t>(grid.x)},
+        {"MAXOWN", max_own},
+    };
+    const std::string role_table = join(role);
+
+    auto make_stream = [&](const KernelSpecName& name, uint32_t par) {
+        const bool stream1 = par == 1;
+        KernelSpec k{
+            .unique_id = name,
+            .source = "ttnn/cpp/ttnn/operations/matmul/device/kernels/dataflow/reader_dram_sharded_multicore.cpp",
+            .hw_config = DataMovementHardwareConfig{DataMovementGen1Config{
+                .processor = stream1 ? tt::tt_metal::DataMovementProcessor::RISCV_0
+                                     : tt::tt_metal::DataMovementProcessor::RISCV_1,
+                .noc = stream1 ? tt::tt_metal::NOC::NOC_1 : tt::tt_metal::NOC::NOC_0,
+            }},
+        };
+        auto& defines = k.compiler_options.defines;
+        defines["DSMC_ROLE"] = role_table;
+        for (const auto& [arg, value] : layout_args) {
+            k.compile_time_args.insert({arg, value});
+        }
+        k.compile_time_args.insert({"D", depth});
+        k.compile_time_args.insert({"WT", w_tile_size});
+        k.compile_time_args.insert({"PAR", par});
+        k.compile_time_args.insert({"WSINGLE", 0u});
+        defines["DSMC_STREAMS_W"] = "1";
+        k.dfb_bindings.push_back(DFBBinding{
+            .dfb_spec_name = stream1 ? W1_DFB : W0_DFB,
+            .accessor_name = "w",
+            .endpoint_type = DFBEndpointType::PRODUCER,
+        });
+        k.tensor_bindings.push_back(TensorBinding{.tensor_parameter_name = IN1, .accessor_name = "in1"});
+        if (stream1) {
+            defines["DSMC_STREAM1"] = "1";
+            defines["DSMC_XC"] = join(x_cores);
+            defines["DSMC_OC"] = join(out_cores);
+            k.compile_time_args.insert({"XT", x_tile_size});
+            k.compile_time_args.insert({"SW", x_shard_w});
+            k.compile_time_args.insert({"XL", x_lookahead});
+            k.compile_time_args.insert({"OT", out_tile_size});
+            k.compile_time_args.insert({"OW", out_shard_w});
+            k.compile_time_args.insert({"OCAP", static_cast<uint32_t>(out_cores.size()) * out_shard_w});
+            k.dfb_bindings.push_back(
+                DFBBinding{.dfb_spec_name = X_DFB, .accessor_name = "x", .endpoint_type = DFBEndpointType::PRODUCER});
+            k.dfb_bindings.push_back(DFBBinding{
+                .dfb_spec_name = OUT_DFB, .accessor_name = "out", .endpoint_type = DFBEndpointType::CONSUMER});
+            k.tensor_bindings.push_back(TensorBinding{.tensor_parameter_name = IN0, .accessor_name = "in0"});
+            k.tensor_bindings.push_back(TensorBinding{.tensor_parameter_name = OUTPUT, .accessor_name = "output"});
+        }
+        return k;
+    };
+
+    // The design keeps the whole K in fp32 Dest at full-sync capacity, whatever the caller's compute kernel config
+    // says about Dest; fidelity and approximation modes are the caller's.
+    enable_32_bit_dest(compute_hw) = true;
+    double_buffer_dest(compute_hw) = false;
+    auto& um = unpack_modes(compute_hw);
+    um = ComputeUnpackModes{};
+    um.emplace(X_DFB, tt::tt_metal::UnpackMode::UnpackToSrc);
+    um.emplace(W0_DFB, tt::tt_metal::UnpackMode::UnpackToSrc);
+    um.emplace(W1_DFB, tt::tt_metal::UnpackMode::UnpackToSrc);
+    KernelSpec compute{
+        .unique_id = COMPUTE,
+        .source = "ttnn/cpp/ttnn/operations/matmul/device/kernels/compute/bmm_dram_sharded_multicore.cpp",
+        .compiler_options = {.opt_level = tt::tt_metal::KernelBuildOptLevel::O3},
+        .hw_config = std::move(compute_hw),
+    };
+    compute.compiler_options.defines["DSMC_ROLE"] = role_table;
+    {
+        // The same opt-in di/dt mitigations as the single-reader path (TT_MM_STAGGER_TYPE, TT_MM_THROTTLE_PERF).
+        std::map<std::string, std::string> throttle_defines;
+        ttnn::operations::compute_throttle_utils::add_stagger_defines_if_needed(
+            arch, static_cast<int>(work_cores.size()), throttle_defines);
+        ttnn::operations::compute_throttle_utils::throttle_mm_perf(
+            arch, static_cast<int>(work_cores.size()), throttle_defines, throttle_level);
+        for (const auto& [name, value] : throttle_defines) {
+            compute.compiler_options.defines[name] = value;
+        }
+    }
+    compute.compiler_options.defines["DSMC_TWO_STREAMS"] = "1";
+    if (mustfail) {
+        compute.compiler_options.defines["DSMC_MUSTFAIL"] = "1";
+    }
+    for (const auto& [arg, value] : layout_args) {
+        compute.compile_time_args.insert({arg, value});
+    }
+    compute.dfb_bindings.push_back(
+        DFBBinding{.dfb_spec_name = X_DFB, .accessor_name = "x", .endpoint_type = DFBEndpointType::CONSUMER});
+    compute.dfb_bindings.push_back(
+        DFBBinding{.dfb_spec_name = W0_DFB, .accessor_name = "w0", .endpoint_type = DFBEndpointType::CONSUMER});
+    compute.dfb_bindings.push_back(
+        DFBBinding{.dfb_spec_name = W1_DFB, .accessor_name = "w1", .endpoint_type = DFBEndpointType::CONSUMER});
+    compute.dfb_bindings.push_back(
+        DFBBinding{.dfb_spec_name = OUT_DFB, .accessor_name = "out", .endpoint_type = DFBEndpointType::PRODUCER});
+
+    Group<KernelSpec> kernels;
+    kernels.push_back(make_stream(STREAM0, 0));
+    kernels.push_back(make_stream(STREAM1, 1));
+    kernels.push_back(std::move(compute));
+
+    Group<TensorParameter> tensor_parameters;
+    tensor_parameters.push_back(TensorParameter{.unique_id = IN0, .spec = in0_tensor.tensor_spec()});
+    tensor_parameters.push_back(TensorParameter{.unique_id = IN1, .spec = in1_tensor.tensor_spec()});
+    tensor_parameters.push_back(TensorParameter{.unique_id = OUTPUT, .spec = out_tensor.tensor_spec()});
+
+    Group<WorkUnitSpec> work_units;
+    work_units.push_back(WorkUnitSpec{
+        .name = "bank_cores_rect",
+        .kernels = {STREAM0, STREAM1, COMPUTE},
+        .target_nodes = rect,
+    });
+    ProgramSpec spec{
+        .name = "matmul_dram_sharded_multicore",
+        .kernels = std::move(kernels),
+        .dataflow_buffers = std::move(dataflow_buffers),
+        .tensor_parameters = std::move(tensor_parameters),
+        .work_units = std::move(work_units),
+    };
+
+    // No kernel has runtime args (every range derives from the work index), so no KernelRunArgs entries.
+    ProgramRunArgs run_args;
+    run_args.tensor_args = {
+        {IN0, in0_tensor},
+        {IN1, in1_tensor},
+        {OUTPUT, out_tensor},
+    };
+    return ttnn::device_operation::ProgramArtifacts{
+        .spec = std::move(spec),
+        .run_params = std::move(run_args),
+    };
 }
 
 }  // namespace reuse_dram_sharded_optimized_helpers
@@ -1087,6 +1587,54 @@ ProgramDescriptor MatmulMultiCoreReuseMultiCastDRAMShardedProgramFactory::create
         skip_in0_mcast,
         skip_write_back,
         row_broadcast_bias);
+}
+
+// tt-stack 0040 (#58922): the multi-core decode variant, cores_per_bank > 0 only (select_program_factory).
+ttnn::device_operation::ProgramArtifacts MatmulDRAMShardedMulticoreProgramFactory::create_program_artifacts(
+    const ttnn::prim::MatmulParams& operation_attributes,
+    const ttnn::prim::MatmulInputs& tensor_args,
+    std::vector<ttnn::Tensor>& tensor_return_value) {
+    const auto& input_tensors = tensor_args.input_tensors;
+    const auto& bias = tensor_args.optional_input_tensors.at(0);
+    const auto& a = input_tensors.at(0);
+    const auto& b = input_tensors.at(1);
+    const auto& output = tensor_return_value.at(0);
+    const auto& ashape = a.padded_shape();
+    const auto& bshape = b.padded_shape();
+    const auto in0_tile = a.tensor_spec().tile();
+    const auto in1_tile = b.tensor_spec().tile();
+    const auto output_tile = tt::tt_metal::Tile({in0_tile.get_tile_shape()[0], in1_tile.get_tile_shape()[1]});
+    const tt::DataFormat in0_data_format = tt::tt_metal::datatype_to_dataformat_converter(a.dtype());
+    const tt::DataFormat in1_data_format = tt::tt_metal::datatype_to_dataformat_converter(b.dtype());
+    const tt::DataFormat output_data_format = tt::tt_metal::datatype_to_dataformat_converter(output.dtype());
+    TT_FATAL(!bias.has_value(), "cores_per_bank does not support a fused bias");
+    TT_FATAL(
+        a.shard_spec().has_value() && output.shard_spec().has_value(), "Both input A and output must have shard specs");
+    TT_FATAL(ashape[-1] == bshape[-2], "Dimension K (A {} vs B {}) must match for matmul", ashape[-1], bshape[-2]);
+    const auto& compute_kernel_config = operation_attributes.compute_kernel_config.value();
+    const auto& program_config = std::get<operations::matmul::MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig>(
+        operation_attributes.program_config.value());
+    TT_FATAL(program_config.cores_per_bank > 0, "MatmulDRAMShardedMulticoreProgramFactory needs cores_per_bank > 0");
+    tt::tt_metal::IDevice* device = a.device();
+    const uint32_t Kt = ashape[-1] / in0_tile.get_tile_shape()[1];
+    const uint32_t Nt = bshape[-1] / in1_tile.get_tile_shape()[1];
+    return reuse_dram_sharded_optimized_helpers::create_program_dram_sharded_multicore_spec(
+        device,
+        a.mesh_tensor(),
+        b.mesh_tensor(),
+        output.mesh_tensor(),
+        ttnn::to_compute_hardware_config(device->arch(), compute_kernel_config),
+        ttnn::get_throttle_level(operation_attributes.compute_kernel_config),
+        Kt,
+        Nt,
+        program_config.in0_block_w,
+        program_config.cores_per_bank,
+        in0_tile,
+        in1_tile,
+        output_tile,
+        in0_data_format,
+        in1_data_format,
+        output_data_format);
 }
 
 }  // namespace ttnn::prim

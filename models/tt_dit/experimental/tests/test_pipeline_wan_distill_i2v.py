@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -19,7 +20,7 @@ from models.tt_dit.utils.test import ring_params
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), False)],
 )
 @pytest.mark.parametrize(
     "mesh_device, mesh_shape, num_links, dynamic_load, device_params, topology, is_fsdp",
@@ -55,7 +56,7 @@ def test_pipeline_inference(
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    pil_image = PIL.Image.open(os.environ.get("PROMPT_IMAGE", "./prompt_image.png"))
+    pil_image = PIL.Image.open(_tt_public_getenv("PROMPT_IMAGE", "./prompt_image.png"))
     image_prompt = [ImagePrompt(image=pil_image, frame_pos=0)]
     # Distill bakes CFG in; negative_prompt is unused when guidance_scale == 1.0,
     # but we keep one for parity with the base I2V test.
@@ -172,7 +173,7 @@ def test_pipeline_inference_random_weights(
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    pil_image = PIL.Image.open(os.environ.get("PROMPT_IMAGE", "./prompt_image.png"))
+    pil_image = PIL.Image.open(_tt_public_getenv("PROMPT_IMAGE", "./prompt_image.png"))
     image_prompt = [ImagePrompt(image=pil_image, frame_pos=0)]
 
     num_frames = 81

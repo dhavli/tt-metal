@@ -51,6 +51,7 @@ per-expert-accumulated MoE.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -78,7 +79,7 @@ def default_expert_compute_kernel_config():
     BOTH directions, so flipping the default needs a fresh paired run, not a single-prompt result.
     ``fp32_dest_acc_en`` stays False: flipping it changes expert numerics and owes its own paired
     run."""
-    fidelity = ttnn.MathFidelity.HiFi4 if os.environ.get("DG_SPARSE_MOE_HIFI4", "0") != "0" else ttnn.MathFidelity.HiFi2
+    fidelity = ttnn.MathFidelity.HiFi4 if _tt_public_getenv("DG_SPARSE_MOE_HIFI4", "0") != "0" else ttnn.MathFidelity.HiFi2
     return ttnn.WormholeComputeKernelConfig(
         math_fidelity=fidelity,
         math_approx_mode=False,
@@ -92,7 +93,7 @@ def expert_compute_kernel_config(tensor, fallback):
     # matmuls emit. Full-DST synchronization preserves the FP32 accumulation fidelity without
     # changing the BF16 expert outputs. Keep an escape hatch for architecture/performance bisects.
     arch = tensor.device().arch()
-    if os.environ.get("DG_SPARSE_EXPERT_FP32_FULL_SYNC", "0") != "1" or arch != ttnn.Arch.BLACKHOLE:
+    if _tt_public_getenv("DG_SPARSE_EXPERT_FP32_FULL_SYNC", "0") != "1" or arch != ttnn.Arch.BLACKHOLE:
         return fallback
     key = (id(tensor.device()), arch)
     config = _EXPERT_FP32_FULL_SYNC_CFG_CACHE.get(key)

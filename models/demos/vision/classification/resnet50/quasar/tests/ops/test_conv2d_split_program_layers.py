@@ -29,6 +29,7 @@ Run:
     pytest -s models/demos/vision/classification/resnet50/quasar/tests/ops/test_conv2d_split_program_layers.py
   # -k 128to128  (layer2) or -k 256to256 (layer3) to isolate one.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -85,7 +86,7 @@ def _run_split_conv(mesh_device, *, in_channels, out_channels):
         device.arch(), math_fidelity=ttnn.MathFidelity.LoFi, packer_l1_acc=True
     )
 
-    saved = {k: os.environ.get(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
+    saved = {k: _tt_public_getenv(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
     os.environ["TT_METAL_QSR_CONV_SPLIT_PROGRAM"] = "1"
     try:
         out, [oh, ow], _wb = ttnn.experimental.quasar.conv2d(

@@ -5,6 +5,7 @@
 (#47461 Stage-2), the reference primitives' parity with the vendored upstream algorithms
 (#47468 drift guard), and the SDPA chunk-size helper the denoise path depends on.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import os
@@ -194,22 +195,22 @@ def test_self_conditioning_matches_upstream():
 
 # Repo root for the in-repo gemma4 config default (honor TT_METAL_HOME, else derive
 # from this file's location — no personal-path default).
-_REPO = os.environ.get("TT_METAL_HOME") or os.path.abspath(
+_REPO = _tt_public_getenv("TT_METAL_HOME") or os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
 )
 # Default to the HF model id (resolved from the HF cache / hub), not a personal
 # snapshot path with a pinned revision hash — portable on any box that has the
 # gated checkpoint cached.
-DG_CKPT = os.getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it")
+DG_CKPT = _tt_public_getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it")
 # Arch config only (Gemma4ModelArgs.load_hf_config) — default to the in-repo config.
-GEMMA_CONFIG_DIR = os.getenv("GEMMA_CONFIG_DIR", os.path.join(_REPO, "models/demos/gemma4/configs/gemma-4-26B-A4B-it"))
-PROMPT = os.getenv("DG_PROMPT", "The capital of France is")
-PCC_THRESHOLD = float(os.getenv("DG_BACKBONE_PCC", "0.99"))
-KNOWN_QB2_PCC_FLOOR = float(os.getenv("DG_BACKBONE_KNOWN_QB2_PCC_FLOOR", "0.84"))
-KNOWN_QB2_PCC_CEILING = float(os.getenv("DG_BACKBONE_KNOWN_QB2_PCC_CEILING", "0.90"))
+GEMMA_CONFIG_DIR = _tt_public_getenv("GEMMA_CONFIG_DIR", os.path.join(_REPO, "models/demos/gemma4/configs/gemma-4-26B-A4B-it"))
+PROMPT = _tt_public_getenv("DG_PROMPT", "The capital of France is")
+PCC_THRESHOLD = float(_tt_public_getenv("DG_BACKBONE_PCC", "0.99"))
+KNOWN_QB2_PCC_FLOOR = float(_tt_public_getenv("DG_BACKBONE_KNOWN_QB2_PCC_FLOOR", "0.84"))
+KNOWN_QB2_PCC_CEILING = float(_tt_public_getenv("DG_BACKBONE_KNOWN_QB2_PCC_CEILING", "0.90"))
 
 _requires_device = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run on a Tenstorrent device (QB2, MESH_DEVICE=P150x4)",
 )
 
@@ -225,7 +226,7 @@ try:
 
     _parametrize_mesh_with_fabric = parametrize_mesh_with_fabric()
 except Exception as _device_enum_error:  # ttnn missing/stale, or device enumeration failed
-    if os.environ.get("DG_RUN_DEVICE") == "1":
+    if _tt_public_getenv("DG_RUN_DEVICE") == "1":
         raise
     _parametrize_mesh_with_fabric = pytest.mark.skip(
         reason=f"device parametrization unavailable (ttnn not importable): {_device_enum_error}"
@@ -245,7 +246,7 @@ def _reference_and_backbone_state(prompt):
     tok = AutoTokenizer.from_pretrained(DG_CKPT)
     input_ids = tok.encode(prompt, return_tensors="pt")  # [1, seq]
 
-    ref_dtype = {"fp32": torch.float32, "bf16": torch.bfloat16}[os.getenv("DG_REF_DTYPE", "bf16")]
+    ref_dtype = {"fp32": torch.float32, "bf16": torch.bfloat16}[_tt_public_getenv("DG_REF_DTYPE", "bf16")]
     logger.info(f"Loading DiffusionGemmaForBlockDiffusion from {DG_CKPT} (ref dtype={ref_dtype}) ...")
     model = DiffusionGemmaForBlockDiffusion.from_pretrained(
         DG_CKPT, dtype=ref_dtype, attn_implementation="eager"
@@ -302,7 +303,7 @@ def test_diffusiongemma_backbone_logits_pcc(mesh_device, reset_seeds, request):
     # system is dtype-only; router/lm_head fp32 are the cheap high-leverage knobs
     # against the MoE-bf16 PCC ceiling (the 26B-A4B full-model bar is only 0.83
     # vs the dense 31B's 0.99 — the bf16 router top-8 selection is the suspect).
-    fp32_modules = [m.strip() for m in os.getenv("DG_FP32_MODULES", "").split(",") if m.strip()]
+    fp32_modules = [m.strip() for m in _tt_public_getenv("DG_FP32_MODULES", "").split(",") if m.strip()]
     precision = Gemma4Precision({m: ttnn.float32 for m in fp32_modules}) if fp32_modules else None
     if fp32_modules:
         logger.info(f"Precision override: fp32 modules = {fp32_modules}")
@@ -313,14 +314,14 @@ def test_diffusiongemma_backbone_logits_pcc(mesh_device, reset_seeds, request):
     # bf16 accumulates in fp32. Experiment A showed weight-dtype fp32 is a bit-
     # identical no-op (ckpt weights are bf16), so the gap is COMPUTE fidelity.
     # Inject HiFi + fp32_dest_acc into every linear/sparse_matmul to match HF.
-    hifi = os.getenv("DG_HIFI", "").strip().lower()
+    hifi = _tt_public_getenv("DG_HIFI", "").strip().lower()
     if hifi:
         fid = {
             "hifi2": ttnn.MathFidelity.HiFi2,
             "hifi3": ttnn.MathFidelity.HiFi3,
             "hifi4": ttnn.MathFidelity.HiFi4,
         }[hifi]
-        _fp32acc = os.getenv("DG_FP32ACC", "1") == "1"
+        _fp32acc = _tt_public_getenv("DG_FP32ACC", "1") == "1"
         ckc = ttnn.init_device_compute_kernel_config(
             mesh_device.arch(),
             math_fidelity=fid,
@@ -329,7 +330,7 @@ def test_diffusiongemma_backbone_logits_pcc(mesh_device, reset_seeds, request):
             packer_l1_acc=not _fp32acc,
         )
         _saved = {}
-        _hifi_ops = [o.strip() for o in os.getenv("DG_HIFI_OPS", "linear,sparse_matmul").split(",") if o.strip()]
+        _hifi_ops = [o.strip() for o in _tt_public_getenv("DG_HIFI_OPS", "linear,sparse_matmul").split(",") if o.strip()]
         request.addfinalizer(lambda: [setattr(ttnn, n, o) for n, o in _saved.items()])
         for _op in _hifi_ops:
             _saved[_op] = getattr(ttnn, _op)

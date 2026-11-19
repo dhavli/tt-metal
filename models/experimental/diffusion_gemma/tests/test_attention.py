@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Critical host-oracle, device-parity, and long-prompt attention regressions."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -17,15 +18,15 @@ from models.experimental.diffusion_gemma.reference.attention_mask import (
 NEGATIVE_INFINITY = -1.0e9
 
 _requires_device = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run on a Tenstorrent device (needs sfpi >= 7.60.0)",
 )
 _requires_device_integration = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run QB2 bidirectional attention integration tests",
 )
 
-if os.environ.get("DG_RUN_DEVICE") == "1":
+if _tt_public_getenv("DG_RUN_DEVICE") == "1":
     from transformers.models.gemma4.configuration_gemma4 import Gemma4TextConfig
     from transformers.models.gemma4.modeling_gemma4 import (
         Gemma4RMSNorm,
@@ -77,7 +78,7 @@ if os.environ.get("DG_RUN_DEVICE") == "1":
 
 
 def _mesh_1x4(function):
-    if os.environ.get("DG_RUN_DEVICE") != "1":
+    if _tt_public_getenv("DG_RUN_DEVICE") != "1":
         return function
     return parametrize_mesh_with_fabric([(1, 4)])(function)
 

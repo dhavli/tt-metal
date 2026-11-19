@@ -9,6 +9,7 @@
 # (correct shape, std > 1). A generation smoke test, not a PCC gate.
 # =============================================================================
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import numpy as np
@@ -21,7 +22,7 @@ from ....utils.test import line_params, ring_params
 # The pipeline needs the gated fp8 checkpoint (create_pipeline raises ValueError without it);
 # skip (don't error) when it isn't configured, matching the component tests.
 _NEEDS_WEIGHTS = pytest.mark.skipif(
-    not os.environ.get("IDEOGRAM4_WEIGHTS"), reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)"
+    not _tt_public_getenv("IDEOGRAM4_WEIGHTS"), reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)"
 )
 
 
@@ -116,7 +117,7 @@ def test_pipeline_class(*, mesh_device, height, width, preset) -> None:
     pipe = Ideogram4Pipeline.create_pipeline(mesh_device=mesh_device, height=height, width=width)
     img = pipe(prompts=[PROMPT], preset=preset, seed=1234, traced=False)[0]
 
-    out_dir = os.environ.get("IDEOGRAM4_OUT_DIR", "generated")
+    out_dir = _tt_public_getenv("IDEOGRAM4_OUT_DIR", "generated")
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"ideogram4_pipeline_class_{height}_{preset}.png")
     img.save(out)
@@ -137,7 +138,7 @@ def test_2048_presets(*, mesh_device) -> None:
     pipe = Ideogram4Pipeline.create_pipeline(mesh_device=mesh_device, height=2048, width=2048)
     for preset in ("V4_TURBO_12", "V4_DEFAULT_20", "V4_QUALITY_48"):
         img = pipe(prompts=[PROMPT], preset=preset, seed=1234, traced=False)[0]
-        out_dir = os.environ.get("IDEOGRAM4_OUT_DIR", "generated")
+        out_dir = _tt_public_getenv("IDEOGRAM4_OUT_DIR", "generated")
         os.makedirs(out_dir, exist_ok=True)
         out = os.path.join(out_dir, f"ideogram4_2048_{preset}.png")
         img.save(out)

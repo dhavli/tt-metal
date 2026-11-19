@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -76,8 +77,8 @@ class DeepseekV3ForCausalLM(DeepseekGenerator):
     def initialize_vllm_model(
         cls, hf_config, mesh_device, max_batch_size, max_seq_len, tt_data_parallel=1, optimizations: str = None
     ):
-        model_path = os.environ.get("DEEPSEEK_V3_HF_MODEL")
-        cache_dir = os.environ.get("DEEPSEEK_V3_CACHE")
+        model_path = _tt_public_getenv("DEEPSEEK_V3_HF_MODEL")
+        cache_dir = _tt_public_getenv("DEEPSEEK_V3_CACHE")
         if not model_path:
             raise ValueError(
                 "DEEPSEEK_V3_HF_MODEL is not set. Set the environment variable or initialize via the demo "

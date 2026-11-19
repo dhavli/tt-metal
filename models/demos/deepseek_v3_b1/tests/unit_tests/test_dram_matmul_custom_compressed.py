@@ -12,6 +12,7 @@ Tests the combined DRAM streaming + compressed tensor matmul where:
 Key difference from test_matmul_custom_compressed.py (L1 version):
 B lives in DRAM and is streamed in variable-size subblocks.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import numpy as np
 import torch
@@ -270,7 +271,7 @@ def test_dram_matmul_bspm_direct(device):
     import os
     from pathlib import Path
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         import pytest
 
@@ -386,7 +387,7 @@ def test_dram_matmul_bspm_via_blitz(device):
 
     from models.demos.deepseek_v3_b1.weights.prepare import prepare_routed_expert_weights
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_DIR not set")
 
@@ -485,7 +486,7 @@ def test_dram_matmul_bspm_down_proj(device):
 
     from models.demos.deepseek_v3_b1.weights.prepare import prepare_routed_expert_weights
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_DIR not set")
 
@@ -586,7 +587,7 @@ def test_dram_matmul_bspm_fallback(device):
 
     from models.demos.deepseek_v3_b1.weights.prepare import prepare_routed_expert_weights
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_DIR not set")
 
@@ -636,7 +637,7 @@ def test_dram_matmul_bspm_multi_expert(device):
 
     from models.demos.deepseek_v3_b1.weights.prepare import prepare_routed_expert_weights
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_DIR not set")
 

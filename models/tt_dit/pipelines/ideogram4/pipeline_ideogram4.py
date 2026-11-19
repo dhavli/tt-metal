@@ -19,6 +19,7 @@ sequence for SP and the wrapper is per-token, so the denoise loop is SP/TP-ready
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -143,7 +144,7 @@ from ..pipeline_api import PipelineAPIMixin
 # checkpoints (encoder + 2 transformers) dominates pipeline build time; caching the
 # bf16 result next to the source makes subsequent builds skip both the fp8 load and
 # the dequant. Set IDEOGRAM4_DEQUANT_CACHE=0 to force a fresh dequant.
-_DEQUANT_CACHE = os.environ.get("IDEOGRAM4_DEQUANT_CACHE", "1") != "0"
+_DEQUANT_CACHE = _tt_public_getenv("IDEOGRAM4_DEQUANT_CACHE", "1") != "0"
 
 
 def _dq(path):
@@ -194,7 +195,7 @@ MAX_TEXT_TOKENS = 2048
 # padded length is a multiple of tile_size * sp_factor. This is exactly the shared tt_dit helper
 # get_padded_vision_seq_len(N, num_devices) (ring SDPA pads+masks any partial tail internally).
 
-_DEFAULT_WEIGHTS_DIR = os.environ.get("IDEOGRAM4_WEIGHTS")
+_DEFAULT_WEIGHTS_DIR = _tt_public_getenv("IDEOGRAM4_WEIGHTS")
 _DEFAULT_QWEN_REPO = "Qwen/Qwen3-VL-8B-Instruct"
 
 # Per-mesh-shape parallelism presets (Blackhole). Ideogram is always cfg-parallel factor 1

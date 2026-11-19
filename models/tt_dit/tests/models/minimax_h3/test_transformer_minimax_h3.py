@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import time
@@ -95,7 +96,7 @@ MODEL_PATH_ENV = "MINIMAX_H3_MODEL_PATH"
 
 
 def _checkpoint_dir() -> Path:
-    model_root = os.environ.get(MODEL_PATH_ENV)
+    model_root = _tt_public_getenv(MODEL_PATH_ENV)
     if not model_root:
         pytest.skip(f"set {MODEL_PATH_ENV} to a MiniMax-H3 diffusers snapshot to run this")
     directory = Path(model_root) / "transformer"

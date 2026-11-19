@@ -30,6 +30,7 @@ Example per-clip prompt format:
 See ``experimental/models/Wan2_2_SVI.md`` for advanced knobs (steps, CFG, seed,
 motion-latent handoff, overlap) and the upstream-workflow comparison.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from dataclasses import dataclass
 from typing import List, Optional, Union
@@ -84,25 +85,25 @@ def _parse_per_clip_env(env_val: str, num_clips: int, name: str, cast):
 
 
 def _read_svi_config(regime: str, width: int, height: int) -> _SVIRunConfig:
-    svi_high = os.environ.get("SVI_HIGH_PATH")
-    svi_low = os.environ.get("SVI_LOW_PATH")
+    svi_high = _tt_public_getenv("SVI_HIGH_PATH")
+    svi_low = _tt_public_getenv("SVI_LOW_PATH")
     if not svi_high or not svi_low:
         pytest.skip("SVI_HIGH_PATH and SVI_LOW_PATH env vars are required for this test.")
 
-    lightx2v_high = os.environ.get("LIGHTX2V_HIGH_PATH")
-    lightx2v_low = os.environ.get("LIGHTX2V_LOW_PATH")
+    lightx2v_high = _tt_public_getenv("LIGHTX2V_HIGH_PATH")
+    lightx2v_low = _tt_public_getenv("LIGHTX2V_LOW_PATH")
     if regime == "comfyui" and (not lightx2v_high or not lightx2v_low):
         pytest.skip("regime='comfyui' requires LIGHTX2V_HIGH_PATH / LIGHTX2V_LOW_PATH env vars.")
 
-    num_clips = int(os.environ.get("SVI_NUM_CLIPS", "2"))
+    num_clips = int(_tt_public_getenv("SVI_NUM_CLIPS", "2"))
     default_steps = "50" if regime == "python" else "6"
     default_cfg = "5.0" if regime == "python" else "1.5"
-    guidance_scale_env = os.environ.get("GUIDANCE_SCALE", default_cfg)
+    guidance_scale_env = _tt_public_getenv("GUIDANCE_SCALE", default_cfg)
 
-    prompt = _parse_per_clip_env(os.environ.get("PROMPT", _DEFAULT_PROMPT), num_clips, "PROMPT", str)
+    prompt = _parse_per_clip_env(_tt_public_getenv("PROMPT", _DEFAULT_PROMPT), num_clips, "PROMPT", str)
     guidance_scale = _parse_per_clip_env(guidance_scale_env, num_clips, "GUIDANCE_SCALE", float)
     guidance_scale_2 = _parse_per_clip_env(
-        os.environ.get("GUIDANCE_SCALE_2", guidance_scale_env),
+        _tt_public_getenv("GUIDANCE_SCALE_2", guidance_scale_env),
         num_clips,
         "GUIDANCE_SCALE_2",
         float,
@@ -114,13 +115,13 @@ def _read_svi_config(regime: str, width: int, height: int) -> _SVIRunConfig:
         svi_low=svi_low,
         lightx2v_high=lightx2v_high,
         lightx2v_low=lightx2v_low,
-        anchor_image=Image.open(os.environ.get("PROMPT_IMAGE", "./prompt_image.png")),
+        anchor_image=Image.open(_tt_public_getenv("PROMPT_IMAGE", "./prompt_image.png")),
         prompt=prompt,
         num_clips=num_clips,
-        num_motion_latent=int(os.environ.get("SVI_NUM_MOTION_LATENT", "1")),
-        num_overlap_frame=int(os.environ.get("SVI_NUM_OVERLAP_FRAME", "4")),
-        base_seed=int(os.environ.get("SVI_SEED", "0")),
-        num_inference_steps=int(os.environ.get("NUM_STEPS", default_steps)),
+        num_motion_latent=int(_tt_public_getenv("SVI_NUM_MOTION_LATENT", "1")),
+        num_overlap_frame=int(_tt_public_getenv("SVI_NUM_OVERLAP_FRAME", "4")),
+        base_seed=int(_tt_public_getenv("SVI_SEED", "0")),
+        num_inference_steps=int(_tt_public_getenv("NUM_STEPS", default_steps)),
         guidance_scale=guidance_scale,
         guidance_scale_2=guidance_scale_2,
         num_frames=81,

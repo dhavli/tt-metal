@@ -14,6 +14,7 @@ Ported from ``tests/galaxy_prefill_kv_pcc.py::check_kv_pcc``. Reached via
 prefill runner never PCCs. At <= 2048 tokens MSA == dense so the dense golden matches; above that the device's block-sparse
 MSA diverges from the dense golden (see the m3-cpu-reference-model notes).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -52,7 +53,7 @@ def kv_cache_pcc_check(
     num_layers = runtime.config.num_layers
     chunk_size = runtime.config.chunk_size
 
-    trace_dir = resolve_trace_dir(trace_dir or os.environ["PREFILL_TRACE_DIR"])
+    trace_dir = resolve_trace_dir(trace_dir or _tt_public_getitem('PREFILL_TRACE_DIR'))
     import json
 
     with open(Path(trace_dir) / "metadata.json") as f:
@@ -67,8 +68,8 @@ def kv_cache_pcc_check(
     src = _hf_to_meta_rotary_perm(head_dim, rotary_dim)
 
     kv_dir = Path(trace_dir) / "kv_cache"
-    threshold = float(os.environ.get("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
-    record_only = os.environ.get("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1"
+    threshold = float(_tt_public_getenv("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
+    record_only = _tt_public_getenv("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1"
 
     logger.info(
         f"[kv-pcc] per-layer K / V / index_k vs golden ({trace_dir}) for slot={slot_id}, "

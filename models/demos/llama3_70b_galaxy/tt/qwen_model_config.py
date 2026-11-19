@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import json
@@ -220,7 +221,7 @@ class TtQwenModelArgs(TtModelArgs):
             # The Blackhole galaxy dram_prefetcher decode path is opt-in (QWEN_BH_PREFETCHER=1):
             # external runners (e.g. vLLM) stay on the proven no-prefetcher path by default, while
             # the tt-metal CI yamls export the flag to keep the prefetcher path covered.
-            if self.is_blackhole and os.environ.get("QWEN_BH_PREFETCHER", "0") == "1":
+            if self.is_blackhole and _tt_public_getenv("QWEN_BH_PREFETCHER", "0") == "1":
                 self.use_prefetcher = True
 
         # On Blackhole galaxy the fused galaxy CCLs (fused_rms_minimal, llama_rs_create_heads,
@@ -230,7 +231,7 @@ class TtQwenModelArgs(TtModelArgs):
         # the no-prefetcher path already uses, each pinned to the worker sub-device. use_prefetcher
         # still gates the matmuls; use_unfused_ccl gates the post-matmul collective/head/rotary logic.
         self.use_unfused_ccl = (
-            self.use_prefetcher and self.is_blackhole and os.environ.get("QWEN_BH_UNFUSED_CCL", "1") == "1"
+            self.use_prefetcher and self.is_blackhole and _tt_public_getenv("QWEN_BH_UNFUSED_CCL", "1") == "1"
         )
 
         # Set up prefetcher stuff (Blackhole galaxy: 8 readers x 3 receivers; Wormhole: 12 x 2)
@@ -262,11 +263,11 @@ class TtQwenModelArgs(TtModelArgs):
             )
         self.start_core = ttnn.CoreCoord(1, 0)
 
-        HF_MODEL = os.getenv("HF_MODEL")
+        HF_MODEL = _tt_public_getenv("HF_MODEL")
         if HF_MODEL:
             self.CKPT_DIR = HF_MODEL
             self.TOKENIZER_PATH = HF_MODEL
-            self.CACHE_PATH = os.getenv("TT_CACHE_PATH")
+            self.CACHE_PATH = _tt_public_getenv("TT_CACHE_PATH")
             if not self.CACHE_PATH:
                 self.CACHE_PATH = os.path.join("model_cache", HF_MODEL, self.device_name)
             else:  # For HF models, always append the device name (e.g. N150/N300/T3K/TG) to the cache path
@@ -313,7 +314,7 @@ class TtQwenModelArgs(TtModelArgs):
         self.tile_padded_batch_rows = self.tile_size * int(math.ceil(self.max_batch_size / self.tile_size))
 
         # Enable workarounds by default until di/dt issues are fixed
-        self.di_dt_workaround = os.getenv("DISABLE_DI_DT_WORKAROUND") != "1"
+        self.di_dt_workaround = _tt_public_getenv("DISABLE_DI_DT_WORKAROUND") != "1"
         if not self.di_dt_workaround:
             logger.info("Disabling di/dt workaround, re-enable if you see hangs")
 
@@ -350,7 +351,7 @@ class TtQwenModelArgs(TtModelArgs):
                 f"Unsupported number of devices: {self.num_devices}. Only 32 devices (Galaxy) are supported."
             )
         default_links = 2 if self.is_blackhole else 4
-        self.model_config["GALAXY_NUM_LINKS"] = int(os.getenv("GALAXY_NUM_LINKS", str(default_links)))
+        self.model_config["GALAXY_NUM_LINKS"] = int(_tt_public_getenv("GALAXY_NUM_LINKS", str(default_links)))
         # Each cluster axis forms a ring on the 2D-torus fabric, so the on-device collectives use Ring
         # topology to match the fabric routing. (Using Linear on a ring/torus fabric leaves the
         # cross-axis route unmapped -> IndexError: map::at.)
@@ -1673,7 +1674,7 @@ class TtQwenModelArgs(TtModelArgs):
         return False
 
     def ccl_topology(self):
-        if self.num_devices == 8 and os.getenv("ACTUAL_DEVICE", "") != "TG":  # T3K
+        if self.num_devices == 8 and _tt_public_getenv("ACTUAL_DEVICE", "") != "TG":  # T3K
             return ttnn.Topology.Ring
         elif self.num_devices > 1:  # All other multi chip devices
             return ttnn.Topology.Linear
@@ -1810,7 +1811,7 @@ class TtQwenModelArgs(TtModelArgs):
             }.get(self.base_model_name, 0)
 
             # Override MLP padding cores from env var
-            mlp_padded_cores = int(os.environ.get("PAD_MLP_CORES", default_padded_cores))
+            mlp_padded_cores = int(_tt_public_getenv("PAD_MLP_CORES", default_padded_cores))
 
             # Only pad if MLP_PADDED_CORES is non-zero
             if mlp_padded_cores > 0:

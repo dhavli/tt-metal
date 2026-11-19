@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -38,7 +39,7 @@ class transformer_2d_model:
         # TODO: instead of hardcoding grid size in many components, configure it in a single place
         self.grid_size = (8, 8)
 
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = _tt_public_getenv("FALLBACK_ON_GROUPNORM", "0") == "1"
 
         self.proj_in_in_channels = in_channels
         self.proj_in_out_channels = out_channels

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -74,7 +75,7 @@ def _load_hf_drafter(load_weights: bool = True):
 
     Skips (``pytest.skip``) when the checkpoint is missing/incomplete or the built model is not a drafter
     (a soft/expected condition); raises ``RuntimeError`` when the model/config genuinely fails to build."""
-    path = os.environ.get(HF_ENV)
+    path = _tt_public_getenv(HF_ENV)
     if not path or not os.path.exists(path):
         pytest.skip(f"set {HF_ENV}=/path/to/Kimi-K2.x-DFlash (dir with config.json [+ model.safetensors])")
     try:

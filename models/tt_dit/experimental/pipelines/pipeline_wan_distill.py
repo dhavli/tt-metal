@@ -23,6 +23,7 @@ lightx2v safetensors. Tokenizer, text encoder, VAE, and scheduler still come
 from the base diffusers repo (~12 GB total).
 """
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import contextlib
 import os
@@ -118,11 +119,11 @@ class WanDistillPipelineI2V(WanPipelineI2V):
         lora_enabled: bool = False,
     ) -> None:
         if allow_download is None:
-            allow_download = os.environ.get("TT_DIT_ALLOW_HF_DOWNLOAD") == "1"
+            allow_download = _tt_public_getenv("TT_DIT_ALLOW_HF_DOWNLOAD") == "1"
         if lightx2v_local_dir is None:
-            lightx2v_local_dir = os.environ.get("LIGHTX2V_LOCAL_DIR")
+            lightx2v_local_dir = _tt_public_getenv("LIGHTX2V_LOCAL_DIR")
         if random_weights is None:
-            random_weights = os.environ.get("TT_DIT_RANDOM_WEIGHTS") == "1"
+            random_weights = _tt_public_getenv("TT_DIT_RANDOM_WEIGHTS") == "1"
 
         self._lightx2v_local_dir = lightx2v_local_dir
         self._allow_download = allow_download

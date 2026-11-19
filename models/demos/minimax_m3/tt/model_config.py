@@ -5,6 +5,7 @@
 """
 MiniMax-M3 ModelArgs class that's compatible with tt_transformers interface
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -50,7 +51,7 @@ class ModelArgs:
         # Weights come from the HF_MODEL environment variable (tt_transformers standard); there is
         # no built-in default path. Dummy-weights mode needs no checkpoint, so a name-only
         # placeholder is enough to satisfy the model-name check below.
-        hf_model = os.getenv("HF_MODEL")
+        hf_model = _tt_public_getenv("HF_MODEL")
         if hf_model is None:
             if not self.dummy_weights:
                 raise ValueError(
@@ -174,13 +175,13 @@ class ModelArgs:
 
         # DEBUG SPEED: M3_LOAD_NLAYERS=K loads ONLY the shards holding layers 0..K-1 (+ embed/norm/lm_head)
         # instead of all 869GB — for fast single-/few-layer real-weights isolation runs.
-        _ln = os.getenv("M3_LOAD_NLAYERS")
+        _ln = _tt_public_getenv("M3_LOAD_NLAYERS")
         if _ln:
             kln = int(_ln)
             # M3_LOAD_LAYER_START=S loads the GLOBAL layer window [S, S+kln) instead of [0, kln). A
             # pipeline-parallel rank owns layers [first_layer_idx, first_layer_idx+num_layers), so its
             # adapter sets S=first_layer_idx to load exactly that slice (keys stay global-indexed).
-            start = int(os.getenv("M3_LOAD_LAYER_START", "0"))
+            start = int(_tt_public_getenv("M3_LOAD_LAYER_START", "0"))
             keep = set()
             for k, shard in weight_map.items():
                 kk = k[len("language_model.") :] if k.startswith("language_model.") else k
@@ -211,7 +212,7 @@ class ModelArgs:
 
     def weight_cache_path(self, dtype):
         """Return weight cache path for the model"""
-        cache_dir = os.getenv("TT_CACHE_PATH")
+        cache_dir = _tt_public_getenv("TT_CACHE_PATH")
         if cache_dir:
             cache_dir = Path(cache_dir)  # If we specify a TT_CACHE_PATH, use that for the cache
         else:

@@ -66,7 +66,9 @@ GatedDeltaAttnSeqProgramFactory::cached_program_t GatedDeltaAttnSeqProgramFactor
     for (auto& c : head_cores) {
         core_set.insert(CoreRange{c, c});
     }
-    CoreRangeSet cores{core_set};
+    // cfx 0030: merge the per-core ranges into rectangles (same cores). A set of single-core ranges makes
+    // dispatch pay per range and per CB: ~35 us per program at 96 cores x 30 CBs ([source validation record]).
+    CoreRangeSet cores = CoreRangeSet{core_set}.merge_ranges();
 
     tt::DataFormat df_f32 = tt::DataFormat::Float32;
 

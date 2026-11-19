@@ -7,6 +7,7 @@ Test factory and helpers for Gemma4 unit tests.
 Uses HF_MODEL env var to determine which model variant to test against.
 All HF reference configs and layers are created from the real checkpoint.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -33,7 +34,7 @@ PREFILL_BUCKETS = [128, 1024, 4096]
 
 
 def _get_model_path():
-    return os.getenv("HF_MODEL") or os.getenv("GEMMA4_MODEL_PATH", _DEFAULT_MODEL_PATH)
+    return _tt_public_getenv("HF_MODEL") or _tt_public_getenv("GEMMA4_MODEL_PATH", _DEFAULT_MODEL_PATH)
 
 
 def build_hf_prefill_mask(seq_len, sliding_window=None):
@@ -479,7 +480,7 @@ def parametrize_mesh_with_fabric(mesh_shapes=None, device_params_extra=None):
 
     # CI mode: pick only the largest fitting shape so that one yaml entry can
     # target multiple SKUs and let each runner select the appropriate mesh.
-    if os.getenv("CI") == "true" and len(mesh_shapes) > 1:
+    if _tt_public_getenv("CI") == "true" and len(mesh_shapes) > 1:
         mesh_shapes = [max(mesh_shapes, key=lambda s: s[0] * s[1])]
 
     extra = dict(device_params_extra or {})

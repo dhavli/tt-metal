@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -27,7 +28,7 @@ from models.tt_transformers.tt.distributed_norm import DistributedNorm
             "T3K": (1, 8),
             "TG": (8, 4),
             "P150": (1, 1),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -80,7 +81,7 @@ def test_rms_norm_inference(
         k[len(first_layer_prefix) :]: v for k, v in state_dict.items() if (k.startswith(first_layer_prefix))
     }
 
-    base_model_name = os.getenv("HF_MODEL")
+    base_model_name = _tt_public_getenv("HF_MODEL")
     if "gemma-3" in base_model_name:
         reference_model = model_args.reference_rms_norm_text()
     else:

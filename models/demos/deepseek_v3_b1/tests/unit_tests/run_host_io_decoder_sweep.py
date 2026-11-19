@@ -85,6 +85,7 @@ Four-layer rank-parallel verification, one rank per host::
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -348,7 +349,7 @@ def _resolve_trace_root(args: argparse.Namespace) -> Path:
     """Resolve the chunked trace registry root."""
     if args.trace_root is not None:
         return Path(args.trace_root)
-    raw = os.environ.get(TRACE_ROOT_ENV)
+    raw = _tt_public_getenv(TRACE_ROOT_ENV)
     if not raw:
         raise ValueError(f"--trace-root is required (or set ${TRACE_ROOT_ENV})")
     return Path(raw)
@@ -368,7 +369,7 @@ def _resolve_dump_dir(
     layer_parallel: bool,
 ) -> Path | None:
     """Resolve dump dir, adding layer subdirs only for plain paths in parallel mode."""
-    raw = args.dump_dir if args.dump_dir is not None else os.environ.get(KV_CACHE_DUMP_DIR_ENV)
+    raw = args.dump_dir if args.dump_dir is not None else _tt_public_getenv(KV_CACHE_DUMP_DIR_ENV)
     if raw is None:
         return None
 
@@ -463,8 +464,8 @@ def _init_rank_context_or_error() -> tuple[int, int]:
     instead of the single-stage injected-hidden-states path.
     """
 
-    rank = os.environ.get("OMPI_COMM_WORLD_RANK")
-    world_size = os.environ.get("OMPI_COMM_WORLD_SIZE")
+    rank = _tt_public_getenv("OMPI_COMM_WORLD_RANK")
+    world_size = _tt_public_getenv("OMPI_COMM_WORLD_SIZE")
     return int(rank), int(world_size)
 
 

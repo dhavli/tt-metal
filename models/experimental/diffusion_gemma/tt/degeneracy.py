@@ -14,6 +14,7 @@ This module is measurement plus a policy hook; it does not decide the default.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -163,14 +164,14 @@ def is_degenerate(
 
 
 def resolve_policy() -> str:
-    policy = os.environ.get("DG_DEGENERACY_POLICY", DEFAULT_POLICY).strip().lower()
+    policy = _tt_public_getenv("DG_DEGENERACY_POLICY", DEFAULT_POLICY).strip().lower()
     if policy not in POLICIES:
         raise ValueError(f"DG_DEGENERACY_POLICY must be one of {POLICIES}, got {policy!r}")
     return policy
 
 
 def _resolve_float(name: str, default: float) -> float:
-    raw = os.environ.get(name)
+    raw = _tt_public_getenv(name)
     if raw is None or raw == "":
         return default
     value = float(raw)
@@ -184,7 +185,7 @@ DEFAULT_RETRIES = 2
 
 def resolve_retries() -> int:
     """How many extra denoise attempts ``retry`` may spend on one block."""
-    raw = os.environ.get("DG_DEGENERACY_RETRIES")
+    raw = _tt_public_getenv("DG_DEGENERACY_RETRIES")
     if raw is None or raw == "":
         return DEFAULT_RETRIES
     value = int(raw)

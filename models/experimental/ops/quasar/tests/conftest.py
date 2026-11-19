@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import contextlib
 import fcntl
 import os
@@ -35,8 +36,8 @@ def _sanitize_lock_path(raw: str) -> str:
     return resolved
 
 
-_TT_DEVICE_LOCK_PATH = _sanitize_lock_path(os.environ.get("TT_DEVICE_LOCK_PATH", "/tmp/tt_device.lock"))
-_TT_DEVICE_LOCK_TIMEOUT = float(os.environ.get("TT_DEVICE_LOCK_TIMEOUT", "60"))  # 1 min default
+_TT_DEVICE_LOCK_PATH = _sanitize_lock_path(_tt_public_getenv("TT_DEVICE_LOCK_PATH", "/tmp/tt_device.lock"))
+_TT_DEVICE_LOCK_TIMEOUT = float(_tt_public_getenv("TT_DEVICE_LOCK_TIMEOUT", "60"))  # 1 min default
 
 
 class DeviceLockTimeout(Exception):

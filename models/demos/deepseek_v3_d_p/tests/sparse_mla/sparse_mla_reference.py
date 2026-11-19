@@ -9,6 +9,7 @@ The package owns the model + weights API (see its `API_SPEC.md`): a single canon
 and PCC is meaningful. This module only adds what's specific to the test harness: deterministic input
 generation, the per-variant disk cache for reference outputs, and a small weight-source helper.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -38,7 +39,7 @@ assert _EMITTED_INDEXER_KEYS == _CONTRACT_INDEXER_KEYS, (
 def cpu_ref_cache_dir(variant) -> Path:
     """Disk cache dir for this variant's CPU reference outputs (env override, else /tmp)."""
     env = variant.mla_ref_cache_env or "DEEPSEEK_V3_MLA_REF_CACHE"
-    return Path(os.environ.get(env, f"/tmp/{variant.name}_mla_ref_cache"))
+    return Path(_tt_public_getenv(env, f"/tmp/{variant.name}_mla_ref_cache"))
 
 
 def build_weights(variant, config, *, seed=42, layer=None, checkpoint_path=None, repo=None) -> tuple[Weights, str]:

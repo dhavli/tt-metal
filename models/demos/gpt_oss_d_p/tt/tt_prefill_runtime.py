@@ -26,6 +26,7 @@ all-gather fallback because sliding RingJointSDPA requires short-Q/long-K. The s
 cache-read is still ``NotImplementedError`` (not used on the galaxy). The galaxy KV-PCC harness runs
 both one-shot and multi-chunk.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -536,7 +537,7 @@ class TtPrefillRuntime:
             )
         from models.demos.common.prefill.runners.runner_utils import resolve_trace_dir
 
-        raw_trace = trace_dir or os.environ.get("PREFILL_TRACE_DIR")
+        raw_trace = trace_dir or _tt_public_getenv("PREFILL_TRACE_DIR")
         assert raw_trace, "kv_cache_pcc_check needs PREFILL_TRACE_DIR or trace_dir="
         trace_dir = resolve_trace_dir(raw_trace)
         token_ids = list(json.load(open(Path(trace_dir) / "metadata.json"))["token_ids"])
@@ -556,13 +557,13 @@ class TtPrefillRuntime:
         src = torch.tensor(src, dtype=torch.long)
 
         kv_dir = Path(trace_dir) / "kv_cache"
-        _dump_env = os.environ.get("GPT_OSS_KV_DUMP", "")
+        _dump_env = _tt_public_getenv("GPT_OSS_KV_DUMP", "")
         if _dump_env == "all":
             _dump_set = set(range(first_layer_idx, first_layer_idx + self.config.num_layers))
         else:
             _dump_set = {int(x) for x in _dump_env.split(",") if x.strip()} if _dump_env else set()
         # Per-layer tensor dumps land next to the golden trace by default; GPT_OSS_KV_DUMP_DIR overrides.
-        _dump_dir = os.environ.get("GPT_OSS_KV_DUMP_DIR") or (Path(trace_dir) / "kv_dump")
+        _dump_dir = _tt_public_getenv("GPT_OSS_KV_DUMP_DIR") or (Path(trace_dir) / "kv_dump")
         logger.info(
             f"[kv-pcc] per-layer K / V vs golden ({trace_dir}) over [0,{n_tokens}) ({self.config.num_layers} layers):"
         )

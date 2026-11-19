@@ -15,6 +15,7 @@ The device cases need the real 22B checkpoint + a LoRA file + a mesh; they mirro
 style of ``test_ltx_lora_runtime.py``. Set ``RUN_LORA_GEN=1`` for an end-to-end base/lora/unloaded
 generate A/B.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -31,7 +32,7 @@ from models.tt_dit.utils.test import line_params
 
 
 def _default_checkpoint() -> str:
-    explicit = os.environ.get("LTX_CHECKPOINT")
+    explicit = _tt_public_getenv("LTX_CHECKPOINT")
     if explicit:
         return explicit
     local = os.path.expanduser("~/.cache/ltx-checkpoints/ltx-2.3-22b-dev.safetensors")
@@ -41,7 +42,7 @@ def _default_checkpoint() -> str:
 
 
 def _default_lora() -> str:
-    explicit = os.environ.get("LORA_PATH")
+    explicit = _tt_public_getenv("LORA_PATH")
     if explicit:
         return explicit
     local = os.path.expanduser("~/.cache/ltx-checkpoints/ltx-2.3-22b-distilled-lora-384-1.1.safetensors")
@@ -90,7 +91,7 @@ def test_ondevice_lora_bind_matches_host_delta(
     (within bf16 add/subtract drift); the transformer Module is reused throughout."""
     ckpt = _default_checkpoint()
     lora = _default_lora()
-    strength = float(os.environ.get("LORA_STRENGTH", "1.0"))
+    strength = float(_tt_public_getenv("LORA_STRENGTH", "1.0"))
 
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
@@ -106,9 +107,9 @@ def test_ondevice_lora_bind_matches_host_delta(
         topology=topology,
         is_fsdp=is_fsdp,
         mode="av",
-        num_frames=int(os.environ.get("NUM_FRAMES", "25")),
-        height=int(os.environ.get("HEIGHT", "256")),
-        width=int(os.environ.get("WIDTH", "256")),
+        num_frames=int(_tt_public_getenv("NUM_FRAMES", "25")),
+        height=int(_tt_public_getenv("HEIGHT", "256")),
+        width=int(_tt_public_getenv("WIDTH", "256")),
         lora_enabled=True,
     )
 
@@ -152,11 +153,11 @@ def test_ondevice_lora_bind_matches_host_delta(
     ), "unbind did not restore the base weight within bf16 drift"
     logger.info("On-device LoRA bind/unbind weight checks passed.")
 
-    if os.environ.get("RUN_LORA_GEN", "0") in ("1", "true", "True"):
-        steps = int(os.environ.get("STEPS", "6"))
-        num_frames = int(os.environ.get("NUM_FRAMES", "25"))
-        height = int(os.environ.get("HEIGHT", "256"))
-        width = int(os.environ.get("WIDTH", "256"))
+    if _tt_public_getenv("RUN_LORA_GEN", "0") in ("1", "true", "True"):
+        steps = int(_tt_public_getenv("STEPS", "6"))
+        num_frames = int(_tt_public_getenv("NUM_FRAMES", "25"))
+        height = int(_tt_public_getenv("HEIGHT", "256"))
+        width = int(_tt_public_getenv("WIDTH", "256"))
         seq = pipeline.gemma_encoder_pair.sequence_length
         v_p = torch.zeros(1, seq, pipeline.gemma_encoder_pair.video_dim)
         a_p = torch.zeros(1, seq, pipeline.gemma_encoder_pair.audio_dim)

@@ -16,6 +16,7 @@ Usage:
 DRAM tensors, 11×10 grid. MLA/Gate: HiFi2; MoE: LoFi. Timing and core count
 come from Tracy device profiler data. Default timeout 3600s.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -441,7 +442,7 @@ def test_sweep_deepseek_v3_matmul_tune(
         "TT_METAL_PROFILER_MID_RUN_DUMP": "1",
         "TT_METAL_PROFILER_CPP_POST_PROCESS": "1",
     }
-    missing = [k for k, v in _required_env.items() if os.environ.get(k) != v]
+    missing = [k for k, v in _required_env.items() if _tt_public_getenv(k) != v]
     if missing:
         pytest.fail(
             f"Tracy env vars not set: {', '.join(missing)}. "

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 from loguru import logger
 
 import torch
@@ -31,7 +32,7 @@ def reference_vision_rms(model_args):
     "device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,

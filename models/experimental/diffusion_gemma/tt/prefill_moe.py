@@ -19,6 +19,7 @@ these paths only for the current DiffusionGemma prefill.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 from contextvars import ContextVar
 import os
@@ -74,13 +75,13 @@ _causal_mask_cache = {}
 def tuned_prefill_moe_enabled() -> bool:
     """Whether the exact dense prefill-MoE geometry is enabled (default on)."""
 
-    return os.environ.get(FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
+    return _tt_public_getenv(FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def ragged_prefill_moe_enabled() -> bool:
     """Whether zero-drop compact sparse prefill is enabled (default ON; bit-identical to the shared path)."""
 
-    return os.environ.get(RAGGED_FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
+    return _tt_public_getenv(RAGGED_FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def ragged_long_prefill_enabled() -> bool:
@@ -91,7 +92,7 @@ def ragged_long_prefill_enabled() -> bool:
     prefill. Set ``DG_PREFILL_RAGGED_LONG=0`` to force the shared 128-expert dense fallback for
     prompts beyond one chunk."""
 
-    return os.environ.get(RAGGED_LONG_FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
+    return _tt_public_getenv(RAGGED_LONG_FLAG, "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _use_ragged_for(seq_len: int) -> bool:

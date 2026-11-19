@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import json
@@ -121,7 +122,7 @@ class ReplayResult:
 )
 @pytest.mark.timeout(1800)
 def test_replay_cache_tensor_specs(mesh_device, device_params) -> None:
-    specs_path_str = os.getenv(SPECS_JSONL_ENV_VAR) or os.getenv(LEGACY_SPECS_JSONL_ENV_VAR)
+    specs_path_str = _tt_public_getenv(SPECS_JSONL_ENV_VAR) or _tt_public_getenv(LEGACY_SPECS_JSONL_ENV_VAR)
     if not specs_path_str:
         pytest.skip(
             f"Cache specs harness is opt-in. Set ${SPECS_JSONL_ENV_VAR} (or legacy ${LEGACY_SPECS_JSONL_ENV_VAR})."
@@ -235,7 +236,7 @@ def test_replay_cache_tensor_specs(mesh_device, device_params) -> None:
         del torch_tensor
         gc.collect()
 
-    report_path_str = os.getenv(REPORT_JSON_ENV_VAR)
+    report_path_str = _tt_public_getenv(REPORT_JSON_ENV_VAR)
     report_path = Path(report_path_str) if report_path_str else (specs_path.parent / DEFAULT_REPORT_NAME)
     report_path.parent.mkdir(parents=True, exist_ok=True)
 

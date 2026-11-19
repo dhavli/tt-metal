@@ -4,6 +4,7 @@
 """Critical up-front trace capture, replay, and request-reuse regressions."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -17,10 +18,10 @@ from models.experimental.diffusion_gemma.config import DiffusionConfig
 from models.experimental.diffusion_gemma.tt import serving
 from models.experimental.diffusion_gemma.tt import traced_denoise as TD
 
-DEVICE_GATED = os.environ.get("DG_RUN_DEVICE", "0") == "1"
+DEVICE_GATED = _tt_public_getenv("DG_RUN_DEVICE", "0") == "1"
 _DG_CKPT_INPUT = Path(
     os.path.expanduser(
-        os.environ.get(
+        _tt_public_getenv(
             "DG_CKPT",
             "~/.cache/huggingface/hub/models--google--diffusiongemma-26B-A4B-it",
         )
@@ -324,7 +325,7 @@ def upfront_device_bundle():
         pytest.skip("up-front capture device tests require DG_RUN_DEVICE=1")
     if not _checkpoint_has_weights(Path(DG_CKPT)):
         pytest.skip(f"complete checkpoint weights not available at {DG_CKPT}")
-    raw_trace_region = os.environ.get("DG_TRACE_REGION_SIZE", "").strip()
+    raw_trace_region = _tt_public_getenv("DG_TRACE_REGION_SIZE", "").strip()
     if not raw_trace_region or int(raw_trace_region) <= 0:
         pytest.skip("up-front capture device tests require an explicit DG_TRACE_REGION_SIZE > 0")
     pytest.importorskip("vllm")
@@ -332,9 +333,9 @@ def upfront_device_bundle():
     from models.experimental.diffusion_gemma.checkpoint import build_tt_model_from_checkpoint_dir
     from models.experimental.diffusion_gemma.demo.text_demo import _close_mesh_device, _open_mesh_device
 
-    p_max = int(os.environ.get("DG_DENOISE_REVEAL_PMAX", "1024"))
+    p_max = int(_tt_public_getenv("DG_DENOISE_REVEAL_PMAX", "1024"))
     old_env = {
-        name: os.environ.get(name)
+        name: _tt_public_getenv(name)
         for name in (
             "DG_UPFRONT_CAPTURE",
             "DG_DENOISE_REVEAL_PMAX",
@@ -351,10 +352,10 @@ def upfront_device_bundle():
         }
     )
 
-    mesh = _open_mesh_device(os.environ.get("DG_MESH", "P150x4"))
+    mesh = _open_mesh_device(_tt_public_getenv("DG_MESH", "P150x4"))
     try:
         model_kwargs = {"max_seq_len": p_max, "create_kv_cache": True}
-        num_layers = os.environ.get("DG_UPFRONT_NUM_LAYERS", "1")
+        num_layers = _tt_public_getenv("DG_UPFRONT_NUM_LAYERS", "1")
         if num_layers.lower() != "full":
             model_kwargs["num_layers"] = int(num_layers)
         yield build_tt_model_from_checkpoint_dir(

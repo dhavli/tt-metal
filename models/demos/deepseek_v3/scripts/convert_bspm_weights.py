@@ -27,6 +27,7 @@ Usage
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -532,7 +533,7 @@ def main() -> None:
     from models.demos.deepseek_v3.tt.model.row_batched_model import RowBatchedModel, get_fabric_config
     from models.demos.deepseek_v3.utils.weight_config import get_weight_config
 
-    mesh_shape_env = os.environ.get("MESH_DEVICE", "TG")
+    mesh_shape_env = _tt_public_getenv("MESH_DEVICE", "TG")
     from models.demos.deepseek_v3.utils.test_utils import SYSTEM_NAME_TO_MESH_SHAPE
 
     mesh_shape = SYSTEM_NAME_TO_MESH_SHAPE.get(mesh_shape_env, (4, 8))

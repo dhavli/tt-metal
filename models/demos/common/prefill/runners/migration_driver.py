@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import struct
@@ -65,13 +66,13 @@ class MigrationDriver:
     def __init__(self, *, chunk_size: int, num_layers: int, default_dst_slot_offset: int):
         self.chunk_size = chunk_size
         self.num_layers = num_layers
-        self.dest_endpoint_id = int(os.environ.get("PREFILL_MIGRATION_DEST_ENDPOINT_ID", "1"))
-        self.src_endpoint_id = int(os.environ.get("PREFILL_MIGRATION_SRC_ENDPOINT_ID", "1"))
-        self.timeout_ms = int(os.environ.get("PREFILL_MIGRATION_TIMEOUT_MS", "3600000"))
-        self.dst_slot_offset = int(os.environ.get("PREFILL_MIGRATION_DST_SLOT_OFFSET", str(default_dst_slot_offset)))
-        self.layers = _parse_layers(os.environ.get("PREFILL_MIGRATION_LAYERS", ""))
-        self.done_file = os.environ.get("MIGRATION_DONE_FILE", "/tmp/migration_done.sentinel")
-        self.handoff_path = os.environ.get("PREFILL_MIGRATION_HANDOFF_PATH", "")
+        self.dest_endpoint_id = int(_tt_public_getenv("PREFILL_MIGRATION_DEST_ENDPOINT_ID", "1"))
+        self.src_endpoint_id = int(_tt_public_getenv("PREFILL_MIGRATION_SRC_ENDPOINT_ID", "1"))
+        self.timeout_ms = int(_tt_public_getenv("PREFILL_MIGRATION_TIMEOUT_MS", "3600000"))
+        self.dst_slot_offset = int(_tt_public_getenv("PREFILL_MIGRATION_DST_SLOT_OFFSET", str(default_dst_slot_offset)))
+        self.layers = _parse_layers(_tt_public_getenv("PREFILL_MIGRATION_LAYERS", ""))
+        self.done_file = _tt_public_getenv("MIGRATION_DONE_FILE", "/tmp/migration_done.sentinel")
+        self.handoff_path = _tt_public_getenv("PREFILL_MIGRATION_HANDOFF_PATH", "")
         self.client = None
 
     @property
@@ -125,7 +126,7 @@ class MigrationDriver:
                     f"slot(s) [0,{num_slots}). Grow PREFILL_NUM_USERS or pick a smaller dst."
                 )
 
-        spec = os.environ.get("PREFILL_MIGRATION_PAIRS", "").strip()
+        spec = _tt_public_getenv("PREFILL_MIGRATION_PAIRS", "").strip()
         triples = []
         if spec:
             for tok in spec.split(","):
@@ -358,7 +359,7 @@ def _dump_src_kv(dump_dir: str, table, stats, slot_traces: dict, layers) -> None
         )
         return
 
-    device_map = producer._read_device_map(int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
+    device_map = producer._read_device_map(int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
     if not device_map:
         logger.error("[migration_driver] no device map available; skipping the src-KV dump.")
         return
@@ -588,7 +589,7 @@ def _verify_migrated_slots(
 
     from models.demos.common.prefill.runners import prefill_producer as producer
 
-    device_map = producer._read_device_map(int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
+    device_map = producer._read_device_map(int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
     if not device_map:
         logger.error(f"[migration_driver] --verify-migration={mode} needs the device map, which is unavailable.")
         return False
@@ -637,7 +638,7 @@ def _run_validator(rank: int, world_size: int, args) -> None:
 
     cfg = producer._config_from_env()
     producer._require_shared_table_path(world_size)
-    timeout_s = int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
+    timeout_s = int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
     driver = MigrationDriver(
         chunk_size=producer.CHUNK_SIZE,
         num_layers=producer.NUM_LAYERS,
@@ -714,7 +715,7 @@ def main() -> None:
     parser.add_argument(
         "--manifest",
         "-m",
-        default=os.environ.get("PREFILL_PRODUCER_MANIFEST"),
+        default=_tt_public_getenv("PREFILL_PRODUCER_MANIFEST"),
         help="Path to the producer YAML manifest (applied at startup; exported env vars override it).",
     )
     parser.add_argument(
@@ -725,14 +726,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--dump-src-kv",
-        default=os.environ.get("PREFILL_MIGRATION_DUMP_SRC_KV"),
+        default=_tt_public_getenv("PREFILL_MIGRATION_DUMP_SRC_KV"),
         help="Directory to save each source slot's KV into as src_slot<N>.pt, for a decode-side consumer "
         "to PCC its received copy against. Honours the migrated layer subset. Off when unset.",
     )
     parser.add_argument(
         "--verify-migration",
         choices=("off", "dst-bytes", "dst-golden", "both"),
-        default=os.environ.get("PREFILL_VERIFY_MIGRATION", "dst-bytes"),
+        default=_tt_public_getenv("PREFILL_VERIFY_MIGRATION", "dst-bytes"),
         help="Read the MIGRATED DESTINATION slots back after the migrate (loopback only). 'dst-bytes' "
         "(default) asserts dst is byte-identical to src — golden-free, model-agnostic, and valid in the "
         "pad/all-zero regions where PCC is undefined. 'dst-golden' PCCs each dst against the src's golden "
@@ -746,7 +747,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--verify-migration-layers",
-        default=os.environ.get("PREFILL_VERIFY_MIGRATION_LAYERS"),
+        default=_tt_public_getenv("PREFILL_VERIFY_MIGRATION_LAYERS"),
         help="Comma list of layer ids to verify (e.g. '0,30,60'), for a fast spot-check instead of the "
         "full depth. Defaults to every layer the migrate covered. A subset makes a PASS a sample, not a "
         "proof — the summary says so. Applies to the DST-BYTES half only: the golden half's reader takes "
@@ -763,10 +764,10 @@ def main() -> None:
         os.environ["PREFILL_MIGRATION_PAIRS"] = args.migrations
     producer._load_env_config()
 
-    if int(os.environ.get("OMPI_COMM_WORLD_SIZE", "1")) > 1:
+    if int(_tt_public_getenv("OMPI_COMM_WORLD_SIZE", "1")) > 1:
         logger.info(
             f"[migration_driver] joining the distributed context "
-            f"({os.environ['OMPI_COMM_WORLD_SIZE']} rank(s) expected); this blocks until all of them arrive"
+            f"({_tt_public_getitem('OMPI_COMM_WORLD_SIZE')} rank(s) expected); this blocks until all of them arrive"
         )
     mr_rank, world_size = producer._mr_config()
     if mr_rank != 0:
@@ -775,7 +776,7 @@ def main() -> None:
 
     cfg = producer._config_from_env()
     producer._require_shared_table_path(world_size)
-    if os.environ.get("PREFILL_PRODUCER_ISSUE_MIGRATION", "1") == "0":
+    if _tt_public_getenv("PREFILL_PRODUCER_ISSUE_MIGRATION", "1") == "0":
         logger.warning(
             "[migration_driver] the manifest sets migration.issue: false, which is ignored when this module "
             "is the entry point — invoking it IS the opt-in. Run prefill_producer for a no-migration run."
@@ -786,8 +787,8 @@ def main() -> None:
         default_dst_slot_offset=cfg.num_users,
     )
 
-    service_id = os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")
-    timeout_s = int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
+    service_id = _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")
+    timeout_s = int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
     logger.info(
         f"[migration_driver] service_id={service_id!r} users={cfg.num_users} "
         f"chunks=[{cfg.chunks_min},{cfg.chunks_max}] max_requests={cfg.max_requests} verify={cfg.verify}"
@@ -897,7 +898,7 @@ def main() -> None:
             logger.info(f"[migration_driver] rank={r}: ok={v}")
         all_ranks_ok = all(verdicts)
 
-    if os.environ.get("PREFILL_SEND_SHUTDOWN", "0") == "1":
+    if _tt_public_getenv("PREFILL_SEND_SHUTDOWN", "0") == "1":
         sentinel = struct.pack("<iii", -1, -1, -1)
         payload = producer._chunk_to_host_array([1] * producer.CHUNK_SIZE)
         logger.info("[migration_driver] sending SHUTDOWN sentinel (metadata=-1,-1,-1)")

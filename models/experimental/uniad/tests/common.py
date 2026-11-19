@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import torch
 from collections import OrderedDict
 
 
 def load_torch_model(torch_model, layer="", model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         weights_path = "models/experimental/uniad/uniad_base_e2e.pth"
         if not os.path.exists(weights_path):
             os.system("bash models/experimental/uniad/weights_download.sh")

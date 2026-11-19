@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from pathlib import Path
@@ -10,12 +11,12 @@ import pytest
 from models.demos.deepseek_v3.demo.demo import load_prompts_from_json, run_demo
 
 MODEL_PATH = Path(
-    os.getenv(
+    _tt_public_getenv(
         "DEEPSEEK_V3_HF_MODEL",
         "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked",
     )
 )
-_ds_cache = os.getenv("DEEPSEEK_V3_CACHE")
+_ds_cache = _tt_public_getenv("DEEPSEEK_V3_CACHE")
 CACHE_DIR = Path(_ds_cache) if _ds_cache else None
 
 
@@ -38,7 +39,7 @@ def _assert_demo_outputs_match(baseline: dict, mtp: dict) -> None:
 
 
 def _artifact_name_for_current_mesh() -> str | None:
-    mesh_device = os.getenv("MESH_DEVICE", "").upper()
+    mesh_device = _tt_public_getenv("MESH_DEVICE", "").upper()
     if mesh_device == "DUAL":
         return "dual_demo_full_results_mtp"
     if mesh_device == "QUAD":
@@ -48,7 +49,7 @@ def _artifact_name_for_current_mesh() -> str | None:
 
 def _is_primary_artifact_writer() -> bool:
     for rank_env in ("TT_MESH_HOST_RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "RANK"):
-        rank_value = os.getenv(rank_env)
+        rank_value = _tt_public_getenv(rank_env)
         if rank_value is None:
             continue
         try:

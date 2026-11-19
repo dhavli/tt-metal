@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Test for Mistral-24B End-to-End Vision-Text Pipeline"""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import torch
 import pytest
@@ -153,7 +154,7 @@ def process_vision_info(messages):
 
 def process_real_vision_inputs(messages, model_args):
     """Process real image inputs using AutoProcessor (Interface Segregation)."""
-    processor = AutoProcessor.from_pretrained(os.getenv("HF_MODEL"))
+    processor = AutoProcessor.from_pretrained(_tt_public_getenv("HF_MODEL"))
 
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True, padding=True, padding_side="left"
@@ -443,7 +444,7 @@ def validate_e2e_outputs(results, expected_min_tokens=1):
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "N150x4": (1, 4), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,

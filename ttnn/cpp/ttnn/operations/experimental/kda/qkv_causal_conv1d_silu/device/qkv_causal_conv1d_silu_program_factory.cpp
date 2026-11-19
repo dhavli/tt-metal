@@ -3,7 +3,10 @@
 
 #include "ttnn/operations/experimental/kda/qkv_causal_conv1d_silu/device/qkv_causal_conv1d_silu_program_factory.hpp"
 
+#include <filesystem>
 #include <limits>
+#include <string>
+#include <mutex>
 #include <vector>
 
 #include <tt-metalium/constants.hpp>
@@ -12,6 +15,7 @@
 #include <tt-metalium/experimental/metal2_host_api/program_run_args.hpp>
 #include <tt-metalium/experimental/metal2_host_api/program_spec.hpp>
 #include <tt-metalium/experimental/metal2_host_api/tensor_parameter.hpp>
+#include <tt-logger/tt-logger.hpp>
 
 #include "ttnn/operations/core/compute_kernel/compute_kernel_config.hpp"
 #include "ttnn/operations/core/data_movement_kernel/datamovement_kernel_config.hpp"
@@ -23,6 +27,12 @@ namespace {
 
 // Kimi-K3 supplies four learned causal-convolution taps; one channel block of weights is queued per tap.
 constexpr uint32_t tap_count = 4;
+
+// QWEN36_GDN_CONV_KDA2 (cfx patches/tt-metal/0035): the read-once kernels (reader stages each item's three look-back
+// rows plus its tile row once; taps once per channel block per core; block-major item numbering).
+constexpr uint32_t history_rows = 3;
+constexpr const char* kReadsOnceKernelDir =
+    "ttnn/cpp/ttnn/operations/experimental/kda/qkv_causal_conv1d_silu/device/kernels_reads_once/";
 
 }  // namespace
 
@@ -50,6 +60,33 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
     auto dist = kda_factory_detail::distribute_prep(
         device.compute_with_storage_grid_size(), Mt * num_blocks, std::numeric_limits<uint32_t>::max());
     const auto& cores = dist.core_set;
+
+    // QWEN36_GDN_CONV_KDA2 (attrs.reads_once, hashed): off emits exactly the stock program below.
+    const bool reads_once = attrs.reads_once != 0;
+    const uint32_t block_row_bytes = block_ct * tt::constants::TILE_WIDTH * sizeof(uint16_t);
+    const uint32_t stage_rows = tt::constants::TILE_HEIGHT + history_rows;
+    if (reads_once) {
+        static std::once_flag banner_on;
+        static std::once_flag banner_mustfail;
+        std::call_once(attrs.reads_once_mustfail != 0 ? banner_mustfail : banner_on, [&] {
+            log_info(
+                tt::LogOp,
+                "QWEN36_GDN_CONV_KDA2{} engaged mode={} (kda qkv_causal_conv1d_silu reads once, #58493 without NoC "
+                "loopback: block-major items, taps once per block per core, activation rows once per item into a "
+                "2 x {}-row stage; first program T={} C={} block_ct={} Mt={} blocks={} items={} cores={} stage={} B)",
+                attrs.reads_once_mustfail != 0 ? "_MUSTFAIL" : "",
+                attrs.reads_once == 2 ? "fast" : "1",
+                stage_rows,
+                attrs.sequence,
+                Ct * tt::constants::TILE_WIDTH,
+                block_ct,
+                Mt,
+                num_blocks,
+                Mt * num_blocks,
+                dist.cores.size(),
+                2 * stage_rows * block_row_bytes);
+        });
+    }
 
     const tt::tt_metal::experimental::KernelSpecName reader_kernel_name{"reader"};
     const tt::tt_metal::experimental::KernelSpecName writer_kernel_name{"writer"};
@@ -83,8 +120,15 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
         };
     };
 
+    // QWEN36_GDN_CONV_KDA2: act_rm is a ring of two stages of row-sized entries (stage_rows rows each), so a stage
+    // never wraps and the compute can tilize a window at any row offset inside it.
+    auto act_rm_dfb = make_dfb(act_rm_dfb_name, 2 * block_ct);
+    if (reads_once) {
+        act_rm_dfb.entry_size = block_row_bytes;
+        act_rm_dfb.num_entries = 2 * stage_rows;
+    }
     tt::tt_metal::experimental::Group<tt::tt_metal::experimental::DataflowBufferSpec> dfbs = {
-        make_dfb(act_rm_dfb_name, 2 * block_ct),
+        act_rm_dfb,
         make_dfb(act_tile_dfb_name, block_ct),
         make_dfb(weights_dfb_name, tap_count * block_ct),
         make_dfb(partial_dfb_name, 2 * block_ct),
@@ -116,6 +160,10 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
         .runtime_arg_schema = {.runtime_arg_names = {"wi_start", "wi_count"}},
         .hw_config = ttnn::create_reader_datamovement_config(arch),
     };
+    if (reads_once) {
+        reader.source = std::filesystem::path(std::string(kReadsOnceKernelDir) + "dataflow/reader_qkv_causal_conv1d_silu_once.cpp");
+        reader.compile_time_args = {{"block_ct", block_ct}, {"Mt", Mt}, {"mustfail", attrs.reads_once_mustfail}};
+    }
 
     tt::tt_metal::experimental::KernelSpec writer{
         .unique_id = writer_kernel_name,
@@ -134,6 +182,10 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
         .runtime_arg_schema = {.runtime_arg_names = {"wi_start", "wi_count"}},
         .hw_config = ttnn::create_writer_datamovement_config(arch),
     };
+    if (reads_once) {
+        writer.source = std::filesystem::path(std::string(kReadsOnceKernelDir) + "dataflow/writer_qkv_causal_conv1d_silu_once.cpp");
+        writer.compile_time_args = {{"Qt", Qt}, {"Kt", Kt}, {"Vt", Vt}, {"block_ct", block_ct}, {"Mt", Mt}};
+    }
 
     tt::tt_metal::experimental::KernelSpec compute{
         .unique_id = compute_kernel_name,
@@ -162,6 +214,12 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
         .runtime_arg_schema = {.runtime_arg_names = {"wi_count"}},
         .hw_config = ttnn::to_compute_hardware_config(arch, attrs.compute_kernel_config),
     };
+    if (reads_once) {
+        compute.source = std::filesystem::path(std::string(kReadsOnceKernelDir) + "compute/qkv_causal_conv1d_silu_once.cpp");
+        compute.compile_time_args = {
+            {"block_ct", block_ct}, {"Mt", Mt}, {"silu_fast", attrs.reads_once == 2 ? 1u : 0u}};
+        compute.runtime_arg_schema.runtime_arg_names = {"wi_start", "wi_count"};
+    }
 
     tt::tt_metal::experimental::KernelRunArgs reader_run_args{.kernel = reader_kernel_name};
     tt::tt_metal::experimental::KernelRunArgs writer_run_args{.kernel = writer_kernel_name};
@@ -172,8 +230,15 @@ ttnn::device_operation::ProgramArtifacts QkvCausalConv1dSiluProgramFactory::crea
             reader_run_args.runtime_arg_values, core, {{"wi_start", dist.wi_start[i]}, {"wi_count", dist.wi_count[i]}});
         tt::tt_metal::experimental::AddRuntimeArgsForNode(
             writer_run_args.runtime_arg_values, core, {{"wi_start", dist.wi_start[i]}, {"wi_count", dist.wi_count[i]}});
-        tt::tt_metal::experimental::AddRuntimeArgsForNode(
-            compute_run_args.runtime_arg_values, core, {{"wi_count", dist.wi_count[i]}});
+        if (reads_once) {
+            tt::tt_metal::experimental::AddRuntimeArgsForNode(
+                compute_run_args.runtime_arg_values,
+                core,
+                {{"wi_start", dist.wi_start[i]}, {"wi_count", dist.wi_count[i]}});
+        } else {
+            tt::tt_metal::experimental::AddRuntimeArgsForNode(
+                compute_run_args.runtime_arg_values, core, {{"wi_count", dist.wi_count[i]}});
+        }
     }
 
     tt::tt_metal::experimental::ProgramSpec spec{

@@ -6,6 +6,7 @@
 on identical random features, asserting PCC. Isolating from the Gemma encoder keeps a
 regression here distinguishable from upstream bf16 drift.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import glob
 import os
@@ -44,7 +45,7 @@ def _raw_video_connector_to_diffusers(raw: dict[str, torch.Tensor]) -> dict[str,
 
 
 def _ltx_ckpt() -> str | None:
-    explicit = os.environ.get("LTX_CHECKPOINT")
+    explicit = _tt_public_getenv("LTX_CHECKPOINT")
     if explicit and os.path.exists(explicit):
         return explicit
     # HF_HUB_CACHE resolves HF_HUB_CACHE / HF_HOME / the default. Hardcoding ~/.cache/huggingface

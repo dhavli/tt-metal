@@ -116,6 +116,8 @@ struct ChunkGdnScanParams {
     bool output_final_state;
     tt::tt_metal::MemoryConfig output_mem_config;
     DeviceComputeKernelConfig compute_kernel_config;
+    // cfx (tt-stack 0028): shared-tile multicast (upstream 5f02a6718f4) with rectangle placement; hashed.
+    bool use_mcast = false;
 };
 
 struct ChunkGdnScanInputs {
@@ -160,6 +162,7 @@ std::vector<Tensor> chunk_gdn_scan(
     uint32_t chunk_size,
     bool output_final_state,
     const tt::tt_metal::MemoryConfig& output_mem_config,
-    const DeviceComputeKernelConfig& compute_kernel_config);
+    const DeviceComputeKernelConfig& compute_kernel_config,
+    bool use_mcast = false);
 
 }  // namespace ttnn::prim

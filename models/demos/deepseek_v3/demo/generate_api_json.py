@@ -12,6 +12,7 @@ Example:
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -325,7 +326,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--api-key",
-        default=os.getenv("TOGETHER_API_KEY", ""),
+        default=_tt_public_getenv("TOGETHER_API_KEY", ""),
         help="API key. Defaults to TOGETHER_API_KEY.",
     )
     parser.add_argument(

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 from io import BytesIO
@@ -77,7 +78,7 @@ def pad_hw_replicate(x_BCFHW: torch.Tensor, h_mult: int, w_mult: int) -> tuple[t
 
 
 def default_ltx_checkpoint(filename: str) -> str:
-    explicit = os.environ.get("LTX_CHECKPOINT")
+    explicit = _tt_public_getenv("LTX_CHECKPOINT")
     if explicit:
         return explicit
     local = os.path.expanduser(f"~/.cache/ltx-checkpoints/{filename}")
@@ -87,7 +88,7 @@ def default_ltx_checkpoint(filename: str) -> str:
 
 
 def default_ltx_gemma() -> str:
-    return os.environ.get("GEMMA_PATH") or "google/gemma-3-12b-it-qat-q4_0-unquantized"
+    return _tt_public_getenv("GEMMA_PATH") or "google/gemma-3-12b-it-qat-q4_0-unquantized"
 
 
 def print_ltx_timing_table(

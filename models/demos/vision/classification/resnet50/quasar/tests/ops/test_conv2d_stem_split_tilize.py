@@ -21,6 +21,7 @@ Run (craq-sim / emulator, slow dispatch + forced JIT):
   TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_FORCE_JIT_COMPILE=1 \
   pytest models/demos/vision/classification/resnet50/quasar/tests/ops/test_conv2d_stem_split_tilize.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -81,7 +82,7 @@ def test_quasar_conv2d_stem_split_tilize(mesh_device):
     # Option C: select the split tilize/matmul compute kernel in the sharded conv factory. Set before the
     # op runs (the factory reads it via std::getenv at program creation, in-process) and restore afterwards
     # so the toggle does not leak into other tests sharing the process.
-    prev = os.environ.get("TT_METAL_QSR_CONV_SPLIT_TILIZE")
+    prev = _tt_public_getenv("TT_METAL_QSR_CONV_SPLIT_TILIZE")
     os.environ["TT_METAL_QSR_CONV_SPLIT_TILIZE"] = "1"
     try:
         out, [out_h, out_w], [tt_weight, tt_bias] = ttnn.experimental.quasar.conv2d(

@@ -11,6 +11,7 @@ Reference: when a pretrained checkpoint is available the layer's input/output co
 forward over layers 0..layer_idx (as in test_prefill_transformer); otherwise it falls back to a
 randomly-initialized HF reference layer so the test still runs without weights.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -206,7 +207,7 @@ def run_model(
     else:
         # --- Cache setup ---
         is_dense = layer_idx < config.first_k_dense_replace
-        cache_root = os.environ.get("TT_DS_PREFILL_HOST_REF_CACHE", "/tmp")
+        cache_root = _tt_public_getenv("TT_DS_PREFILL_HOST_REF_CACHE", "/tmp")
         balanced_tag = "balanced" if is_balanced else "non_balanced"
         gate_tag = gate_fallback_mode.value if gate_fallback_mode else "no_gate_fallback"
         cache_dir = Path(

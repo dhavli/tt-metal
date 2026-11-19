@@ -14,6 +14,7 @@ Usage (run from tt-metal root):
 
 Reports are saved to: generated/profiler/reports/<timestamp>/ops_perf_results_<timestamp>.csv
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -67,7 +68,7 @@ def test_n300_dp_tracy(mesh_device):
     """Profile one B12/S8192 DP=2 forward between Tracy signposts for per-op
     device timing. Untraced so Tracy sees the individual ops. Requires
     TT_METAL_DEVICE_PROFILER=1."""
-    if os.environ.get("TT_METAL_DEVICE_PROFILER", "0") != "1":
+    if _tt_public_getenv("TT_METAL_DEVICE_PROFILER", "0") != "1":
         pytest.fail("TT_METAL_DEVICE_PROFILER=1 is required for device kernel profiling.")
 
     assert tuple(mesh_device.shape) == (2, 1)

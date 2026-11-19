@@ -40,6 +40,7 @@ itself (~2.8 s), never the reload.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import json
@@ -390,7 +391,7 @@ class MiniMaxH3Pipeline:
         The parallel configuration defaults to this mesh shape's entry in `_PRESETS_BH`; pass any of
         `tp_axis`/`sp_axis`/`num_links`/`topology` to override it.
         """
-        weights_dir = weights_dir or os.environ.get("MINIMAX_H3_MODEL_PATH")
+        weights_dir = weights_dir or _tt_public_getenv("MINIMAX_H3_MODEL_PATH")
         if not weights_dir:
             raise ValueError(
                 "MiniMax-H3 weights directory not set: pass weights_dir=... or set MINIMAX_H3_MODEL_PATH "
@@ -912,7 +913,7 @@ class MiniMaxH3Pipeline:
         downstream can notice. That is the schedule (step count and both per-modality shifts), the
         conditioning floor, the model geometry, and the checkpoint itself.
         """
-        cache_dir = Path(os.environ.get("TT_DIT_CACHE_DIR") or Path.home() / ".cache/tt-dit") / "minimax-h3-adaln"
+        cache_dir = Path(_tt_public_getenv("TT_DIT_CACHE_DIR") or Path.home() / ".cache/tt-dit") / "minimax-h3-adaln"
         cache_dir.mkdir(parents=True, exist_ok=True)
         key = "|".join(
             str(part)

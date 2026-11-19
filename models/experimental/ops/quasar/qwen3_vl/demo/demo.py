@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from datetime import datetime
@@ -248,7 +249,7 @@ def create_tt_model(
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4), "P150x8": (1, 8)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -281,7 +282,7 @@ def test_demo(
         pytest.skip("CI only runs the CI-only tests")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
     logger.info(f"mesh_device: {mesh_device}")
@@ -597,7 +598,7 @@ def test_demo(
         # which keeps on-device sampling. Setting TT_QWEN_FORCE_HOST_SAMPLING=1 forces host argmax
         # instead: a known-good reference (correct output) but slower (per-step logits read-back),
         # useful to compare against the on-device path locally.
-        force_host_sampling = os.environ.get("TT_QWEN_FORCE_HOST_SAMPLING", "0") == "1"
+        force_host_sampling = _tt_public_getenv("TT_QWEN_FORCE_HOST_SAMPLING", "0") == "1"
         argmax_on_device = model._supports_on_device_sampling and not force_host_sampling
         if argmax_on_device:
             device_sampling_params = SamplingParams(temperature=0.0, top_k=-1, top_p=1.0)

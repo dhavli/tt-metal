@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -70,7 +71,7 @@ def match_detections(torch_boxes, tt_boxes):
 
 
 def get_coco_images():
-    images_path = Path(os.environ.get(COCO_IMAGES_ENV, DEFAULT_COCO_IMAGES_PATH))
+    images_path = Path(_tt_public_getenv(COCO_IMAGES_ENV, DEFAULT_COCO_IMAGES_PATH))
     image_paths = sorted(images_path.glob("*.jpg"))[:NUM_VALIDATION_IMAGES]
 
     if not images_path.is_dir() or not image_paths:

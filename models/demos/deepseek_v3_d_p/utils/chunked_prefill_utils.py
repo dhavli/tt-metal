@@ -7,6 +7,7 @@ GPU-trace discovery/loading, multi-user iteration partitioning, and the CPU torc
 Kept out of tt/mla/utils.py on purpose: these pull the reference model + safetensors, which should
 not enter the production model import path.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import os
@@ -122,7 +123,7 @@ def cpu_mla_reference(config, weights, hidden_2d):
     reads stay enabled either way.
     """
     seq_len = hidden_2d.shape[0]
-    cache_dir = Path(os.environ.get(_REF_CACHE_ENV, _REF_CACHE_DEFAULT))
+    cache_dir = Path(_tt_public_getenv(_REF_CACHE_ENV, _REF_CACHE_DEFAULT))
     cache_path = cache_dir / f"chunked_ref_seq{seq_len}_{_ref_cache_key(config, weights, hidden_2d)}.pt"
     if cache_path.exists():
         try:
@@ -157,7 +158,7 @@ def cpu_mla_reference(config, weights, hidden_2d):
     kvpe = hf_cache_layer_kv(ref_cache, 0)[0][0, 0]  # [S, kvpe], latent k_nope + roped k_pe (Meta basis)
     out_bf16, kvpe_bf16 = out[0].to(torch.bfloat16), kvpe.to(torch.bfloat16)
 
-    if os.environ.get("CI") == "true" or os.environ.get("TT_GH_CI_INFRA"):
+    if _tt_public_getenv("CI") == "true" or _tt_public_getenv("TT_GH_CI_INFRA"):
         logger.debug("CPU MLA reference: CI env, not writing the reference cache")
     else:
         try:

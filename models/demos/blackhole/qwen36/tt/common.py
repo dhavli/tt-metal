@@ -7,6 +7,7 @@ from loguru import logger
 
 from models.demos.blackhole.qwen36.tt.model import Qwen36Model
 from models.demos.blackhole.qwen36.tt.model_config import Qwen36ModelArgs
+from models.demos.blackhole.qwen36.tt.weight_cache import build_model
 
 
 def create_tt_model(
@@ -43,17 +44,10 @@ def create_tt_model(
         args.n_layers = n_layers
         args.attention_type_list = args.attention_type_list[:n_layers]
 
-    # NOTE: the warm-ttnn-cache HF-load skip is DISABLED for qwen3.6.
-    # Its Gated-DeltaNet loader consumes conv weights on the host without a cache_file_name --
-    # gdn/weights.py::load_conv_weight does ttnn.from_torch(state_dict[name], ...) for q/k/v_conv in
-    # every DeltaNet layer, and gdn/tp.py derives taps the same way -- so a dataless placeholder
-    # feeds those layers garbage while the HF load is skipped. This is the same failure that made
-    # the vision demo emit token soup, on the text path. Re-enabling needs those conv weights either
-    # cache-backed or captured to the sidecar via an is_host_weight predicate. (#45400 review)
+    # Warm-cache build (no checkpoint read) when the sealed ttnn cache covers this build; cold
+    # otherwise. The host-consumed weights that made upstream disable this for qwen3.6 (GDN conv
+    # taps, attention q/k norms) are served real from the sidecar -- see tt/weight_cache.py.
     cache_path = args.weight_cache_path()
-    logger.info("Loading + remapping weights via Qwen36ModelArgs.load_state_dict()...")
-    state_dict = args.load_state_dict()
-
-    model = Qwen36Model(mesh_device, args, state_dict, tensor_cache_path=cache_path)
+    model, state_dict, _warm = build_model(mesh_device, args, Qwen36Model, cache_path)
 
     return args, model, state_dict

@@ -18,6 +18,7 @@ Checks per case (identical to test_max_pool2d_correctness.py):
 Run (craq-sim, kernel asserts OFF):
   ./qsr_sim_run models/demos/vision/classification/resnet50/quasar/tests/ops/test_max_pool2d_channel_sweep.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -111,10 +112,10 @@ def test_quasar_max_pool2d_channel_sweep(mesh_device, channels):
     # the rest of the sweep (comma-separated channel counts):
     #   QSR_POOL_SWEEP_ONLY=96        -> run ONLY channels=96 (isolate one)
     #   QSR_POOL_SWEEP_SKIP=96,160    -> skip these (continue past a known-faulting one to find others)
-    only = os.environ.get("QSR_POOL_SWEEP_ONLY", "").strip()
+    only = _tt_public_getenv("QSR_POOL_SWEEP_ONLY", "").strip()
     if only and channels not in {int(c) for c in only.split(",") if c.strip()}:
         pytest.skip(f"channels={channels} not in QSR_POOL_SWEEP_ONLY={only}")
-    skip = os.environ.get("QSR_POOL_SWEEP_SKIP", "").strip()
+    skip = _tt_public_getenv("QSR_POOL_SWEEP_SKIP", "").strip()
     if skip and channels in {int(c) for c in skip.split(",") if c.strip()}:
         pytest.skip(f"channels={channels} in QSR_POOL_SWEEP_SKIP={skip}")
     _run_max_pool_channels(mesh_device, channels)

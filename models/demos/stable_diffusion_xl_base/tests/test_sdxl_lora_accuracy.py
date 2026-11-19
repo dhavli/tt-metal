@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 
@@ -159,7 +160,7 @@ def test_accuracy_sdxl_lora(
         lora_path=lora_path,
     )
 
-    skip_check_and_save = os.getenv("TT_SDXL_SKIP_CHECK_AND_SAVE", "0") == "1"
+    skip_check_and_save = _tt_public_getenv("TT_SDXL_SKIP_CHECK_AND_SAVE", "0") == "1"
     if skip_check_and_save:
         logger.info("Skipping accuracy check and saving results as per environment variable.")
         return

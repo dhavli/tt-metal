@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 """Helpers for the Generator contract: RoPE packing, prefill dispatch, and decode warmup."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import gc
 import os
 
@@ -13,7 +14,7 @@ import ttnn
 def warmup_decode_buckets(generator, warmup, *args, **kwargs):
     """Compile every decode width before capturing any bucket trace."""
     max_batch_size = kwargs.get("max_batch_size")
-    if os.environ.get("TT_DECODE_BUCKETING", "1") != "1" or not isinstance(max_batch_size, int) or max_batch_size <= 1:
+    if _tt_public_getenv("TT_DECODE_BUCKETING", "1") != "1" or not isinstance(max_batch_size, int) or max_batch_size <= 1:
         return warmup(*args, **kwargs)
 
     widths = []

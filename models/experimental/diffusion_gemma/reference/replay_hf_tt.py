@@ -8,6 +8,7 @@ renoise tokens, then saves the decision-level trajectory comparison.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 from dataclasses import asdict
@@ -431,7 +432,7 @@ def _run_hf_reference(
 
         def __call__(self, canvas, step):
             prev_sc = None
-            if self.prev_raw is not None and os.environ.get("DG_DISABLE_SELF_CONDITIONING", "0") != "1":
+            if self.prev_raw is not None and _tt_public_getenv("DG_DISABLE_SELF_CONDITIONING", "0") != "1":
                 temperature = S.temperature_at_step(
                     self.prev_step,
                     config.max_denoise_steps,
@@ -1069,21 +1070,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Replay one DiffusionGemma block through HF and TT.")
     parser.add_argument(
         "--checkpoint",
-        default=os.getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it"),
+        default=_tt_public_getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it"),
         help="DiffusionGemma checkpoint directory or model id for TT weights/tokenizer.",
     )
     parser.add_argument(
         "--hf-checkpoint",
-        default=os.getenv("DG_HF_CKPT"),
+        default=_tt_public_getenv("DG_HF_CKPT"),
         help="Optional separate HF checkpoint path/model id; defaults to --checkpoint.",
     )
-    parser.add_argument("--prompt", default=os.getenv("DG_PROMPT", DEFAULT_PROMPT))
+    parser.add_argument("--prompt", default=_tt_public_getenv("DG_PROMPT", DEFAULT_PROMPT))
     parser.add_argument("--seed", type=int, default=1, help="Seed for the initial host canvas.")
     parser.add_argument("--canvas-length", type=int, default=256)
     parser.add_argument("--max-denoising-steps", type=int, default=1)
     parser.add_argument("--entropy-stop-threshold", type=float, default=-1.0)
     parser.add_argument("--stable-steps-to-halt", type=int, default=1)
-    parser.add_argument("--mesh", default=os.getenv("MESH_DEVICE", "P150x4"))
+    parser.add_argument("--mesh", default=_tt_public_getenv("MESH_DEVICE", "P150x4"))
     parser.add_argument("--max-seq-len", type=int, default=512)
     parser.add_argument("--num-layers", type=int, default=None)
     parser.add_argument("--local-files-only", action="store_true")

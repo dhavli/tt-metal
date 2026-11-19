@@ -8,6 +8,7 @@ SMALL real tokens twice — as a native SMALL chunk vs padded into a LARGE chunk
 GALAXY-GATED; needs the torus descriptor + FABRIC_1D_RING (chunk 0 is cache-backed ring).
 Env: HF_MODEL, GPT_OSS_WEIGHTS_FROM_CACHE=1, EXPERT_DTYPE=bf8, PREFILL_NUM_LAYERS (optional).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import resource
@@ -20,8 +21,8 @@ import ttnn
 ROWS, COLS = 4, 8
 GALAXY_NUM_DEVICES = 32
 # 1k/8k: the 128k-context pair (131072 = 128*1024 = 16*8192).
-SMALL = int(os.getenv("VARCHUNK_SMALL", "1024"))
-LARGE = int(os.getenv("VARCHUNK_LARGE", "8192"))
+SMALL = int(_tt_public_getenv("VARCHUNK_SMALL", "1024"))
+LARGE = int(_tt_public_getenv("VARCHUNK_LARGE", "8192"))
 
 
 def _raise_nproc_limit():
@@ -53,13 +54,13 @@ def main():
         model_args = ModelArgs(mesh_device=mesh)
         hf_config = model_args.hf_config
         num_layers = hf_config.num_hidden_layers
-        nl = os.getenv("PREFILL_NUM_LAYERS")
+        nl = _tt_public_getenv("PREFILL_NUM_LAYERS")
         if nl:
             num_layers = int(nl)
             hf_config.num_hidden_layers = num_layers
-        expert_dtype = ttnn.bfloat8_b if os.getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
+        expert_dtype = ttnn.bfloat8_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
         cache_path = model_args.weight_cache_path(ttnn.bfloat8_b)
-        if os.getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
+        if _tt_public_getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
             state_dict = {}
         else:
             state_dict = ModelArgs.load_state_dict(model_args.weights_path)

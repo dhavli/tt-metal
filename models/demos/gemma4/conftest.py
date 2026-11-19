@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -46,7 +47,7 @@ def pytest_addoption(parser):
 @pytest.fixture(scope="session")
 def state_dict(request):
     load_model = not request.config.getoption("--skip-model-load")
-    model_path = os.getenv("HF_MODEL", None)
+    model_path = _tt_public_getenv("HF_MODEL", None)
     if model_path is None or not load_model:
         return {}
     else:

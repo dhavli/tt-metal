@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from copy import deepcopy
 from pathlib import Path
@@ -103,7 +104,7 @@ def mesh_device(request, device_params):
     request.node.pci_ids = ttnn.get_pcie_device_ids()
 
     # Override mesh shape based on MESH_DEVICE environment variable
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError("Environment variable $MESH_DEVICE is not set. Please set it to T3K, DUAL, QUAD, or TG.")
 
@@ -155,7 +156,7 @@ def mesh_device(request, device_params):
 @pytest.fixture(scope="session")
 def model_path():
     """Get model path and resolve symlinks to ensure all operations can find files."""
-    path = Path(os.getenv("DEEPSEEK_V3_HF_MODEL", "models/demos/deepseek_v3/reference"))
+    path = Path(_tt_public_getenv("DEEPSEEK_V3_HF_MODEL", "models/demos/deepseek_v3/reference"))
     # Resolve symlinks to ensure AutoConfig and other operations can find config.json and other files
     return path.resolve()
 
@@ -202,7 +203,7 @@ def hf_config_short(request, hf_config):
     """
     hf_config_out = deepcopy(hf_config)
     hf_config_out.num_hidden_layers = getattr(request, "param", 1)
-    max_seq_len_override = os.getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
+    max_seq_len_override = _tt_public_getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
     if max_seq_len_override is not None:
         hf_config_out.max_seq_len = int(max_seq_len_override)
     else:
@@ -267,7 +268,7 @@ def cache_path():
         default_cache = f"/localdev/{os.getlogin()}/deepseek-v3-cache"
     except OSError:
         default_cache = "/proj_sw/user_dev/deepseek-v3-cache"
-    return Path(os.getenv("DEEPSEEK_V3_CACHE", default_cache))
+    return Path(_tt_public_getenv("DEEPSEEK_V3_CACHE", default_cache))
 
 
 def get_current_device_type() -> str:
@@ -283,7 +284,7 @@ def get_current_device_type() -> str:
     """
 
     valid_system_names = get_valid_system_names()
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError(
             f"Invalid system name: {requested_system_name}. Must be one of {', '.join(valid_system_names)} or AUTO"

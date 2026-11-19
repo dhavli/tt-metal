@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Shared helpers for the MiniMax-H3 bringup tests."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -26,7 +27,7 @@ DECODE_LATENT_FRAMES = 7
 
 
 def weights_subdir(subfolder: str) -> str | None:
-    base = os.environ.get("MINIMAX_H3_MODEL_PATH")
+    base = _tt_public_getenv("MINIMAX_H3_MODEL_PATH")
     if not base:
         return None
     candidate = os.path.join(base, subfolder)
@@ -309,7 +310,7 @@ def conditioner_checkpoint_dir(patterns: list[str]) -> str:
     """
     import glob
 
-    root = os.environ.get("MINIMAX_H3_MODEL_PATH", "")
+    root = _tt_public_getenv("MINIMAX_H3_MODEL_PATH", "")
     if not root or not os.path.isdir(root):
         pytest.skip("set MINIMAX_H3_MODEL_PATH to a MiniMax-H3 diffusers snapshot")
     missing = [pattern for pattern in patterns if not glob.glob(os.path.join(root, pattern))]

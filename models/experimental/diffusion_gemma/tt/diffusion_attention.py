@@ -22,6 +22,7 @@ with the backbone, only the attention math differs.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -94,7 +95,7 @@ def _resolve_sdpa_grid(device):
     across cores (``k_chunk_size`` is untouched), so changing it keeps outputs bit-identical.
     Falls back to ``8x1`` when the device cannot be queried, so a mock/None device works.
     """
-    spec = os.environ.get("DG_SDPA_GRID", "device").strip().lower()
+    spec = _tt_public_getenv("DG_SDPA_GRID", "device").strip().lower()
     if spec == "device":
         if device is None:
             return ttnn.CoreCoord(8, 1)
@@ -117,7 +118,7 @@ def _sdpa_exp_approx_mode() -> bool:
     and every denoise decision is committed as a clean argmax with no temperature
     cushion.
     """
-    return os.environ.get("DG_SDPA_EXP_APPROX", "0").strip().lower() not in ("0", "false", "no", "off")
+    return _tt_public_getenv("DG_SDPA_EXP_APPROX", "0").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _denoise_sdpa_program_config(head_dim, q_seq_len, k_seq_len, *, device=None):
@@ -128,8 +129,8 @@ def _denoise_sdpa_program_config(head_dim, q_seq_len, k_seq_len, *, device=None)
     independently divide each axis.
     """
     grid = _resolve_sdpa_grid(device)
-    q_chunk = int(os.environ.get("GEMMA4_PREFILL_SDPA_QCHUNK", TILE_SIZE))
-    k_chunk = int(os.environ.get("GEMMA4_PREFILL_SDPA_KCHUNK", TILE_SIZE))
+    q_chunk = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_QCHUNK", TILE_SIZE))
+    k_chunk = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_KCHUNK", TILE_SIZE))
     return ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=grid,
         q_chunk_size=_largest_tile_divisor(q_seq_len, q_chunk),

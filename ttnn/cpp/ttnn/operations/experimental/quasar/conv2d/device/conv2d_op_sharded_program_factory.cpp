@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -23,7 +24,7 @@
 //   #3 ACT split_reader_cb_shared -> TT_FATAL-rejected (deferred); single-DM-fill ACT only.
 
 #include <cstdint>
-#include <cstdlib>  // std::getenv (Option C split-tilize test toggle)
+#include <cstdlib>  // tt_stack_public::getenv(Option C split-tilize test toggle)
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -1044,7 +1045,7 @@ ttnn::device_operation::ProgramArtifacts Conv2dShardedProgramFactory::create_pro
     // no-split-reader / no-activation-reuse / non-depthwise path -- the resnet stem / 1x1 conv shape the split
     // kernel implements. Requires act_tilized to hold all height blocks at once (resized below). Everything
     // else falls back to the fused kernel even when the env is set.
-    const bool split_tilize_matmul = (std::getenv("TT_METAL_QSR_CONV_SPLIT_TILIZE") != nullptr) && height_sharded &&
+    const bool split_tilize_matmul = (tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_TILIZE") != nullptr) && height_sharded &&
                                      !is_conv_1d_depthwise_conv && !enable_split_reader && !enable_activation_reuse &&
                                      (in0_num_blocks_w == 1) && (num_blocks_weight_w_per_core == 1);
 
@@ -1060,7 +1061,7 @@ ttnn::device_operation::ProgramArtifacts Conv2dShardedProgramFactory::create_pro
     // to localize the intrinsic Quasar 0x19 to tilize_block vs unpack-tilize. Shares ALL the standalone
     // Program-A plumbing below (folded into split_program_tilize_only); differs only in the compute kernel,
     // an extra reduce-scalar (srcB) DFB, and REDUCE_OP/REDUCE_DIM compute defines.
-    const bool split_program_unpack_tilize = (std::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") != nullptr) &&
+    const bool split_program_unpack_tilize = (tt_stack_public::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") != nullptr) &&
                                              height_sharded && !is_conv_1d_depthwise_conv && !enable_split_reader &&
                                              !enable_activation_reuse && (in0_num_blocks_w == 1) &&
                                              (num_blocks_weight_w_per_core == 1);
@@ -1072,7 +1073,7 @@ ttnn::device_operation::ProgramArtifacts Conv2dShardedProgramFactory::create_pro
     // [#48552 Stage2] block_sharded also eligible for the tilize-only Program A (split path). Must stay aligned
     // with conv2d.cpp's split_program_active gate or Program A tilizes but Program B never runs (RBFAIL).
     const bool split_program_tilize_only =
-        ((std::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) || split_program_unpack_tilize) &&
+        ((tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) || split_program_unpack_tilize) &&
         (height_sharded || block_sharded) && !is_conv_1d_depthwise_conv && !enable_split_reader &&
         !enable_activation_reuse && (in0_num_blocks_w == 1) && (num_blocks_weight_w_per_core == 1);
 

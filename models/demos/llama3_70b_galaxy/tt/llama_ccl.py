@@ -2,14 +2,15 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import ttnn
 import torch
 import os
 from loguru import logger
 
 # Only for prefill, check tt-metal/models/demos/llama3_70b_galaxy/README.md
-LINE_RS = os.environ.get("LINE_RS", "0") == "1"
-LINE_AG = os.environ.get("LINE_AG", "0") == "1"
+LINE_RS = _tt_public_getenv("LINE_RS", "0") == "1"
+LINE_AG = _tt_public_getenv("LINE_AG", "0") == "1"
 
 # If set, use line for those AG ops in prefill, otherwise use ring if available
 USE_LINE_AG = {

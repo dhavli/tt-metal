@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from itertools import product
 
@@ -45,7 +46,7 @@ class WarmupForwardMixin:
             # exercises — trading a one-time runtime capture for the rarer
             # penalty/logprob request shapes in exchange for a much smaller trace
             # region. Greedy and ``None`` are still captured below.
-            if os.environ.get("TT_LEAN_DECODE_WARMUP"):
+            if _tt_public_getenv("TT_LEAN_DECODE_WARMUP"):
                 penalty_logprob_combos = [(False, False)]
             else:
                 penalty_logprob_combos = list(product([True, False], repeat=2))

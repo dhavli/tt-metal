@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import re
 
@@ -65,7 +66,7 @@ def get_mesh_device_name(num_devices, mesh_device_name):
 
 
 def base_model_name_from_env():
-    HF_MODEL = os.getenv("HF_MODEL")
+    HF_MODEL = _tt_public_getenv("HF_MODEL")
 
     if HF_MODEL:
         model_name = HF_MODEL.strip("/").split("/")[-1]
@@ -83,7 +84,7 @@ def device_name_based_on_data_parallel(request, num_devices, mesh_device_name):
 
 
 def _model_name_candidates() -> list[str]:
-    hf_model = os.getenv("HF_MODEL")
+    hf_model = _tt_public_getenv("HF_MODEL")
     if not hf_model:
         base = base_model_name_from_env()
         return [base] if base else []
@@ -100,7 +101,7 @@ def get_logical_sku(request, mesh_device):
     to the SKU of the mesh that is actually opened. Returns ``None`` for CPU or
     when the device count is unsupported.
     """
-    device_name_based_on_dp = device_name_based_on_data_parallel(request, mesh_device, os.getenv("MESH_DEVICE"))
+    device_name_based_on_dp = device_name_based_on_data_parallel(request, mesh_device, _tt_public_getenv("MESH_DEVICE"))
     if not device_name_based_on_dp or device_name_based_on_dp == "CPU":
         return None
     return normalize_sku(device_name_based_on_dp)

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import csv
 import itertools
 import json
@@ -172,7 +173,7 @@ def test_tt_dit_accuracy(
     It relies on the default configurations set in each pipeline.
     """
 
-    if os.getenv("TT_DIT_CACHE_DIR") is None:
+    if _tt_public_getenv("TT_DIT_CACHE_DIR") is None:
         monkeypatch.setenv("TT_DIT_CACHE_DIR", "/tmp/TT_DIT_CACHE")
     benchmark_profiler = BenchmarkProfiler()
     if ttnn.device.is_blackhole() and device_name == "galaxy":

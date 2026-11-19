@@ -40,6 +40,7 @@ This path is the default commit.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -91,7 +92,7 @@ _KV_WRITE_MODES = (_KV_WRITE_FILL, _KV_WRITE_POSITION)
 
 def _default_kv_write_mode() -> str:
     """Resolve the default write mechanism from ``DG_COMMIT_KV_WRITE`` (default fill)."""
-    mode = os.environ.get("DG_COMMIT_KV_WRITE")
+    mode = _tt_public_getenv("DG_COMMIT_KV_WRITE")
     if mode:
         mode = mode.strip().lower()
         if mode not in _KV_WRITE_MODES:

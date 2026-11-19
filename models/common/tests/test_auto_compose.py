@@ -9,6 +9,7 @@ MeshToTensor composers from a sharded ttnn.Tensor's topology metadata.
 
 It validates both host-sharded and device-sharded cases.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from unittest.mock import MagicMock, patch
@@ -103,7 +104,7 @@ def _get_hw_shard_unit() -> int:
     Override via env var TT_TEST_SHARD_UNIT for future hardware.
     """
     try:
-        return int(os.environ.get("TT_TEST_SHARD_UNIT", "32"))
+        return int(_tt_public_getenv("TT_TEST_SHARD_UNIT", "32"))
     except Exception:
         return 32
 

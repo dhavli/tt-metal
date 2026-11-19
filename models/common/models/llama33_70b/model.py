@@ -22,6 +22,7 @@ TTTv1 source for precision recipes:
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -401,7 +402,7 @@ def _resolve_llama33_70b_wh_tuning(*, num_dev: int, max_batch_size: int) -> _Lla
     t = _Llama33_70BWHTuning()
     t.mlp_prefill_len_cutoff = 1024
     t.mlp_decode_spill_w1_to_dram = False
-    t.prefill_minimal_matmul = not os.environ.get("DISABLE_MINIMAL_MATMUL")
+    t.prefill_minimal_matmul = not _tt_public_getenv("DISABLE_MINIMAL_MATMUL")
     logger.info(
         f"MLP tuning for Llama-3.3-70B on {num_dev} device(s): "
         f"prefill_len_cutoff={t.mlp_prefill_len_cutoff}, "

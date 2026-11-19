@@ -1,0 +1,67 @@
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include <cstdint>
+
+#include "internal/tt-1xx/risc_common.h"
+#include "llk_math_eltwise_binary_sfpu_init.h"
+#include "llk_math_eltwise_sfpu_common.h"
+#include "sfpu/ckernel_sfpu_triangle_solve.h"
+
+// cfx (tt-stack patches/tt-metal/0038): vendored from tenstorrent/tt-metal #57445 + #58928 (L_CACHED) onto our
+// pin. Adapted: the pin has no internal/tt-1xx/cache.h (set_l1_data_cache / invalidate_l1_cache live in
+// risc_common.h) and no sanitizer/api.h (the SAN_HOOK lines are dropped). Used only by the GDN fused prep under
+// QWEN36_GDN_WY_SFPU.
+namespace ckernel {
+
+/**
+ * @brief Program the SFPU for the triangle solve: ADDR_MOD_7 for its SFPLOAD/SFPSTOREs, the default SFPU config
+ * register, and reset RWCs.
+ *
+ * @note Call before the first @ref llk_math_triangle_solve_sfpu_tile of a kernel section; the solve keeps no other
+ * state.
+ */
+inline void llk_math_triangle_solve_sfpu_init() {
+    llk_math_eltwise_binary_sfpu_init<SfpuType::triangle_solve>();
+}
+
+/**
+ * @brief Solve L X = DST[idst_in] into DST[idst_out] for one 32x32 tile, L unit lower-triangular and read in place from
+ * L1.
+ *
+ * @tparam L_FORMAT: Format of the L tile in L1, values = <Float32/Float16_b>
+ * @tparam L_NEGATED: The tile holds -L below the diagonal
+ * @tparam L_CACHED: Read L through this RISC's L1 data cache
+ * @param l1_base: L1 byte address of the L tile, resident until this function returns.
+ * @param idst_in: DEST tile index of the right-hand side.
+ * @param idst_out: DEST tile index that receives X; must differ from idst_in.
+ * @note Call @ref llk_math_triangle_solve_sfpu_init before this function. The L1 reads of L are issued by this RISC and
+ *       complete before the function returns; the SFPU instructions still in flight touch only DEST and the LREGs.
+ * @note With L_CACHED the data cache is enabled only inside this call: invalidated after the enable, flushed and
+ *       disabled again before the return.
+ */
+template <DataFormat L_FORMAT, bool L_NEGATED, bool L_CACHED = true>
+inline void llk_math_triangle_solve_sfpu_tile(
+    const std::uint32_t l1_base, const std::uint32_t idst_in, const std::uint32_t idst_out) {
+    _llk_math_eltwise_sfpu_assert_dst_index_<DST_SYNC_MODE>(idst_in, "triangle_solve_tile: idst_in out of range");
+    _llk_math_eltwise_sfpu_assert_dst_index_<DST_SYNC_MODE>(idst_out, "triangle_solve_tile: idst_out out of range");
+    LLK_ASSERT(idst_in != idst_out, "triangle_solve_tile: idst_out must differ from idst_in");
+    if constexpr (L_CACHED) {
+        set_l1_data_cache<true>();
+    }
+    // The RISC reads L through its write-through L1 cache, which may still hold this address from an earlier tile
+    // written by the packer or the NoC.
+    invalidate_l1_cache();
+    // The solve addresses DEST absolutely (tile index * rows per tile), so the DEST base is 0.
+    _llk_math_eltwise_sfpu_start_(0 /*dst_index*/);
+    sfpu::_triangle_solve_tile_<L_FORMAT, L_NEGATED>(idst_in, idst_out, l1_base);
+    if constexpr (L_CACHED) {
+        set_l1_data_cache<false>();
+    }
+    _llk_math_eltwise_sfpu_done_();
+}
+
+}  // namespace ckernel

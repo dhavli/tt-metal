@@ -6,6 +6,7 @@
 Fused kernel source generation: source utilities, phase namespace generation,
 and the unified fused source generator.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import datetime
 import os
@@ -65,7 +66,7 @@ def _read_kernel_source(kernel_desc: "ttnn.KernelDescriptor") -> Tuple[str, Opti
         return kernel_desc.kernel_source, None
 
     base_paths = [
-        os.environ.get("TT_METAL_HOME", ""),
+        _tt_public_getenv("TT_METAL_HOME", ""),
         "",
     ]
     for base in base_paths:
@@ -76,7 +77,7 @@ def _read_kernel_source(kernel_desc: "ttnn.KernelDescriptor") -> Tuple[str, Opti
     raise FileNotFoundError(
         f"Kernel source file not found: '{kernel_desc.kernel_source}'. "
         f"Searched paths: {[os.path.join(b, kernel_desc.kernel_source) if b else kernel_desc.kernel_source for b in base_paths]}. "
-        f"Ensure TT_METAL_HOME is set correctly (current: {os.environ.get('TT_METAL_HOME', '<unset>')})."
+        f"Ensure TT_METAL_HOME is set correctly (current: {_tt_public_getenv('TT_METAL_HOME', '<unset>')})."
     )
 
 

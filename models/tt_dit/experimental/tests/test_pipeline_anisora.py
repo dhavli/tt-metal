@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -19,7 +20,7 @@ from models.tt_dit.utils.test import ring_params
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), False)],
 )
 @pytest.mark.parametrize(
     "mesh_device, mesh_shape, num_links, dynamic_load, device_params, topology, is_fsdp",
@@ -55,14 +56,14 @@ def test_pipeline_inference(
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    pil_image = PIL.Image.open(os.environ.get("PROMPT_IMAGE", "./prompt_image.png"))
+    pil_image = PIL.Image.open(_tt_public_getenv("PROMPT_IMAGE", "./prompt_image.png"))
     image_prompt = [ImagePrompt(image=pil_image, frame_pos=0)]
     negative_prompt = ""
 
     # AniSora upstream defaults (anisoraV3.2/wan/configs/wan_i2v_A14B.py):
     #   sample_steps=40, boundary=0.9, sample_guide_scale=(3.5, 3.5).
     num_frames = 81
-    num_inference_steps = int(os.environ.get("NUM_STEPS", "40"))
+    num_inference_steps = int(_tt_public_getenv("NUM_STEPS", "40"))
     guidance_scale = 3.5
     guidance_scale_2 = 3.5
 
@@ -173,7 +174,7 @@ def test_pipeline_inference_random_weights(
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    pil_image = PIL.Image.open(os.environ.get("PROMPT_IMAGE", "./prompt_image.png"))
+    pil_image = PIL.Image.open(_tt_public_getenv("PROMPT_IMAGE", "./prompt_image.png"))
     image_prompt = [ImagePrompt(image=pil_image, frame_pos=0)]
 
     num_frames = 81

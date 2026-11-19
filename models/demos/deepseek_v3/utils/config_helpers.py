@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import math
 import os
@@ -26,7 +27,7 @@ NORM_CATEGORIES = {"attention_norm", "mlp_norm", "q_norm", "k_norm"}
 
 
 def _env_flag_enabled(name: str) -> bool:
-    value = os.getenv(name)
+    value = _tt_public_getenv(name)
     return value is not None and value.strip().lower() not in ("", "0", "false")
 
 
@@ -42,7 +43,7 @@ def is_ring_fabric(fabric_config: ttnn.FabricConfig) -> bool:
 
 def is_quad_mesh_env() -> bool:
     """True when ``MESH_DEVICE`` requests a QUAD run (before a mesh device exists)."""
-    return os.getenv("MESH_DEVICE") == "QUAD"
+    return _tt_public_getenv("MESH_DEVICE") == "QUAD"
 
 
 # We can't warmup prefill for all possible prompt lengths, only warmup for the selective prompt lengths.
@@ -64,7 +65,7 @@ USERS_PER_ROW = 32
 DEFAULT_MAX_SEQ_LEN = 2048
 SEQ_LEN_CHUNK_SIZE = 1024  # NOTE: should be 512 for blackhole (in case of future bring-up)
 Q_CHUNK_SIZE = 128
-K_CHUNK_SIZE = int(os.getenv("DEEPSEEK_K_CHUNK_SIZE", "64"))
+K_CHUNK_SIZE = int(_tt_public_getenv("DEEPSEEK_K_CHUNK_SIZE", "64"))
 TOPK_MIN_WIDTH = 64  # Minimum width of the topk input tensor
 MAX_TOP_K = 32
 # Default sampling parameters, huggingface recommended values

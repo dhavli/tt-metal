@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 from loguru import logger
@@ -25,7 +26,7 @@ class ModelArgs(TTModelArgs):
         # Resolve HF_MODEL to a local snapshot path before super().__init__() so that
         # all HF calls (AutoConfig, tokenizer, weights) skip the refs/main lookup,
         # which is absent on some CI machines.
-        hf_model = os.environ.get("HF_MODEL", "")
+        hf_model = _tt_public_getenv("HF_MODEL", "")
         if hf_model and not os.path.isabs(hf_model):
             snapshot = ModelArgs._resolve_hf_snapshot(hf_model)
             if snapshot:
@@ -45,8 +46,8 @@ class ModelArgs(TTModelArgs):
     @staticmethod
     def _resolve_hf_snapshot(hf_model_name):
         hf_cache = os.path.normpath(
-            os.environ.get("HF_HUB_CACHE")
-            or os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "hub")
+            _tt_public_getenv("HF_HUB_CACHE")
+            or os.path.join(_tt_public_getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "hub")
         )
         model_slug = "models--" + hf_model_name.replace("/", "--")
         snapshots_dir = os.path.normpath(os.path.join(hf_cache, model_slug, "snapshots"))
@@ -75,7 +76,7 @@ class ModelArgs(TTModelArgs):
         return AutoTokenizer.from_pretrained(
             self.CKPT_DIR,
             use_fast=True,
-            local_files_only=os.getenv("CI") == "true",
+            local_files_only=_tt_public_getenv("CI") == "true",
             trust_remote_code=self.trust_remote_code_hf,
         )
 
@@ -142,7 +143,7 @@ class ModelArgs(TTModelArgs):
         # TT weights via load_state_dict), so the upcast cannot leak into the weight path regardless of
         # call order. Mirrors models/demos/multimodal/gemma3.tt.model_config.reference_vision_transformer.
         model = self.get_hf_model_cls().from_pretrained(
-            self.CKPT_DIR, torch_dtype="auto", local_files_only=os.getenv("CI") == "true"
+            self.CKPT_DIR, torch_dtype="auto", local_files_only=_tt_public_getenv("CI") == "true"
         )
         model = model.float()
         if wrap:

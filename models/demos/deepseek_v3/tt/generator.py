@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -2105,7 +2106,7 @@ class DeepseekGenerator(ModelCapabilitiesMixin, WarmupForwardMixin):
         mtp_accepts = None
         mtp_verifies = None
         temp_decode_page_tables: list[tuple[ttnn.Tensor, ...]] = []
-        token_trace = bool(int(os.getenv("DEEPSEEK_TOKEN_TRACE", "0")))
+        token_trace = bool(int(_tt_public_getenv("DEEPSEEK_TOKEN_TRACE", "0")))
         mtp_layout = self._configure_mtp_prompt_layout(
             tokens_batched=tokens_batched,
             lengths=lengths,

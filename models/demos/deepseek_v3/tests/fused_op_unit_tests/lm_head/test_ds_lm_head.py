@@ -19,6 +19,7 @@ Key characteristics:
     - Decode input/output: L1 INTERLEAVED
     - Prefill input/output: DRAM INTERLEAVED
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -154,7 +155,7 @@ def _run_ds_lm_head_test(
         strict_assert=False,
     )
 
-    if os.getenv(DEVICE_PERF_ENV_VAR) is None:
+    if _tt_public_getenv(DEVICE_PERF_ENV_VAR) is None:
         perf_profiler = BenchmarkProfiler()
         benchmark_data = BenchmarkData()
         trace_suffix = "trace" if trace_mode else "no_trace"
@@ -217,7 +218,7 @@ def _run_ds_lm_head_test(
                 "trace": trace_mode,
                 "program_cache_enabled": program_cache_enabled,
                 "module": "lm_head",
-                "mesh_device": os.getenv("MESH_DEVICE", "TG"),
+                "mesh_device": _tt_public_getenv("MESH_DEVICE", "TG"),
                 "op_type": "lm_head",
             },
         )
@@ -366,7 +367,7 @@ def _build_lm_head_inputs(
             1.0,
             1.0,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
             id="prefill_seq1024",
         ),  # batch=32, seq=1024 → 32768 tokens
         pytest.param(
@@ -376,7 +377,7 @@ def _build_lm_head_inputs(
             1.0,
             1.0,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
             id="prefill_seq8192",
         ),
         pytest.param(
@@ -386,7 +387,7 @@ def _build_lm_head_inputs(
             1.0,
             1.0,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
             id="prefill_seq32768",
         ),
         pytest.param(
@@ -396,19 +397,19 @@ def _build_lm_head_inputs(
             1.0,
             1.0,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
             id="prefill_seq131072",
         ),  # batch=32, seq=128k
     ],
 )
 @pytest.mark.parametrize(
     "use_real_weights",
-    [True, pytest.param(False, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"))],
+    [True, pytest.param(False, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"))],
     ids=["real_weights", "random_weights"],
 )
 @pytest.mark.parametrize(
     "program_cache_enabled",
-    [True, pytest.param(False, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"))],
+    [True, pytest.param(False, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"))],
     ids=["program_cache", "no_program_cache"],
 )
 @pytest.mark.parametrize("trace_mode", [False, True], ids=["eager", "trace"])
@@ -446,7 +447,7 @@ def test_ds_lm_head(
     The weight is sharded across all 32 devices with bfloat4_b quantization.
     """
     # CI skip logic: only run specific combinations in CI
-    in_ci = os.getenv("CI") == "true"
+    in_ci = _tt_public_getenv("CI") == "true"
     if in_ci:
         # Only run these combinations in CI:
         # - decode + seq_len=1 + trace + program_cache + real_weights
@@ -557,16 +558,16 @@ def test_ds_lm_head_single_device(
     [
         ("decode", 1),
         ("prefill", 128),
-        pytest.param("prefill", 1024, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 8192, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 32768, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 131072, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 1024, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 8192, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 32768, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 131072, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
     ],
 )
 def test_ds_lm_head_device_perf(mode, seq_len):
     maybe_skip_long_seq(seq_len, LONG_SEQ_ENV_VAR)
 
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError("Environment variable $MESH_DEVICE is not set. Please set it to T3K, DUAL, QUAD, or TG.")
     # batch_size=32 (USERS_PER_ROW) for all modes

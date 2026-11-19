@@ -43,6 +43,7 @@ blocks selected) and only matters for >2048 sparsity. This reference matches the
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -64,8 +65,8 @@ MSA_DENSE_EQUIV_TOKENS = 2048
 # in token-chunks of FFN_TOKEN_CHUNK. Both are pure memory/speed knobs — they do NOT change outputs.
 # Defaults keep peak host RAM well under ~40GB at S=55k in fp32; raise them (via env) for speed on
 # machines with more RAM, or lower them if you still OOM.
-ATTN_Q_CHUNK = int(os.environ.get("REF_ATTN_Q_CHUNK", "256"))
-FFN_TOKEN_CHUNK = int(os.environ.get("REF_FFN_TOKEN_CHUNK", "4096"))
+ATTN_Q_CHUNK = int(_tt_public_getenv("REF_ATTN_Q_CHUNK", "256"))
+FFN_TOKEN_CHUNK = int(_tt_public_getenv("REF_FFN_TOKEN_CHUNK", "4096"))
 
 
 @dataclass

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import glob
 import math
 import os
@@ -567,7 +568,7 @@ def get_data(input_loc):
 
 def load_imagenet_dataset(model_location_generator=None, model_version="ImageNet_data"):
     # loads LFC dataset path in CIv2 env
-    if model_location_generator is not None and "TT_GH_CI_INFRA" in os.environ:
+    if model_location_generator is not None and _tt_public_contains('TT_GH_CI_INFRA'):
         dataset_path = (
             model_location_generator("vision-models/mobilenetv2/ImageNet_data", model_subdir="", download_if_ci_v2=True)
             / "data"

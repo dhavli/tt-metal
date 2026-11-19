@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import random
 
@@ -513,7 +514,7 @@ def verify_output(
 
 @pytest.mark.requires_device(["QUAD"])
 @pytest.mark.skipif(
-    (os.getenv("USE_TORUS_MODE", "0") == "0"),
+    (_tt_public_getenv("USE_TORUS_MODE", "0") == "0"),
     reason=f"Requires ring fabric",
 )
 @pytest.mark.parametrize(

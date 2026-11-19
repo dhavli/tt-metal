@@ -5,6 +5,7 @@
 """
 GPT-OSS ModelArgs class that's compatible with tt_transformers interface
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import json
@@ -72,7 +73,7 @@ class ModelArgs:
             default_path = default_models[-1]  # Fallback to first in list
 
         # Use HF_MODEL environment variable (consistent with tt_transformers)
-        dir = os.getenv("HF_MODEL", default_path)
+        dir = _tt_public_getenv("HF_MODEL", default_path)
         self.model_path = dir
         self.weights_path = dir
 
@@ -298,7 +299,7 @@ class ModelArgs:
 
     def weight_cache_path(self, dtype):
         """Return weight cache path for the model"""
-        cache_dir = os.getenv("TT_CACHE_PATH")
+        cache_dir = _tt_public_getenv("TT_CACHE_PATH")
         if cache_dir:
             cache_dir = Path(cache_dir)  # If we specify a TT_CACHE_PATH, use that for the cache
         else:
@@ -330,7 +331,7 @@ class ModelArgs:
         load entirely (the load that OOMs/hangs during prefill, #48509) without needing the
         manual --skip-model-load flag. Set GPT_OSS_FORCE_MODEL_LOAD=1 to force a fresh load
         (e.g. to regenerate the cache)."""
-        if os.getenv("GPT_OSS_FORCE_MODEL_LOAD") == "1":
+        if _tt_public_getenv("GPT_OSS_FORCE_MODEL_LOAD") == "1":
             return False
         cache_path = self.weight_cache_path(dtype)
         marker = cache_path / self.WEIGHT_CACHE_MARKER

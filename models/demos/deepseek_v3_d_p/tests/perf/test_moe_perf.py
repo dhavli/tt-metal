@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """MoE device-perf proxies on LoudBox plus production 8x4 TorusXY ground truth."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -26,7 +27,7 @@ _CMD_8X1 = f"pytest {_TEST_PATH} -k 'perf-host-64 and torus-y-8x1 and pad0' --wr
 _CMD_2X4 = f"pytest {_TEST_PATH} -k 'perf-device-256 and fabric2d-mesh-2x4 and pad0' --wrapper-invocation"
 
 
-_IGNORE_POWER = os.environ.get("DS_PERF_IGNORE_POWER") == "1"
+_IGNORE_POWER = _tt_public_getenv("DS_PERF_IGNORE_POWER") == "1"
 _REQUIRE_HIGH_POWER = pytest.mark.skipif(
     not (is_high_power() or _IGNORE_POWER),
     reason="galaxy perf baselines are cut on a >=130W TDP host; an 8kW galaxy measures differently. "
@@ -35,7 +36,7 @@ _REQUIRE_HIGH_POWER = pytest.mark.skipif(
 
 
 def _require_certified_torus_xy():
-    if os.getenv("PREFILL_TORUS_XY_CERTIFIED") != "1" or not os.getenv("TT_MESH_GRAPH_DESC_PATH"):
+    if _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") != "1" or not _tt_public_getenv("TT_MESH_GRAPH_DESC_PATH"):
         pytest.fail("TorusXY perf requires a certified Galaxy and explicit mesh graph descriptor")
 
 

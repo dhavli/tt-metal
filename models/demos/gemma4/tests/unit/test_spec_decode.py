@@ -16,6 +16,7 @@ Device tests require a target (HF_MODEL) + matching drafter
 otherwise. Use GEMMA4_NUM_LAYERS to shrink the target for a fast wiring check
 (equivalence still holds; acceptance becomes meaningless).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -29,17 +30,17 @@ import ttnn
 
 from ...tests.test_factory import parametrize_mesh_with_fabric
 
-ASSISTANT_PATH = os.getenv("GEMMA4_ASSISTANT_MODEL")
+ASSISTANT_PATH = _tt_public_getenv("GEMMA4_ASSISTANT_MODEL")
 _needs_assistant = pytest.mark.skipif(not ASSISTANT_PATH, reason="set GEMMA4_ASSISTANT_MODEL to run")
 _assistant_probe = pytest.mark.skipif(
-    os.environ.get("GEMMA4_RUN_ASSISTANT_PROBES", "0") != "1",
+    _tt_public_getenv("GEMMA4_RUN_ASSISTANT_PROBES", "0") != "1",
     reason="assistant diagnostic/perf probe; set GEMMA4_RUN_ASSISTANT_PROBES=1 to run",
 )
 
 
 @lru_cache(maxsize=1)
 def _target_text_config():
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         return None
 
@@ -66,7 +67,7 @@ def _skip_if_target_too_large_for_mesh(request):
     if "mesh_device" not in request.fixturenames:
         return
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         return
 
@@ -174,7 +175,7 @@ def test_verify_batched_matches_sequential(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
@@ -295,7 +296,7 @@ def _pcc(a, b):
 
 def _assert_argmaxes_match_except_near_ties(ref_logits, got_logits, ref_argmax, got_argmax, context):
     """Allow argmax drift only when the reference distribution is a near-tie."""
-    near_tie_gap = float(os.environ.get("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
+    near_tie_gap = float(_tt_public_getenv("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
     failures = []
     for idx, (ref_logit, got_logit, ref_tok, got_tok) in enumerate(zip(ref_logits, got_logits, ref_argmax, got_argmax)):
         pcc = _pcc(ref_logit, got_logit)
@@ -365,7 +366,7 @@ def test_assistant_step_pcc_vs_hf(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.generator import Gemma4Generator
     from models.tt_transformers.tt.common import PagedAttentionConfig
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
@@ -640,7 +641,7 @@ def test_assistant_first_step_vs_hf_realistic(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     try:
@@ -677,7 +678,7 @@ def test_assistant_first_step_vs_hf_realistic(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "The capital of France is")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "The capital of France is")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 24, max_prefill_len=max_seq_len
     )
@@ -751,7 +752,7 @@ def test_assistant_first_step_vs_hf_realistic(mesh_device, reset_seeds):
 
     # Optional: compare TT's extracted drafter inputs (seed hidden + shared KV)
     # against the REAL HF target on the SAME tokens, to localize a seed/KV bug.
-    if os.environ.get("GEMMA4_SPEC_HF_TARGET") == "1":
+    if _tt_public_getenv("GEMMA4_SPEC_HF_TARGET") == "1":
         from transformers import Gemma4UnifiedForConditionalGeneration
 
         prompt_ids = torch.tensor([[int(t) for t in encoded[0][: prefill_lens[0]]]], dtype=torch.long)
@@ -831,12 +832,12 @@ def test_export_tt_spec_features(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
-    out_path = os.environ.get("GEMMA4_SPEC_EXPORT", "/tmp/tt_spec_features.pt")
-    n_steps = int(os.environ.get("GEMMA4_SPEC_EXPORT_STEPS", 64))
+    out_path = _tt_public_getenv("GEMMA4_SPEC_EXPORT", "/tmp/tt_spec_features.pt")
+    n_steps = int(_tt_public_getenv("GEMMA4_SPEC_EXPORT_STEPS", 64))
     max_seq_len = 1024
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
@@ -862,7 +863,7 @@ def test_export_tt_spec_features(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_steps, max_prefill_len=max_seq_len
     )
@@ -877,7 +878,7 @@ def test_export_tt_spec_features(mesh_device, reset_seeds):
         tt_kv_cache=tt_kv_cache,
         page_table_torch=page_table,
         stop_tokens=tokenizer.stop_tokens,
-        draft_len=int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4)),
+        draft_len=int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4)),
     )
 
     generator.prefill_forward_text(in_pt, page_table=page_table, kv_cache=tt_kv_cache, prompt_lens=decoding_pos)
@@ -939,7 +940,7 @@ def test_assistant_recurrent_vs_hf_realistic(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     try:
@@ -976,8 +977,8 @@ def test_assistant_recurrent_vs_hf_realistic(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 32, max_prefill_len=max_seq_len
     )
@@ -1117,7 +1118,7 @@ def test_assistant_step_pcc_real(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     try:
@@ -1154,7 +1155,7 @@ def test_assistant_step_pcc_real(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 64, max_prefill_len=max_seq_len
     )
@@ -1325,7 +1326,7 @@ def test_drafter_per_position_tt_vs_hf(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     try:
@@ -1337,7 +1338,7 @@ def test_drafter_per_position_tt_vs_hf(mesh_device, reset_seeds):
     except Exception as e:
         pytest.skip(f"could not load HF assistant reference: {e}")
 
-    n_steps = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 48))
+    n_steps = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 48))
     max_seq_len = 1024
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
@@ -1363,8 +1364,8 @@ def test_drafter_per_position_tt_vs_hf(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_steps, max_prefill_len=max_seq_len
     )
@@ -1475,11 +1476,11 @@ def test_tt_drafter_greedychain_acceptance(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
-    n_steps = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 64))
+    n_steps = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 64))
     max_seq_len = 1024
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
@@ -1505,8 +1506,8 @@ def test_tt_drafter_greedychain_acceptance(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_steps, max_prefill_len=max_seq_len
     )
@@ -1565,20 +1566,20 @@ def test_spec_decode_matches_greedy(mesh_device, reset_seeds):
     (top-2 logit gap < ~1), so spec-decode is token-identical to plain greedy up
     to the first such near-tie. A divergence at a CONFIDENT token (large top-2
     gap) would indicate a real accept/commit/KV bug and fails here."""
-    near_tie_gap = float(os.environ.get("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
+    near_tie_gap = float(_tt_public_getenv("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
     from models.demos.gemma4.tt.common import create_assistant_model
     from models.demos.gemma4.tt.generator import Gemma4Generator
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    num_layers = os.environ.get("GEMMA4_NUM_LAYERS")
+    num_layers = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     num_layers = int(num_layers) if num_layers else None
 
     max_seq_len = 1024
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 24))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 24))
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
@@ -1605,7 +1606,7 @@ def test_spec_decode_matches_greedy(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "The capital of France is")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "The capital of France is")
 
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
@@ -1621,7 +1622,7 @@ def test_spec_decode_matches_greedy(mesh_device, reset_seeds):
         tt_kv_cache=tt_kv_cache,
         page_table_torch=page_table,
         stop_tokens=tokenizer.stop_tokens,
-        draft_len=int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4)),
+        draft_len=int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4)),
     )
 
     # Reference: prefill, then plain greedy decode.
@@ -1682,15 +1683,15 @@ def test_verify_batchsize_invariance(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    num_layers = os.environ.get("GEMMA4_NUM_LAYERS")
+    num_layers = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     num_layers = int(num_layers) if num_layers else None
 
     max_seq_len = 1024
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 48))
-    pad = int(os.environ.get("GEMMA4_SPEC_VERIFY_PAD", 4))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 48))
+    pad = int(_tt_public_getenv("GEMMA4_SPEC_VERIFY_PAD", 4))
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
@@ -1716,7 +1717,7 @@ def test_verify_batchsize_invariance(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "The capital of France is")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "The capital of France is")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -1784,13 +1785,13 @@ def test_spec_decode_perf_breakdown(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
     max_seq_len = 1024
     block_size = 64
-    reps = int(os.environ.get("GEMMA4_SPEC_PERF_REPS", 30))
+    reps = int(_tt_public_getenv("GEMMA4_SPEC_PERF_REPS", 30))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -1814,14 +1815,14 @@ def test_spec_decode_perf_breakdown(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 32, max_prefill_len=max_seq_len
     )
     in_pt = torch.stack(in_pt).view(1, -1)
     anchor_token = int(encoded[0][prefill_lens[0] - 1])
     anchor_pos = prefill_lens[0] - 1
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     spec = SpeculativeDecoder(
         target_model=target,
         assistant_model=assistant,
@@ -1918,17 +1919,17 @@ def test_spec_decode_sampling_acceptance(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    num_layers = os.environ.get("GEMMA4_NUM_LAYERS")
+    num_layers = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     num_layers = int(num_layers) if num_layers else None
 
     max_seq_len = 1024
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 64))
-    temperature = float(os.environ.get("GEMMA4_SPEC_TEMP", 1.0))
-    top_p = float(os.environ.get("GEMMA4_SPEC_TOP_P", 0.95))
-    top_k = int(os.environ.get("GEMMA4_SPEC_TOP_K", 64))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 64))
+    temperature = float(_tt_public_getenv("GEMMA4_SPEC_TEMP", 1.0))
+    top_p = float(_tt_public_getenv("GEMMA4_SPEC_TOP_P", 0.95))
+    top_k = int(_tt_public_getenv("GEMMA4_SPEC_TOP_K", 64))
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
@@ -1954,7 +1955,7 @@ def test_spec_decode_sampling_acceptance(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -2008,12 +2009,12 @@ def test_spec_decode_traced(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    near_tie_gap = float(os.environ.get("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
+    near_tie_gap = float(_tt_public_getenv("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
     max_seq_len = 1024
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 48))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 48))
     block_size = 64
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
@@ -2038,7 +2039,7 @@ def test_spec_decode_traced(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -2122,12 +2123,12 @@ def test_verify_trace_batched_capture(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2152,7 +2153,7 @@ def test_verify_trace_batched_capture(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 48, max_prefill_len=max_seq_len
     )
@@ -2252,12 +2253,12 @@ def test_ondevice_argmax_probe(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2281,7 +2282,7 @@ def test_ondevice_argmax_probe(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 48, max_prefill_len=max_seq_len
     )
@@ -2378,12 +2379,12 @@ def test_fused_iter_eager(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2407,7 +2408,7 @@ def test_fused_iter_eager(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 48, max_prefill_len=max_seq_len
     )
@@ -2470,14 +2471,14 @@ def test_fused_loop_eager(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    near_tie_gap = float(os.environ.get("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
+    near_tie_gap = float(_tt_public_getenv("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
     max_seq_len = 1024
     block_size = 64
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 48))
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 48))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2501,7 +2502,7 @@ def test_fused_loop_eager(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -2576,13 +2577,13 @@ def test_fused_loop_traced(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 32))
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 32))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2606,7 +2607,7 @@ def test_fused_loop_traced(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -2675,13 +2676,13 @@ def test_fused_trace_minimal(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 24))
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 24))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2705,7 +2706,7 @@ def test_fused_trace_minimal(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, n_new, max_prefill_len=max_seq_len
     )
@@ -2759,12 +2760,12 @@ def test_verify_seqkv_cost(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2788,7 +2789,7 @@ def test_verify_seqkv_cost(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 32, max_prefill_len=max_seq_len
     )
@@ -2871,12 +2872,12 @@ def test_draft_step_breakdown(mesh_device, reset_seeds):
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     max_seq_len = 1024
     block_size = 64
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     paged_attention_config = PagedAttentionConfig(
         block_size=block_size, max_num_blocks=math.ceil(max_seq_len / block_size)
     )
@@ -2900,7 +2901,7 @@ def test_draft_step_breakdown(mesh_device, reset_seeds):
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table
 
     page_table = create_tt_page_table(1, paged_attention_config)
-    prompt = os.environ.get("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+    prompt = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
     in_pt, encoded, decoding_pos, prefill_lens = preprocess_inputs_prefill(
         [prompt], tokenizer, generator.model_args, True, 32, max_prefill_len=max_seq_len
     )
@@ -3111,22 +3112,22 @@ def test_spec_decode_batched(mesh_device, reset_seeds):
     """
     import time
 
-    near_tie_gap = float(os.environ.get("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
+    near_tie_gap = float(_tt_public_getenv("GEMMA4_SPEC_NEAR_TIE_GAP", 2.0))
     from models.demos.gemma4.tt.common import create_assistant_model
     from models.demos.gemma4.tt.generator import Gemma4Generator
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
     from models.tt_transformers.tt.common import PagedAttentionConfig, preprocess_inputs_prefill
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
-    num_layers = os.environ.get("GEMMA4_NUM_LAYERS")
+    num_layers = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     num_layers = int(num_layers) if num_layers else None
 
-    B = int(os.environ.get("GEMMA4_SPEC_BATCH", 4))
-    max_seq_len = int(os.environ.get("GEMMA4_SPEC_MAX_SEQ", 1024))
-    n_new = int(os.environ.get("GEMMA4_SPEC_TEST_TOKENS", 16))
-    draft_len = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 4))
+    B = int(_tt_public_getenv("GEMMA4_SPEC_BATCH", 4))
+    max_seq_len = int(_tt_public_getenv("GEMMA4_SPEC_MAX_SEQ", 1024))
+    n_new = int(_tt_public_getenv("GEMMA4_SPEC_TEST_TOKENS", 16))
+    draft_len = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
     block_size = 64
     blocks_per_user = math.ceil(max_seq_len / block_size)
     paged_attention_config = PagedAttentionConfig(block_size=block_size, max_num_blocks=B * blocks_per_user)
@@ -3147,7 +3148,7 @@ def test_spec_decode_batched(mesh_device, reset_seeds):
         mesh_config=target.mesh_config,
         ccl_manager=target.ccl_manager,
         assistant_path=ASSISTANT_PATH,
-        max_local_batch_size=int(os.environ.get("GEMMA4_SPEC_ASSIST_BATCH", B)),
+        max_local_batch_size=int(_tt_public_getenv("GEMMA4_SPEC_ASSIST_BATCH", B)),
     )
 
     from models.demos.gemma4.demo.text_demo_v2 import create_tt_page_table

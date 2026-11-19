@@ -10,6 +10,7 @@ This test suite verifies:
 3. Numerical correctness vs pure-torch HF reference
 4. from_model_args backward compatibility (vs TTTv1)
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -321,7 +322,7 @@ def test_rope_1d_decode_forward_vs_reference(
     cos_torch, sin_torch = _rope_cos_sin(head_dim=head_dim, max_seq_len=max_seq_len, theta=rope_theta, scaling=scaling)
     scaling_tag = "llama3" if scaling else "none"
     tag = f"theta{rope_theta}_{scaling_tag}"
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
     cos_lw = LazyWeight(source=cos_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"cos_{tag}"))
     sin_lw = LazyWeight(source=sin_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"sin_{tag}"))
 
@@ -437,7 +438,7 @@ def test_prepare_rot_idxs(
     """Test prepare_rot_idxs standalone helper produces correct ttnn tensor."""
     cos_torch, sin_torch = _rope_cos_sin(head_dim=128, max_seq_len=8192, theta=500000.0, scaling=Llama3Scaling())
     tag = "theta500000.0_llama3"
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
     cos_lw = LazyWeight(source=cos_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"cos_{tag}"))
     sin_lw = LazyWeight(source=sin_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"sin_{tag}"))
     config = Rope1DConfig(
@@ -650,7 +651,7 @@ def test_rope_1d_prefill_forward_vs_reference(
     cos_torch, sin_torch = _rope_cos_sin(head_dim=head_dim, max_seq_len=max_seq_len, theta=rope_theta, scaling=scaling)
     scaling_tag = "llama3" if scaling else "none"
     tag = f"theta{rope_theta}_{scaling_tag}"
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/rope_1d"))
     cos_lw = LazyWeight(source=cos_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"cos_{tag}"))
     sin_lw = LazyWeight(source=sin_torch, device=ttnn_mesh_device, cache_dir_weight_name=(cache_dir, f"sin_{tag}"))
 

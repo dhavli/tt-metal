@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2024 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -5,7 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <cstdlib>  // std::getenv (TT_METAL_QSR_CONV_SPLIT_PROGRAM Option-B two-program split)
+#include <cstdlib>  // tt_stack_public::getenv(TT_METAL_QSR_CONV_SPLIT_PROGRAM Option-B two-program split)
 #include <optional>
 #include <string>
 #include <utility>
@@ -560,7 +561,7 @@ Result conv2d_L1(
     // OVERRUN (dprint_spe3: end-wptr=64 tiles vs nent=16) -> hang. So force no-spill on Quasar TOO when the
     // split is requested, matching the WH/BH config (act_block_w == full_K, reader gather == CB size).
     const bool arch_is_quasar = device->arch() == tt::ARCH::QUASAR;
-    const bool split_env_requested = (std::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr);
+    const bool split_env_requested = (tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr);
     // [#48552 Stage2] Block-sharded convs also take the split path. CORRECTION (iter1->iter2): block-sharding
     // splits N (out_channels), NOT K -- the weights keep FULL K height (proven: Program B matmul demanded
     // b_height=2304=full-K while Program A had tilized only Cin=256 because act_block_w was not rewritten). So
@@ -582,7 +583,7 @@ Result conv2d_L1(
     // (no regression). Env escape TT_METAL_QSR_STEM_FORCE_NOSPILL=1 disables this opt-out so the eventual
     // LLK fix can be validated on the no-spill path without editing code.
     const bool arch_is_wormhole = device->arch() == tt::ARCH::WORMHOLE_B0;
-    const bool force_stem_nospill = (std::getenv("TT_METAL_QSR_STEM_FORCE_NOSPILL") != nullptr);
+    const bool force_stem_nospill = (tt_stack_public::getenv("TT_METAL_QSR_STEM_FORCE_NOSPILL") != nullptr);
     const bool stem_nospill_optout =
         arch_is_wormhole && !force_stem_nospill && (kernel_size[0] == 4) && (kernel_size[1] == 4);
     const bool force_conv_no_spill = (!arch_is_quasar || split_env_requested) && height_sharded_conv && !mm_conv &&
@@ -992,7 +993,7 @@ Result conv2d_L1(
         // are unaffected.
         // [#48552 Stage2 REVERTED] block-sharded can't use the single-K-block split (in0_num_blocks_w>1 ->
         // needs cross-column K-reduction the split path deliberately avoids); keep height-sharded-only.
-        const bool split_program_active = (std::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) &&
+        const bool split_program_active = (tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) &&
                                           parallel_config.shard_scheme == TensorMemoryLayout::HEIGHT_SHARDED &&
                                           conv_config.full_inner_dim;
         if (split_program_active) {

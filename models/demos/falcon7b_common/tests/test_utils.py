@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -38,7 +39,7 @@ def initialize_kv_cache(configuration, num_layers, batch_size, max_seq_len, mesh
 
 def load_hf_model(model_name):
     hugging_face_reference_model = FalconForCausalLM.from_pretrained(
-        model_name, local_files_only=os.getenv("CI") == "true"
+        model_name, local_files_only=_tt_public_getenv("CI") == "true"
     )
     hugging_face_reference_model.eval()
     state_dict = hugging_face_reference_model.state_dict()

@@ -17,6 +17,7 @@ Standalone (no `test_` prefix → pytest skips it). CPU only, no ttnn. Run in th
   uv run --no-project --with "transformers>=5.12" --with "torch" --python 3.10 \
       python models/demos/minimax_m3/tests/golden_hf_first_token.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import sys
@@ -53,14 +54,14 @@ def main():
     from transformers import AutoTokenizer
     from transformers.models.minimax_m3_vl import MiniMaxM3SparseForConditionalGeneration
 
-    hf = os.environ["HF_MODEL"]
+    hf = _tt_public_getitem('HF_MODEL')
     t0 = time.time()
     print(f"[golden] loading tokenizer + model from {hf} (CPU, mmap, bf16) ...", flush=True)
     tok = AutoTokenizer.from_pretrained(hf, trust_remote_code=True)
     # 869GB bf16 model > 566GB RAM -> CANNOT fit on CPU. Use accelerate device_map disk-offload:
     # keep ~500GB resident, spill the rest to LOCAL ext4 (/tmp is local, 2.6TB free; NOT the NFS
     # weights mount). Forward streams the offloaded layers from local disk (~slow but correct).
-    offload = os.environ.get("OFFLOAD_DIR", "/tmp/m3_offload")
+    offload = _tt_public_getenv("OFFLOAD_DIR", "/tmp/m3_offload")
     os.makedirs(offload, exist_ok=True)
     model = MiniMaxM3SparseForConditionalGeneration.from_pretrained(
         hf,

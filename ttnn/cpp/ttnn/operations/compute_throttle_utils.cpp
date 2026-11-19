@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -20,8 +21,8 @@ void add_stagger_defines_if_needed(
     // Apply stagger delay on Wormhole B0 on odd rows, so that only half of cores start doing work at once.
     // This is done to mitigate di/dt issues, in case the environment var is set.
     // See issue #9857.
-    const char* stagger_type = std::getenv("TT_MM_STAGGER_TYPE");
-    const char* stagger_value = std::getenv("TT_MM_STAGGER_VALUE");
+    const char* stagger_type = tt_stack_public::getenv("TT_MM_STAGGER_TYPE");
+    const char* stagger_value = tt_stack_public::getenv("TT_MM_STAGGER_VALUE");
     if (stagger_type && ((arch == tt::ARCH::WORMHOLE_B0 && num_cores > WH_B0_MM_MAX_CORES_NO_STAGGER) ||
                          (arch == tt::ARCH::BLACKHOLE && num_cores > BH_MM_MAX_CORES_NO_STAGGER))) {
         // TODO check range for stagger_type
@@ -54,7 +55,7 @@ void throttle_mm_perf(
     // Limit matmul compute throughput by inserting NOP instructions between MVMUL instructions of matmul kernel
     // This will slow down the OP if UNPACK/PACK threads are capable of feeding data sufficiently fast (MATH compute
     // bound)
-    const char* mm_throttle_env = std::getenv("TT_MM_THROTTLE_PERF");
+    const char* mm_throttle_env = tt_stack_public::getenv("TT_MM_THROTTLE_PERF");
 
     uint32_t uint_throttle_level = static_cast<uint32_t>(throttle_level);
 
@@ -91,14 +92,14 @@ void throttle_mm_perf(
 
 void add_dram_skip_defines_if_needed(
     const tt::ARCH arch, std::map<std::string, std::string>& mm_in1_sender_writer_defines) {
-    const bool skip_in1_dram = std::getenv("TT_MM_SKIP_IN1_DRAM");
+    const bool skip_in1_dram = tt_stack_public::getenv("TT_MM_SKIP_IN1_DRAM");
     if (skip_in1_dram && (arch == tt::ARCH::WORMHOLE_B0 || arch == tt::ARCH::BLACKHOLE)) {
         mm_in1_sender_writer_defines["SKIP_IN1_DRAM"] = "1";
     }
 }
 
 bool should_sync_after_in1_dram(const tt::ARCH arch) {
-    const bool sync_in1_dram = std::getenv("TT_MM_SYNC_AFTER_IN1_DRAM");
+    const bool sync_in1_dram = tt_stack_public::getenv("TT_MM_SYNC_AFTER_IN1_DRAM");
     return sync_in1_dram && (arch == tt::ARCH::WORMHOLE_B0 || arch == tt::ARCH::BLACKHOLE);
 }
 

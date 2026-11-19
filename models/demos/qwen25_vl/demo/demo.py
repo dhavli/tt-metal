@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from datetime import datetime
@@ -32,7 +33,7 @@ from models.tt_transformers.tt.model_config import DecodersPrecision, ModelArgs,
 
 
 def _qwen25_vl_model_key() -> str:
-    hf_model = os.getenv("HF_MODEL", "")
+    hf_model = _tt_public_getenv("HF_MODEL", "")
     hf_lower = hf_model.lower()
     if "72b" in hf_lower:
         return "qwen2.5-vl-72b"
@@ -265,7 +266,7 @@ def create_tt_model(
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -298,10 +299,10 @@ def test_demo(
         pytest.skip("CI only runs the CI-only tests")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
-    if mesh_device.get_num_devices() == 1 and "Qwen2.5-VL-7B" in os.environ.get("HF_MODEL", ""):
+    if mesh_device.get_num_devices() == 1 and "Qwen2.5-VL-7B" in _tt_public_getenv("HF_MODEL", ""):
         pytest.skip("Qwen2.5-VL-7B does not support running on N150")
 
     logger.info(f"mesh_device: {mesh_device}")
@@ -527,7 +528,7 @@ def test_demo(
         # see tt/model.py), which keeps greedy decode on-device. Setting TT_QWEN_FORCE_HOST_SAMPLING=1
         # forces host argmax instead: a known-good reference (correct output) but slower (per-step
         # logits read-back, fails the wh_llmbox_perf decode target), useful only for local A/B.
-        force_host_sampling = os.environ.get("TT_QWEN_FORCE_HOST_SAMPLING", "0") == "1"
+        force_host_sampling = _tt_public_getenv("TT_QWEN_FORCE_HOST_SAMPLING", "0") == "1"
         argmax_on_device = model._supports_on_device_sampling and not force_host_sampling
         if argmax_on_device:
             logger.info(f"Using on-device sampling with temperature=0.0, top_k=-1, top_p=1.0")

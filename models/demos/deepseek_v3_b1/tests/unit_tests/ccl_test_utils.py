@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Shared CCL unit-test helpers for DeepSeek B1 tests."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from collections.abc import Callable
@@ -43,14 +44,14 @@ def parse_positive_env_int(name: str, value: str) -> int:
 
 
 def get_env_int(name: str, default: int) -> int:
-    value = os.getenv(name)
+    value = _tt_public_getenv(name)
     if value is None or value.strip() == "":
         return default
     return parse_positive_env_int(name, value)
 
 
 def get_optional_env_int(name: str) -> int | None:
-    value = os.getenv(name)
+    value = _tt_public_getenv(name)
     if value is None or value.strip() == "":
         return None
     return parse_positive_env_int(name, value)
@@ -62,7 +63,7 @@ def get_num_links_env_params(
     *,
     validate: Callable[[int], None] | None = None,
 ) -> list[int]:
-    value = os.getenv(env_name)
+    value = _tt_public_getenv(env_name)
     if value is None or value.strip() == "":
         return list(defaults)
     parsed = parse_positive_env_int(env_name, value)

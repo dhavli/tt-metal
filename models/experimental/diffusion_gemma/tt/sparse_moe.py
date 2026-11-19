@@ -26,6 +26,7 @@ NEVER edits gemma4 — composes over ``moe.router`` and ``moe.experts.weights`` 
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 from dataclasses import dataclass
 import os
@@ -69,7 +70,7 @@ def _ladder_group_size(group_size: int) -> int:
 
 
 def _ragged_ladder_enabled() -> bool:
-    return os.environ.get("DG_PREFILL_RAGGED_LADDER", "1") == "1"
+    return _tt_public_getenv("DG_PREFILL_RAGGED_LADDER", "1") == "1"
 
 
 def _quantize_ragged_groups(groups, token_slot, packed_rows):
@@ -560,7 +561,7 @@ def ragged_prefill_chunk_size():
     Defaults to ``RAGGED_PREFILL_CHUNK`` (4096), the single-call ceiling for the ragged path.
     Must be a positive multiple of the tile height so every chunk (and the
     32-multiple-padded tail) is a legal ragged prefill shape."""
-    raw = os.environ.get("DG_PREFILL_RAGGED_CHUNK")
+    raw = _tt_public_getenv("DG_PREFILL_RAGGED_CHUNK")
     if raw is None or not raw.strip():
         return RAGGED_PREFILL_CHUNK
     value = int(raw)

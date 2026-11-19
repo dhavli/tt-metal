@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from pathlib import Path
@@ -21,16 +22,16 @@ from models.demos.deepseek_v3.utils.hf_model_utils import load_tokenizer
 from models.demos.deepseek_v3.utils.test_utils import system_name_to_mesh_shape
 
 MODEL_PATH = Path(
-    os.getenv(
+    _tt_public_getenv(
         "DEEPSEEK_V3_HF_MODEL",
         "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked",
     )
 )
-_ds_cache = os.getenv("DEEPSEEK_V3_CACHE")
+_ds_cache = _tt_public_getenv("DEEPSEEK_V3_CACHE")
 CACHE_DIR = Path(_ds_cache) if _ds_cache else None
 
 REFERENCE_FILE = Path(
-    os.getenv(
+    _tt_public_getenv(
         "DEEPSEEK_V3_TEACHER_REF",
         str(Path(__file__).with_name("deepseek_r1_teacher_forcing_256.refpt")),
     )
@@ -103,7 +104,7 @@ def test_demo_teacher_forcing_accuracy(
             "--input <api-json> --output <refpt-path> --model-path <hf-model>"
         )
 
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         pytest.fail("Environment variable $MESH_DEVICE is not set. Please set it to DUAL or QUAD.")
 

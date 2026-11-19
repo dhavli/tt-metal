@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -193,7 +194,7 @@ LTX_UPSAMPLER_MESH_PARAMS = [
 
 # VAE decoder mesh params — multi-device configs for full LTXVideoDecoder parity.
 # Format: (mesh_shape, h_axis, w_axis, num_links, device_params, topology)
-_LTX_SKIP_SMALL_MESH_FABRIC = os.environ.get("LTX_VAE_FORCE_SMALL_MESH_FABRIC", "0") != "1"
+_LTX_SKIP_SMALL_MESH_FABRIC = _tt_public_getenv("LTX_VAE_FORCE_SMALL_MESH_FABRIC", "0") != "1"
 
 _line_fabric = {"fabric_config": ttnn.FabricConfig.FABRIC_1D, "require_exact_physical_num_devices": True}
 

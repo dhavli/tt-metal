@@ -7,6 +7,7 @@ Shared fixtures for deepseek_v3_d_p tests.
 Provides mesh topology markers and pretrained weights checking.
 Automatically downloads weights from HuggingFace if not available locally.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -168,8 +169,8 @@ def pytest_collection_modifyitems(config, items):
     set PREFILL_TORUS_XY_CERTIFIED=1 and TT_MESH_GRAPH_DESC_PATH. Native Nx1 ring proxies use
     Fabric2D TorusY and 1xN ring proxies use TorusX; non-ring local shapes remain unwrapped Fabric2D.
     """
-    is_ci_env = os.getenv("CI") == "true"
-    is_ci_v2_env = "TT_GH_CI_INFRA" in os.environ
+    is_ci_env = _tt_public_getenv("CI") == "true"
+    is_ci_v2_env = _tt_public_contains('TT_GH_CI_INFRA')
     on_ci = is_ci_env or is_ci_v2_env
 
     # A wrapper's child pytest owns its own selection through -k; trimming it here would
@@ -177,7 +178,7 @@ def pytest_collection_modifyitems(config, items):
     if not config.getoption("--wrapper-invocation"):
         items[:] = _test_defined_uncollection(items, is_ci_env, is_ci_v2_env)
 
-    torus_xy_certified = os.getenv("PREFILL_TORUS_XY_CERTIFIED") == "1"
+    torus_xy_certified = _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") == "1"
     torus_xy_fabric = ttnn.FabricConfig.FABRIC_2D_TORUS_XY
     ring_or_torus_fabrics = {
         ttnn.FabricConfig.FABRIC_2D_TORUS_X,
@@ -255,10 +256,10 @@ def pytest_collection_modifyitems(config, items):
         return _get_requested_fabric_cfg(item) == torus_xy_fabric
 
     torus_xy_items_collected = any(_is_torus_xy(item) for item in items)
-    if torus_xy_items_collected and torus_xy_certified and not os.getenv("TT_MESH_GRAPH_DESC_PATH"):
+    if torus_xy_items_collected and torus_xy_certified and not _tt_public_getenv("TT_MESH_GRAPH_DESC_PATH"):
         pytest.exit("PREFILL_TORUS_XY_CERTIFIED=1 requires explicit TT_MESH_GRAPH_DESC_PATH", returncode=2)
     if torus_xy_items_collected and torus_xy_certified:
-        assert_torus_xy_descriptor(os.environ["TT_MESH_GRAPH_DESC_PATH"])
+        assert_torus_xy_descriptor(_tt_public_getitem('TT_MESH_GRAPH_DESC_PATH'))
 
     # Generic CI galaxies are not wrap-cabling certified. get_cluster_type() opens the chip cluster as a
     # side effect, so call it only when this session collects a wrapped device configuration. This keeps
@@ -352,7 +353,7 @@ def _assert_certified_torus_profile(request):
         return
     if device_params.get("fabric_config") != ttnn.FabricConfig.FABRIC_2D_TORUS_XY:
         return
-    if os.getenv("PREFILL_TORUS_XY_CERTIFIED") != "1":
+    if _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") != "1":
         return
     request.getfixturevalue("mesh_device")
     assert ttnn.get_fabric_config() == ttnn.FabricConfig.FABRIC_2D_TORUS_XY
@@ -607,7 +608,7 @@ def get_or_download_model(variant: TestVariant, layer_idx: int = 0, num_layers: 
         Path to model directory with weights.
     """
     # Check environment variable first
-    env_path = os.getenv(variant.env_var)
+    env_path = _tt_public_getenv(variant.env_var)
     if env_path:
         model_path = Path(env_path)
         if model_path.exists():
@@ -644,7 +645,7 @@ def get_or_download_model(variant: TestVariant, layer_idx: int = 0, num_layers: 
     logger.info(f"Model not found locally. Downloading {variant.hf_repo_id} from HuggingFace...")
 
     # Determine cache directory
-    cache_dir = Path(os.getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    cache_dir = Path(_tt_public_getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
     logger.info(f"Will cache to: {cache_dir}")
     # Note: Detailed download size is logged by download_model_weights() after analyzing the index
 
@@ -698,7 +699,7 @@ def _resolve_config_only(variant_name: str):
     if v.config_builder is not None:
         return v.config_builder()
     # Check environment variable first
-    env_path = os.getenv(v.env_var)
+    env_path = _tt_public_getenv(v.env_var)
     if env_path:
         model_path = Path(env_path)
         if (model_path / "config.json").exists():
@@ -717,7 +718,7 @@ def _resolve_config_only(variant_name: str):
 
     # Download only config files from HuggingFace (not weight shards)
     logger.info(f"Config not found locally. Downloading {v.hf_repo_id} config only from HuggingFace...")
-    cache_dir = Path(os.getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    cache_dir = Path(_tt_public_getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
     config_path = download_model_config_only(v, cache_dir)
     return _unwrap_multimodal_config(AutoConfig.from_pretrained(str(config_path), trust_remote_code=True))
 
@@ -743,7 +744,7 @@ def _resolve_tokenizer(variant_name: str, padding_side: str):
     # uses a stock fast tokenizer and turns it off to avoid the flat-config custom-import path.
     trust_remote_code = v.tokenizer_trust_remote_code
     candidates = [
-        os.getenv(v.env_var),
+        _tt_public_getenv(v.env_var),
         str(v.default_local_path) if v.default_local_path is not None else None,
         str(v.shared_path) if v.shared_path is not None else None,
     ]
@@ -758,7 +759,7 @@ def _resolve_tokenizer(variant_name: str, padding_side: str):
             return tok
 
     # Fall back to downloading config-only (includes tokenizer files)
-    cache_dir = Path(os.getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    cache_dir = Path(_tt_public_getenv("HF_HOME", Path.home() / ".cache" / "huggingface"))
     config_path = download_model_config_only(v, cache_dir)
     logger.info(f"Loading tokenizer from downloaded config: {config_path}")
     tok = AutoTokenizer.from_pretrained(str(config_path), use_fast=True, trust_remote_code=trust_remote_code)
@@ -855,7 +856,7 @@ def weight_cache_path(variant, model_path):
     arch = "bh" if is_blackhole() else "wh"
     num_devices = ttnn.get_num_devices()
     env_name = variant.ttnn_cache_env or "TT_DS_PREFILL_TTNN_CACHE"
-    env_cache = os.getenv(env_name)
+    env_cache = _tt_public_getenv(env_name)
     if env_cache:
         cache_dir = Path(env_cache) / f"{variant.name}_{arch}_{num_devices}dev"
     else:
@@ -1121,7 +1122,7 @@ def pytest_collection_finish(session):
     count — e.g. topology-gated tests that can silently collect 0 on the wrong
     mesh. Emits a GitHub Actions ``::warning::`` annotation but never changes the
     exit code, so the job still passes."""
-    expected_raw = os.getenv("EXPECT_NUM_TESTS")
+    expected_raw = _tt_public_getenv("EXPECT_NUM_TESTS")
     if not expected_raw:
         return
     try:
@@ -1147,7 +1148,7 @@ def pytest_collection_finish(session):
         print(annotation, flush=True)
 
     # Also surface it on the GitHub job-summary page when available.
-    summary_path = os.getenv("GITHUB_STEP_SUMMARY")
+    summary_path = _tt_public_getenv("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a") as fh:
             fh.write(f"⚠️ **Unexpected test count** — {msg}\n")

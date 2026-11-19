@@ -179,4 +179,5 @@ enum class SfpuType {
     expm1_cw,
     softcap,
     situ_glu,
+    triangle_solve,  // cfx 0038 (#57445): appended last so no existing enumerator moves
 };

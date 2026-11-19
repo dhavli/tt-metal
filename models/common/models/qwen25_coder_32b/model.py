@@ -15,6 +15,7 @@ Executor contract (``EagerLLMExecutor`` / ``TracedLLMExecutor``): pre-embedded f
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -352,7 +353,7 @@ def _post_attn_norm_decode_configs(
 # than 72b's >70B bf4/bf8 recipe), so the accuracy profile is re-gated separately. A/B escape hatch: set
 # DISABLE_PREFILL_AG_BF8=1 to keep the gathers at bf16 (byte-identical to the pre-change HEAD). None disables.
 _PREFILL_AG_CCL_DTYPE: ttnn.DataType | None = (
-    None if os.environ.get("DISABLE_PREFILL_AG_BF8") == "1" else ttnn.bfloat8_b
+    None if _tt_public_getenv("DISABLE_PREFILL_AG_BF8") == "1" else ttnn.bfloat8_b
 )
 
 
@@ -444,8 +445,8 @@ def _resolve_qwen_coder_wh_tuning(*, num_dev: int, max_batch_size: int) -> _Qwen
         mlp_prefill_len_cutoff=1024,
         mlp_decode_spill_w1_to_dram=False,
     )
-    t.prefill_minimal_matmul = not os.environ.get("DISABLE_MINIMAL_MATMUL")
-    t.prefill_reduce_ccl_bf8 = not os.environ.get("DISABLE_PREFILL_REDUCE_BF8")
+    t.prefill_minimal_matmul = not _tt_public_getenv("DISABLE_MINIMAL_MATMUL")
+    t.prefill_reduce_ccl_bf8 = not _tt_public_getenv("DISABLE_PREFILL_REDUCE_BF8")
     logger.info(
         f"L1 tuning for Qwen2.5-Coder-32B on {num_dev} device(s): "
         f"prefill_len_cutoff={t.mlp_prefill_len_cutoff}, "

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import inspect
 import os
 
@@ -28,7 +29,7 @@ from models.tt_transformers.tt.multimodal.llama_cross_attention import TtLlamaCr
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -60,7 +61,7 @@ def test_cross_attention_inference(text_seq_len, batch, mesh_device, reset_seeds
     norm_eps = model_args.norm_eps
 
     # Initialization of HF subclass parameters
-    hf_weights_repo_name = os.getenv("HF_MODEL")
+    hf_weights_repo_name = _tt_public_getenv("HF_MODEL")
     past_key_values = DynamicCache()
     config = AutoConfig.from_pretrained(hf_weights_repo_name)
     config.text_config._attn_implementation = "sdpa"

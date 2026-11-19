@@ -4,6 +4,7 @@
 """Text-only DiffusionGemma prompt-to-text demo for #47464 bring-up."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -54,7 +55,7 @@ def _open_mesh_device(mesh: str):
     # DG_TRACE_REGION_SIZE reserves Metal trace storage when the model-lifetime
     # DG_UPFRONT_CAPTURE path is selected. Unset/zero preserves the ordinary eager demo.
     kwargs = {}
-    trace_region_size = int(os.environ.get("DG_TRACE_REGION_SIZE", "0"))
+    trace_region_size = int(_tt_public_getenv("DG_TRACE_REGION_SIZE", "0"))
     if trace_region_size > 0:
         kwargs["trace_region_size"] = trace_region_size
     try:
@@ -216,11 +217,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run DiffusionGemma text generation on a TT mesh.")
     parser.add_argument(
         "--checkpoint",
-        default=os.getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it"),
+        default=_tt_public_getenv("DG_CKPT", "google/diffusiongemma-26B-A4B-it"),
         help="HF checkpoint directory or model id (default: DG_CKPT or google/diffusiongemma-26B-A4B-it)",
     )
-    parser.add_argument("--prompt", default=os.getenv("DG_PROMPT", "The capital of France is"))
-    parser.add_argument("--mesh", default=os.getenv("MESH_DEVICE", "P150x4"), help="Mesh label or ROWSxCOLS")
+    parser.add_argument("--prompt", default=_tt_public_getenv("DG_PROMPT", "The capital of France is"))
+    parser.add_argument("--mesh", default=_tt_public_getenv("MESH_DEVICE", "P150x4"), help="Mesh label or ROWSxCOLS")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--canvas-length", type=int, default=256, help="Diffusion canvas length per generated block")
     parser.add_argument("--max-denoising-steps", type=int, default=48, help="Denoise steps per generated block")

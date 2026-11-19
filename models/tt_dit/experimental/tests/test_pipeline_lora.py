@@ -10,6 +10,7 @@ test): ``LORA_HIGH_PATH``, ``LORA_LOW_PATH``, ``LORA_SCALE``. Set
 ``path[:scale]`` entries to exercise multi-LoRA stacking. If both single-LoRA
 and stack env vars are set, the stack form wins.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 import statistics
@@ -62,11 +63,11 @@ def _parse_stack(env_val: str) -> List[LoRASpec]:
 
 
 def _resolve_lora_args() -> Tuple[List[LoRASpec], List[LoRASpec], float]:
-    stack_high = os.environ.get("LORA_STACK_HIGH")
-    stack_low = os.environ.get("LORA_STACK_LOW")
-    single_high = os.environ.get("LORA_HIGH_PATH")
-    single_low = os.environ.get("LORA_LOW_PATH")
-    scale = float(os.environ.get("LORA_SCALE", "1.0"))
+    stack_high = _tt_public_getenv("LORA_STACK_HIGH")
+    stack_low = _tt_public_getenv("LORA_STACK_LOW")
+    single_high = _tt_public_getenv("LORA_HIGH_PATH")
+    single_low = _tt_public_getenv("LORA_LOW_PATH")
+    scale = float(_tt_public_getenv("LORA_SCALE", "1.0"))
 
     if stack_high or stack_low:
         return (
@@ -82,7 +83,7 @@ def _resolve_lora_args() -> Tuple[List[LoRASpec], List[LoRASpec], float]:
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), False)],
 )
 @pytest.mark.parametrize(
     "mesh_device, mesh_shape, num_links, dynamic_load, device_params, topology, is_fsdp",
@@ -132,16 +133,16 @@ def test_pipeline_inference(
     parent_mesh = mesh_device
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    prompt_image_path = os.environ.get("PROMPT_IMAGE")
+    prompt_image_path = _tt_public_getenv("PROMPT_IMAGE")
     pil_image = PIL.Image.open(prompt_image_path) if prompt_image_path else create_fractal_image(width, height)
     image_prompt = [ImagePrompt(image=pil_image, frame_pos=0)]
     negative_prompt = ""
 
     num_frames = 81
-    num_inference_steps = int(os.environ.get("NUM_STEPS", "4"))
-    guidance_scale = float(os.environ.get("GUIDANCE_SCALE", "1"))
-    guidance_scale_2 = float(os.environ.get("GUIDANCE_SCALE_2", str(guidance_scale)))
-    boundary_ratio = float(os.environ.get("BOUNDARY_RATIO", "0.875"))
+    num_inference_steps = int(_tt_public_getenv("NUM_STEPS", "4"))
+    guidance_scale = float(_tt_public_getenv("GUIDANCE_SCALE", "1"))
+    guidance_scale_2 = float(_tt_public_getenv("GUIDANCE_SCALE_2", str(guidance_scale)))
+    boundary_ratio = float(_tt_public_getenv("BOUNDARY_RATIO", "0.875"))
 
     # A scale of 1.0 is a no-op lerp, so the unconditional pass is pure waste: skip CFG
     # entirely and halve the denoising cost. Guidance-distilled LoRAs want exactly this.
@@ -169,7 +170,7 @@ def test_pipeline_inference(
     )
 
     # prompt = os.environ.get("PROMPT", "A golden retriever running on a sandy beach, waves in the background")
-    prompt = os.environ.get("PROMPT", "A  cat running on a sandy beach, waves in the background")
+    prompt = _tt_public_getenv("PROMPT", "A  cat running on a sandy beach, waves in the background")
 
     profiler = BenchmarkProfiler()
 

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -8,9 +9,9 @@ from transformers import AutoConfig
 
 
 def load_hf_mixtral_config():
-    hf_model = os.getenv("HF_MODEL")
+    hf_model = _tt_public_getenv("HF_MODEL")
     assert hf_model is not None, "Please set HF_MODEL to a HuggingFace name e.g. meta-llama/Llama-3.1-8B-Instruct"
-    config = AutoConfig.from_pretrained(hf_model, local_files_only=os.getenv("CI") == "true")
+    config = AutoConfig.from_pretrained(hf_model, local_files_only=_tt_public_getenv("CI") == "true")
     return config
 
 

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Device-perf wrappers for local Fabric2D, 4x4 subtorus, and production TorusXY workloads."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import re
@@ -14,7 +15,7 @@ from models.demos.deepseek_v3_d_p.utils.smbus_telemetry import is_high_power
 
 _TEST_PATH = "models/demos/deepseek_v3_d_p/tests/test_prefill_block_loop.py"
 
-_IGNORE_POWER = os.environ.get("DS_PERF_IGNORE_POWER") == "1"
+_IGNORE_POWER = _tt_public_getenv("DS_PERF_IGNORE_POWER") == "1"
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), *([".."] * 5)))
 _SUBTORUS_Y4_ENV = {
@@ -163,7 +164,7 @@ def test_deepseek_v3_prefill_block_perf(
     if "_8x4_" in model_name and "torus_xy" in model_name:
         if not _is_galaxy_env():
             pytest.skip("This test requires 8x4 mesh - galaxy. (set MESH_DEVICE=TG)")
-        if os.getenv("PREFILL_TORUS_XY_CERTIFIED") != "1" or not os.getenv("TT_MESH_GRAPH_DESC_PATH"):
+        if _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") != "1" or not _tt_public_getenv("TT_MESH_GRAPH_DESC_PATH"):
             pytest.fail("TorusXY perf requires a certified Galaxy and explicit mesh graph descriptor")
 
     extra_env = None

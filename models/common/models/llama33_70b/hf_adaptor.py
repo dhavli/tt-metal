@@ -4,6 +4,7 @@
 """Hugging Face product adaptor for the TTTv2 Llama 3.3 70B path."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass, field
@@ -138,7 +139,7 @@ class Llama33_70BForCausalLM:
 
 
 def load_tokenizer(hf_model: str):
-    tokenizer = AutoTokenizer.from_pretrained(hf_model, local_files_only=os.getenv("CI") == "true")
+    tokenizer = AutoTokenizer.from_pretrained(hf_model, local_files_only=_tt_public_getenv("CI") == "true")
     eos = getattr(tokenizer, "eos_token_id", None)
     tokenizer.stop_tokens = [] if eos is None else ([eos] if isinstance(eos, int) else list(eos))
     return tokenizer
@@ -160,8 +161,8 @@ def _trace_warmup_seq_lens(max_prefill_chunk_size: int, max_seq_len: int) -> tup
 def _cache_path(hf_model: str, mesh_device, cache_dir: Path | str | None) -> Path:
     if cache_dir is not None:
         path = Path(cache_dir)
-    elif os.getenv("TT_CACHE_PATH"):
-        path = Path(os.environ["TT_CACHE_PATH"])
+    elif _tt_public_getenv("TT_CACHE_PATH"):
+        path = Path(_tt_public_getitem('TT_CACHE_PATH'))
     else:
         path = Path("model_cache") / hf_model / "T3K"
     path.mkdir(parents=True, exist_ok=True)
@@ -234,7 +235,7 @@ def from_pretrained(
     if num_devices != 8:
         raise ValueError(f"Llama-3.3-70B supports exactly 8 devices (T3K), got {num_devices}")
     ttnn.SetDefaultDevice(mesh_device)
-    load_kwargs = {"local_files_only": os.getenv("CI") == "true"}
+    load_kwargs = {"local_files_only": _tt_public_getenv("CI") == "true"}
     hf_config = AutoConfig.from_pretrained(hf_model, **load_kwargs)
     if hf_config.num_attention_heads % num_devices or hf_config.num_key_value_heads % num_devices:
         raise ValueError(
@@ -300,7 +301,7 @@ def from_pretrained(
         max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=_trace_seq_lens(num_devices, 2048, max_seq_len),
         trace_prefill_warmup_seq_lens=_trace_warmup_seq_lens(2048, max_seq_len),
-        disable_batched_prefill=bool(os.getenv("DISABLE_BATCHED_PREFILL")),
+        disable_batched_prefill=bool(_tt_public_getenv("DISABLE_BATCHED_PREFILL")),
     )
     del hf
     return Llama33_70BForCausalLM(

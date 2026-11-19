@@ -7,6 +7,7 @@ Launch script for multi-host Galaxy jobs via tt-run.
 
 This module can be used programmatically or as a CLI tool.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import os
 import shlex
@@ -215,7 +216,7 @@ def build_tt_run_command(
         ValueError: If configuration is invalid
     """
     if tt_metal_home is None:
-        tt_metal_home = os.environ.get("TT_METAL_HOME", os.getcwd())
+        tt_metal_home = _tt_public_getenv("TT_METAL_HOME", os.getcwd())
 
     assert os.path.exists(tt_metal_home), f"TT_METAL_HOME not found: {tt_metal_home}"
 
@@ -328,7 +329,7 @@ def run_galaxy_command(
         Exit code (0 for success)
     """
     if tt_metal_home is None:
-        tt_metal_home = os.environ.get("TT_METAL_HOME", os.getcwd())
+        tt_metal_home = _tt_public_getenv("TT_METAL_HOME", os.getcwd())
 
     tt_run_cmd, cfg, host_cfg, hostname = build_tt_run_command(command, config_type, hostname, tt_metal_home)
 

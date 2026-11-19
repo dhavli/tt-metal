@@ -7,6 +7,7 @@ Shared utility functions for DeepSeek V3 fused op unit tests.
 This module contains common helper functions used across all fused op unit tests
 to reduce code duplication and ensure consistent behavior.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -140,7 +141,7 @@ def get_int_env(name: str, default: int) -> int:
     Raises:
         ValueError: If the environment variable is set but cannot be parsed as an integer.
     """
-    val = os.getenv(name)
+    val = _tt_public_getenv(name)
     if val is None:
         return default
     try:
@@ -159,7 +160,7 @@ def maybe_skip_long_seq(seq_len: int, long_seq_env_var: str, threshold: int = 81
     """
     if seq_len <= threshold:
         return
-    if os.getenv(long_seq_env_var) is None:
+    if _tt_public_getenv(long_seq_env_var) is None:
         pytest.skip(f"Set {long_seq_env_var}=1 to enable seq_len={seq_len} coverage.")
 
 

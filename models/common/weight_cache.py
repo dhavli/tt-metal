@@ -20,6 +20,7 @@ time (write-access run), and ``build_cached_state_dict`` serves them real on lat
 while placeholdering the rest — a HYBRID state_dict. The host subset is a tiny fraction of the
 weight bytes, so the full from_pretrained (and its OOM) is still avoided.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import collections.abc
 import hashlib
@@ -158,7 +159,7 @@ def weight_cache_is_complete(
     ``"text+vision"``); a marker written by a narrower build does not satisfy a wider one, because
     the wider build needs tensorbins the narrower one never wrote. ``force_env=...=1`` forces a
     cold load."""
-    if force_env and os.getenv(force_env) == "1":
+    if force_env and _tt_public_getenv(force_env) == "1":
         return False
     # A variant we could not compute is a variant we cannot verify: accepting it could hand a
     # placeholder to a build whose cache-filename set we did not check, and as_tensor would

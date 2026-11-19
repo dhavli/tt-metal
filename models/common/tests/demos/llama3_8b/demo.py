@@ -19,6 +19,7 @@ Usage:
     MESH_DEVICE=T3K HF_MODEL=meta-llama/Llama-3.1-8B-Instruct \
     python_env/bin/pytest models/common/tests/demos/llama3_8b/demo.py -k "batch-32" -v
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -210,9 +211,9 @@ def load_reference_data(model_name: str):
 
 
 def _resolve_llama_head_counts(hf_model: str | None = None) -> tuple[int, int]:
-    hf_model = hf_model or os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    hf_model = hf_model or _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
     try:
-        config = AutoConfig.from_pretrained(hf_model, local_files_only=os.getenv("CI") == "true")
+        config = AutoConfig.from_pretrained(hf_model, local_files_only=_tt_public_getenv("CI") == "true")
     except OSError:
         if hf_model.rstrip("/").split("/")[-1] == "Llama-3.1-8B-Instruct":
             return 32, 8
@@ -246,7 +247,7 @@ def _skip_unsupported_case(case: DemoCase, mesh_device) -> None:
 
 
 def _sampling_params_for_model(model, *, case_name: str):
-    sampling_mode = os.environ.get("SAMPLING_MODE", "on_device_topk").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "on_device_topk").lower()
     on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -299,10 +300,10 @@ def log_teacher_forcing_text(prompt_tokens, predicted_tokens_per_user, reference
 
 def create_llama3_for_causal_lm(mesh_device, optimizations="performance", max_batch_size=32, max_seq_len=1024):
     """Create product-level Llama3ForCausalLM for testing."""
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
     instruct = "Instruct" in hf_model
 
-    n_layers = int(os.environ.get("LLAMA3_8B_TTTV2_NUM_LAYERS", "32"))
+    n_layers = int(_tt_public_getenv("LLAMA3_8B_TTTV2_NUM_LAYERS", "32"))
 
     block_size = 32
     max_num_blocks = max_batch_size * math.ceil(max_seq_len / block_size)
@@ -321,7 +322,7 @@ def create_llama3_for_causal_lm(mesh_device, optimizations="performance", max_ba
     )
 
 
-mesh_device_name = os.environ.get("MESH_DEVICE", "").strip().upper()
+mesh_device_name = _tt_public_getenv("MESH_DEVICE", "").strip().upper()
 mesh_device_shape = {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (4, 8)}.get(mesh_device_name)
 if mesh_device_shape is None:
     pytest.skip(
@@ -518,8 +519,8 @@ def _run_token_accuracy(llm, mesh_device, expected, optimizations: str):
         llm, mesh_device, optimizations=optimizations, log_text=True
     )
 
-    if os.environ.get("CI") == "true":
-        hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    if _tt_public_getenv("CI") == "true":
+        hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
         model_target, _ = _benchmark_model_identity(hf_model, llm.model_name)
         central = resolve_accuracy_targets(
             model_target,
@@ -610,8 +611,8 @@ def _measure_teacher_forcing_accuracy(llm, mesh_device, *, optimizations: str, l
             prompt_tokens, result.predicted_tokens_per_user, reference_tokens[prompt_len:], llm.tokenizer
         )
 
-    if os.environ.get("CI") == "true":
-        hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    if _tt_public_getenv("CI") == "true":
+        hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
         model_target, model_variant = _benchmark_model_identity(hf_model, llm.model_name)
         num_target = len(reference_tokens) - prompt_len
         measurements = {
@@ -668,7 +669,7 @@ def _run_batch_once(
     )
 
     sampling_mode, sampling_params = _sampling_params_for_model(model, case_name=case_name)
-    pipeline_readback = os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
+    pipeline_readback = _tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
     logger.info(f"[{case_name}] PIPELINE_READBACK={pipeline_readback}")
 
     executor = None
@@ -742,8 +743,8 @@ def _report_performance(
     if log_text:
         log_generated_text(prompts, result.generated_token_ids, llm.tokenizer)
 
-    if os.environ.get("CI") == "true":
-        hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    if _tt_public_getenv("CI") == "true":
+        hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
         model_target, model_variant = _benchmark_model_identity(hf_model, llm.model_name)
         prefill_seq_len = int(prompt_lens.max())
         measurements = {
@@ -826,7 +827,7 @@ def _run_perf_benchmark(llm, mesh_device, expected, batch_size, case_name, num_d
     prompts_path = DEMO_DIR / "sample_prompts" / "input_data_questions_prefill_128.json"
     prompts = load_input_prompts(prompts_path, batch_size)
     default_decode_tokens = 200 if num_decode_tokens is None else int(num_decode_tokens)
-    num_decode_tokens = int(os.environ.get("LLAMA3_8B_TTTV2_DECODE_TOKENS", str(default_decode_tokens)))
+    num_decode_tokens = int(_tt_public_getenv("LLAMA3_8B_TTTV2_DECODE_TOKENS", str(default_decode_tokens)))
     profiler = BenchmarkProfiler()
     result, prompt_lens, sampling_mode = _run_batch_once(
         llm,
@@ -990,7 +991,7 @@ def _run_dp_smoke(mesh_device, optimizations: str, case: DemoCase) -> None:
                 prompt_lens=prompt_lens,
                 sampling_params=sampling_params,
                 prefill_sampling_params=None,
-                pipeline_readback=os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no"),
+                pipeline_readback=_tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no"),
                 profiler=profiler,
             )
         finally:

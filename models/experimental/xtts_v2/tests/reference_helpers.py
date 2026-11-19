@@ -20,6 +20,7 @@ Cross-check mode: set XTTS_GOLDEN_DIR to a golden/ root holding fixtures capture
 real coqui run, and every helper returns those coqui-validated fixtures instead, with
 identical keys/shapes. The default path never touches golden files.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import functools
 import math
@@ -54,7 +55,7 @@ def golden_dir():
     Read at every public helper call and passed INTO the lru_cached builders as the cache
     key — reading it inside the cached body would freeze whichever mode ran first for the
     rest of the process (a test toggling XTTS_GOLDEN_DIR would silently get stale results)."""
-    return os.environ.get("XTTS_GOLDEN_DIR", "")
+    return _tt_public_getenv("XTTS_GOLDEN_DIR", "")
 
 
 def _load_golden(golden, *rel):

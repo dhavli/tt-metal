@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,7 +39,7 @@ def _allow_quad_ring_repack_for_synthetic_weights(allow: bool):
         yield
         return
 
-    previous_value = os.environ.get("DEEPSEEK_V3_ALLOW_QUAD_RING_WEIGHT_REPACK")
+    previous_value = _tt_public_getenv("DEEPSEEK_V3_ALLOW_QUAD_RING_WEIGHT_REPACK")
     os.environ["DEEPSEEK_V3_ALLOW_QUAD_RING_WEIGHT_REPACK"] = "1"
     try:
         yield

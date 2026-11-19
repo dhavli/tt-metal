@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -19,7 +20,7 @@ def device_params(request, galaxy_type):
         "N300": (1, 2),
         "P150": (1, 1),
         "P300": (1, 2),
-    }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+    }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     is_single_device = (mesh_device == (1, 1)) if isinstance(mesh_device, tuple) else (mesh_device == 1)
 
     if "fabric_config" in params:

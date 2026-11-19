@@ -15,6 +15,7 @@ Configuration:
 Run with:
 'MESH_DEVICE=TG USE_TORUS_MODE=1 pytest models/demos/deepseek_v3/tests/test_combine_tg.py -v'
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import random
@@ -234,7 +235,7 @@ def run_combine_test(
 
 @pytest.mark.requires_device("TG")
 @pytest.mark.skipif(
-    (os.getenv("USE_TORUS_MODE", "0") == "0"),
+    (_tt_public_getenv("USE_TORUS_MODE", "0") == "0"),
     reason="Requires ring fabric",
 )
 @pytest.mark.parametrize(

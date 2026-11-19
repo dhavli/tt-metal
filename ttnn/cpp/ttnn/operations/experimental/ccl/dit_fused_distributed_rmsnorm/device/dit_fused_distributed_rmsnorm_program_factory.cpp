@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: 2026 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -93,7 +94,7 @@ uint32_t derive_worker_cap(
     // DEV worker-count sweep knob: WAN_RMSNORM_WORKER_CAP overrides the grid-derived cap
     // (still validity-clamped below, and it bypasses the arch knee). Used to re-sweep the
     // per-shape optimum before finalizing the heuristic.
-    const char* worker_cap_env = std::getenv("WAN_RMSNORM_WORKER_CAP");
+    const char* worker_cap_env = tt_stack_public::getenv("WAN_RMSNORM_WORKER_CAP");
     if (worker_cap_env != nullptr) {
         const int forced = std::atoi(worker_cap_env);
         if (forced > 0) {

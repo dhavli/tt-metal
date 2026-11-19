@@ -14,13 +14,14 @@ pass `_enc_stats=None` on the trace-capture call (the first warm call of
 a given shape), so that call's per-sub-phase timings show up as zeros.
 Sub-phase numbers are only meaningful on subsequent (trace-replay) calls
 — read the totals, not the breakdown, on the capture call."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
 
 import ttnn
 
-_ENABLED = os.environ.get("TT_UNIAD_TIMING") == "1"
+_ENABLED = _tt_public_getenv("TT_UNIAD_TIMING") == "1"
 _CALL_IDX = [0]
 
 

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -12,7 +13,7 @@ EFFICIENTNETB0_L1_SMALL_SIZE = 79104
 
 
 def load_torch_model(model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         model = EfficientNet.from_pretrained("efficientnet-b0").eval()
         state_dict = model.state_dict()
     else:

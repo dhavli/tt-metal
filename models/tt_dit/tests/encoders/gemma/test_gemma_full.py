@@ -14,6 +14,7 @@ fabric-router kernel-config buffer at device open.
 
     pytest models/tt_dit/tests/encoders/gemma/test_gemma_full.py -s
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import glob
 import os
@@ -75,7 +76,7 @@ CONNECTOR_PREFIXES = (
 
 
 def _gemma_path() -> str:
-    explicit = os.environ.get("GEMMA_PATH")
+    explicit = _tt_public_getenv("GEMMA_PATH")
     if explicit:
         return explicit
     # HF_HUB_CACHE resolves HF_HUB_CACHE / HF_HOME / the default. Hardcoding ~/.cache/huggingface
@@ -85,7 +86,7 @@ def _gemma_path() -> str:
 
 
 def _ltx_ckpt() -> str | None:
-    explicit = os.environ.get("LTX_CHECKPOINT")
+    explicit = _tt_public_getenv("LTX_CHECKPOINT")
     if explicit and os.path.exists(explicit):
         return explicit
     # HF_HUB_CACHE resolves HF_HUB_CACHE / HF_HOME / the default. Hardcoding ~/.cache/huggingface
@@ -243,7 +244,7 @@ def _flush_after(mod, mesh_device):
 
 
 @pytest.mark.skipif(
-    os.environ.get("GEMMA_PROF") != "1",
+    _tt_public_getenv("GEMMA_PROF") != "1",
     reason="Tracy profiling harness — run: GEMMA_PROF=1 python -m tracy -p -r -m pytest "
     "'<file>::test_prof_gemma_ltx_devicetime[2x4]' -s",
 )

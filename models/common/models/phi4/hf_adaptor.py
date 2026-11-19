@@ -4,6 +4,7 @@
 """Hugging Face provider boundary for ``microsoft/phi-4``."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -145,7 +146,7 @@ def load_tokenizer(hf_model: str, hf_revision: str | None = DEFAULT_HF_REVISION)
     tokenizer = AutoTokenizer.from_pretrained(
         hf_model,
         revision=hf_revision,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     eos = getattr(tokenizer, "eos_token_id", None)
     stops = [] if eos is None else ([eos] if isinstance(eos, int) else list(eos))
@@ -165,8 +166,8 @@ def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: 
 def _cache_path(hf_model: str, mesh_device, cache_dir: Path | str | None) -> Path:
     if cache_dir is not None:
         path = Path(cache_dir)
-    elif os.getenv("TT_CACHE_PATH"):
-        path = Path(os.environ["TT_CACHE_PATH"])
+    elif _tt_public_getenv("TT_CACHE_PATH"):
+        path = Path(_tt_public_getitem('TT_CACHE_PATH'))
     else:
         path = Path("model_cache") / hf_model / "N300"
     path.mkdir(parents=True, exist_ok=True)
@@ -257,7 +258,7 @@ def from_pretrained(
     if num_devices != 2:
         raise ValueError(f"Phi-4 supports logical TP2 lanes only, got {num_devices} devices")
     ttnn.SetDefaultDevice(mesh_device)
-    load_kwargs = dict(revision=hf_revision, local_files_only=os.getenv("CI") == "true")
+    load_kwargs = dict(revision=hf_revision, local_files_only=_tt_public_getenv("CI") == "true")
     hf_config = AutoConfig.from_pretrained(hf_model, **load_kwargs)
     _validate_checkpoint_config(hf_config)
     hf = AutoModelForCausalLM.from_pretrained(hf_model, torch_dtype=torch.bfloat16, **load_kwargs)
@@ -325,8 +326,8 @@ def from_pretrained(
         max_context_len=int(hf_config.max_position_embeddings),
         max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=_trace_seq_lens(num_devices, max_prefill_chunk_size, max_seq_len),
-        disable_batched_prefill=bool(os.getenv("DISABLE_BATCHED_PREFILL")),
-        batched_prefill_batched_extract=not bool(os.getenv("DISABLE_BATCHED_EXTRACT")),
+        disable_batched_prefill=bool(_tt_public_getenv("DISABLE_BATCHED_PREFILL")),
+        batched_prefill_batched_extract=not bool(_tt_public_getenv("DISABLE_BATCHED_EXTRACT")),
     )
     del hf
     return Phi4ForCausalLM(model=model, tokenizer=tokenizer, runtime_config=runtime_config, instruct=instruct)

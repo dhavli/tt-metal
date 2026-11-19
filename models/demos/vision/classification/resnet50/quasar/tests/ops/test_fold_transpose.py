@@ -32,6 +32,7 @@ RUN (emulator or craq-sim, slow dispatch, forced JIT):
 Localized diagnostics are written to fold_transpose_dbg_*.log (flushed+fsync'd; survives a kill/hang)
 as well as stdout; set FOLD_DBG_LOG to override the path.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import pytest
 import torch
@@ -90,7 +91,7 @@ def test_quasar_fold_transpose(mesh_device, n, c, h, w, dim0, dim1):
     import traceback
 
     tid = f"{n}x{c}x{h}x{w}_t{dim0}{dim1}"
-    log_path = os.environ.get("FOLD_DBG_LOG", os.path.abspath(f"fold_transpose_dbg_{tid}.log"))
+    log_path = _tt_public_getenv("FOLD_DBG_LOG", os.path.abspath(f"fold_transpose_dbg_{tid}.log"))
 
     def _dbg(msg):
         line = f"[xpose-dbg {tid} t={time.time():.3f}] {msg}"

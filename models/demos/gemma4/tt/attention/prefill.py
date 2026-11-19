@@ -6,6 +6,7 @@ Prefill-mode attention forward pass for Gemma4.
 
 Uses HF-style ttnn.experimental.rotary_embedding (no transformation matrices).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -56,7 +57,7 @@ def _resolve_valid_seq_len_tensor(config, valid_seq_len, padded_seq_len, mesh_de
     dev = getattr(config, "prefill_valid_len_dev", None)
     if dev is not None and valid_seq_len is None:
         return dev
-    if os.environ.get("GEMMA4_KERNEL_FILL_CAP", "0").lower() not in ("1", "true", "yes"):
+    if _tt_public_getenv("GEMMA4_KERNEL_FILL_CAP", "0").lower() not in ("1", "true", "yes"):
         return None
     if valid_seq_len is None:
         return None

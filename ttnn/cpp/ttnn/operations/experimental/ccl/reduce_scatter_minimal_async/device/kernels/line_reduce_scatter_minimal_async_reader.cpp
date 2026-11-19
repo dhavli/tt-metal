@@ -14,6 +14,14 @@
 #include <utility>
 #include "api/tensor/noc_traits.h"
 
+// QWEN36_PREFILL_RS_BANK (tt-stack bench/probes/rs_bank): the line RS reader of the bank-contiguous writer
+// (line_writer.bank.cpp, which explains the layout argument). On the SENDER side (is_first_device_in_direction) it
+// fills the CB in BANK order inside each sync group (rs_bank::GroupIter, byte-identical in both files), and it
+// merges reads whose source addresses are contiguous (the same per-bank runs, read with one NoC read). The reducer
+// side (intermediate + input reads, final reduction) is the stock code, unchanged: it still reads in stock order.
+#define QWEN36_PREFILL_RS_BANK_READER 1
+#define QWEN36_PREFILL_RS_BANK_ORDER_VERSION 1
+
 using address_t = uint32_t;
 
 ///////////////////////////////////////////////////
@@ -40,6 +48,82 @@ constexpr uint32_t slice_Wt = get_compile_time_arg_val(16);
 constexpr uint32_t fuse_op = get_compile_time_arg_val(17);
 constexpr bool sync_with_other_direction = get_compile_time_arg_val(18);
 constexpr uint32_t dim = get_compile_time_arg_val(19);
+
+// ---- rs_bank::GroupIter: BYTE-IDENTICAL in line_reader.bank.cpp and line_writer.bank.cpp (the ttsim gate diffs it).
+namespace rs_bank {
+constexpr uint32_t NB = NUM_DRAM_BANKS;
+// Visits the n tiles of one sync group, which starts at column col0 of the slice row at row_off (a tile offset, a
+// multiple of the row stride) and runs on in row-major order, in BANK order: inside each row segment the columns
+// are taken class by class, class k = the columns at offsets k, k+NB, k+2NB, ... from the segment start (one DRAM
+// bank each, since the tile ids of a segment are consecutive), each class in ascending column order (= ascending
+// per-bank page). The class order is rotated by (row index + worker rotation) mod NB so that the 8 workers of a
+// direction do not all stream the same bank at the same time. tile() is relative to the slice's tile_id_start.
+struct GroupIter {
+    uint32_t row_off;  // tile offset of the current segment's row
+    uint32_t row_idx;  // slice row index of the current segment (rotation input)
+    uint32_t c0;       // first column of the current segment
+    uint32_t len;      // columns in the current segment
+    uint32_t rest;     // tiles of the group after the current segment
+    uint32_t rot;      // class rotation of the current segment
+    uint32_t q;        // class slot being visited (0..NB-1)
+    uint32_t c;        // current column offset inside the segment
+    uint32_t wrot;     // per-worker rotation
+    uint32_t stride;   // row stride in tiles (input_tensor_Wt)
+    uint32_t width;    // slice width in tiles (slice_Wt)
+
+    bool seek_class() {
+        for (; q < NB; ++q) {
+            uint32_t cls = q + rot;
+            if (cls >= NB) {
+                cls -= NB;
+            }
+            if (cls < len) {
+                c = cls;
+                return true;
+            }
+        }
+        return false;
+    }
+    void start_segment() {
+        rot = (row_idx + wrot) % NB;
+        q = 0;
+        seek_class();
+    }
+    void init(uint32_t row_off_, uint32_t row_idx_, uint32_t col0, uint32_t n, uint32_t wrot_, uint32_t stride_,
+              uint32_t width_) {
+        stride = stride_;
+        width = width_;
+        wrot = wrot_;
+        row_off = row_off_;
+        row_idx = row_idx_;
+        c0 = col0;
+        len = (width - col0 < n) ? (width - col0) : n;
+        rest = n - len;
+        start_segment();
+    }
+    uint32_t tile() const { return row_off + c0 + c; }
+    void advance() {
+        c += NB;
+        if (c < len) {
+            return;
+        }
+        ++q;
+        if (seek_class()) {
+            return;
+        }
+        if (rest == 0) {
+            return;  // group exhausted; the caller never reads past n tiles
+        }
+        row_off += stride;
+        row_idx++;
+        c0 = 0;
+        len = (rest < width) ? rest : width;
+        rest -= len;
+        start_segment();
+    }
+};
+}  // namespace rs_bank
+// ---- end rs_bank::GroupIter
 
 void kernel_main() {
     ///////////////////////////////////////////////////
@@ -156,6 +240,10 @@ void kernel_main() {
      */
     const uint32_t intermediate_full_offset = is_forward ? 0 : input_num_pages;
 
+    // per-worker class rotation (rs_bank::GroupIter): the worker's ordinal in its direction, from its tile range
+    const uint32_t rs_bank_span = start_tiles_to_read - start_tiles_read;
+    const uint32_t rs_bank_wrot = (rs_bank_span > 0 ? start_tiles_read / rs_bank_span : 0) % rs_bank::NB;
+
     uint32_t chunk_count = 0;
     uint32_t fwd_sync_cnt = 0;
     uint32_t sem_target = 0;
@@ -190,34 +278,70 @@ void kernel_main() {
             uint32_t intermediate_tile_id_start = input_tile_id_start + intermediate_full_offset;
 
             if (is_first_device_in_direction) {
-                // We have no incoming slices, so forward directly to writer
+                // We have no incoming slices, so forward directly to writer -- in bank order (rs_bank)
                 CircularBuffer& cb_in0 = cb_reader_output;
                 for (uint32_t c = 0; c < slice_C; ++c) {
                     uint32_t input_pages_read_in_row = start_pages_read_in_row;
                     uint32_t input_row_offset = start_row_offset;
+                    uint32_t input_row_idx = start_row_offset / input_tensor_Wt;
 
                     uint32_t tiles_read = start_tiles_read;
                     uint32_t tiles_to_read = start_tiles_to_read;
+
+                    rs_bank::GroupIter group;
+                    uint32_t group_left = 0;
 
                     while (tiles_read < tiles_to_read) {
                         uint32_t tiles_remaining_to_read = tiles_to_read - tiles_read;
                         uint32_t num_pages_to_read = std::min(tiles_remaining_to_read, tile_granularity);
 
-                        cb_in0.reserve_back(tile_granularity);
-                        uint32_t l1_write_addr = cb_in0.get_write_ptr();
-                        for (uint32_t j = 0; j < num_pages_to_read; ++j) {
-                            uint32_t tile_id = input_tile_id_start + input_row_offset + input_pages_read_in_row;
-                            uint64_t noc_read_addr = input_tensor_addrgen.get_noc_addr(tile_id);
-                            noc_async_read(noc_read_addr, l1_write_addr, page_size);
-                            l1_write_addr += page_size;
-
-                            input_pages_read_in_row++;
-                            if (input_pages_read_in_row == slice_Wt) {
-                                input_row_offset += input_tensor_Wt;
+                        if (group_left == 0) {
+                            // the writer's sync group, computed the same way (rounds to the next out_ready
+                            // increment, cut at the channel end)
+                            const uint32_t rounds_to_sync = chunks_per_sync - (chunk_count % chunks_per_sync);
+                            const uint32_t n = std::min(rounds_to_sync * tile_granularity, tiles_remaining_to_read);
+                            group.init(
+                                input_row_offset,
+                                input_row_idx,
+                                input_pages_read_in_row,
+                                n,
+                                rs_bank_wrot,
+                                input_tensor_Wt,
+                                slice_Wt);
+                            group_left = n;
+                            input_pages_read_in_row += n;
+                            while (input_pages_read_in_row >= slice_Wt) {
                                 input_pages_read_in_row -= slice_Wt;
+                                input_row_offset += input_tensor_Wt;
+                                input_row_idx++;
                             }
                         }
+
+                        cb_in0.reserve_back(tile_granularity);
+                        uint32_t l1_write_addr = cb_in0.get_write_ptr();
+                        uint64_t run_src = 0;
+                        uint32_t run_bytes = 0;
+                        for (uint32_t j = 0; j < num_pages_to_read; ++j) {
+                            uint32_t tile_id = input_tile_id_start + group.tile();
+                            group.advance();
+                            uint64_t noc_read_addr = input_tensor_addrgen.get_noc_addr(tile_id);
+                            if (run_bytes > 0 && noc_read_addr == run_src + run_bytes) {
+                                run_bytes += page_size;
+                            } else {
+                                if (run_bytes > 0) {
+                                    noc_async_read(run_src, l1_write_addr, run_bytes);
+                                    l1_write_addr += run_bytes;
+                                }
+                                run_src = noc_read_addr;
+                                run_bytes = page_size;
+                            }
+                        }
+                        if (run_bytes > 0) {
+                            noc_async_read(run_src, l1_write_addr, run_bytes);
+                        }
+                        group_left -= num_pages_to_read;
                         tiles_read += num_pages_to_read;
+                        chunk_count++;
 
                         noc_obj.async_read_barrier();
                         cb_in0.push_back(tile_granularity);

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import ast
 import gc
 
@@ -82,7 +83,7 @@ def pytest_sessionfinish(session, exitstatus):
     from loguru import logger
 
     def _env_true(name: str) -> bool:
-        return os.getenv(name, "0").strip().lower() not in {"", "0", "false", "no", "off"}
+        return _tt_public_getenv(name, "0").strip().lower() not in {"", "0", "false", "no", "off"}
 
     if not _env_true("VALIDATE_PERF_TARGETS"):
         return
@@ -115,7 +116,7 @@ def pytest_sessionfinish(session, exitstatus):
     spec.loader.exec_module(validator)
 
     # SKU: explicit env > best-effort device autodetect > per-file card_type (None).
-    sku_override = os.getenv("VALIDATE_PERF_TARGETS_SKU") or None
+    sku_override = _tt_public_getenv("VALIDATE_PERF_TARGETS_SKU") or None
     if sku_override is None:
         try:
             from models.demos.utils.device_sku import get_current_device_sku_name

@@ -44,6 +44,7 @@ See models/demos/minimax_m3/tests/perf/README_profiling.md.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import contextlib
 import os
@@ -83,8 +84,8 @@ ZONE_END_PREFIX = "M3_ZONE_END"
 COARSE, MEDIUM, FINE = 1, 2, 3
 
 # Read once at import: the harness sets these before the model is built.
-ZONES_ENABLED = os.getenv("M3_PROFILE_ZONES", "0") == "1"
-LEVEL = int(os.getenv("M3_PROFILE_LEVEL", str(MEDIUM)))
+ZONES_ENABLED = _tt_public_getenv("M3_PROFILE_ZONES", "0") == "1"
+LEVEL = int(_tt_public_getenv("M3_PROFILE_LEVEL", str(MEDIUM)))
 
 # Reused singleton for the disabled path — nullcontext carries no per-use state, so one
 # instance is safe to enter/exit repeatedly (and re-entrantly).
@@ -92,7 +93,7 @@ _NULL_ZONE = contextlib.nullcontext()
 
 # Host-side Tracy zones are cosmetic (the signposts are what the parser reads). Kept behind
 # their own flag so a build without the bindings can still produce a zone CSV.
-_HOST_ZONES = os.getenv("M3_PROFILE_HOST_ZONES", "1") == "1"
+_HOST_ZONES = _tt_public_getenv("M3_PROFILE_HOST_ZONES", "1") == "1"
 
 
 @contextlib.contextmanager

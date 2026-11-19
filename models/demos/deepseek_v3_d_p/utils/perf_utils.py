@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import shutil
 import tempfile
@@ -76,7 +77,7 @@ def _is_galaxy_env() -> bool:
     CI sets `MESH_DEVICE=TG` for galaxy jobs (see blaze_models_prefill_tests.yaml
     and demo_sp_release_tests.yaml).
     """
-    return os.environ.get("MESH_DEVICE", "").upper() in ("TG", "GALAXY")
+    return _tt_public_getenv("MESH_DEVICE", "").upper() in ("TG", "GALAXY")
 
 
 def load_merged_durations(csv_path: str, use_avg: bool = False) -> pd.Series:
@@ -238,7 +239,7 @@ def run_model_device_perf_test_with_merge(
     cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]
     inference_time_key = "AVG DEVICE KERNEL DURATION [ns]"
 
-    saved_env = {k: os.environ.get(k) for k in (extra_env or {})}
+    saved_env = {k: _tt_public_getenv(k) for k in (extra_env or {})}
     try:
         if extra_env:
             os.environ.update(extra_env)
@@ -378,7 +379,7 @@ def run_model_device_perf_test_per_op(
     cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]
     inference_time_key = "AVG DEVICE KERNEL DURATION [ns]"
 
-    saved_env = {k: os.environ.get(k) for k in (extra_env or {})}
+    saved_env = {k: _tt_public_getenv(k) for k in (extra_env or {})}
     try:
         if extra_env:
             os.environ.update(extra_env)

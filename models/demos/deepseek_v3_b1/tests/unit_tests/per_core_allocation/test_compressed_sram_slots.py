@@ -11,6 +11,7 @@ Validates:
   - Expert index encoding and selection meta for SRAM/DRAM routing
   - BSPM real-assignment path: 0 bfp8 tiles, real {bfp4, bfp2, zero} assignment
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -671,7 +672,7 @@ _DOWN_NUM_CORES = 28
 
 def _get_bspm_path() -> Path:
     """Return path to layer-4 BSPM file, or pytest.skip if unavailable."""
-    bspm_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"

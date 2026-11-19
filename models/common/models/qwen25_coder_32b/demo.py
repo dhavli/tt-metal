@@ -24,6 +24,7 @@ Executor + paged KV::
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -67,7 +68,7 @@ def device_params(request, galaxy_type):
     params = getattr(request, "param", {}).copy()
 
     mesh_device = {"N150": (1, 1), "N300": (1, 2), "N150x4": (1, 4), "T3K": (1, 8), "TG": (8, 4)}.get(
-        os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+        _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
     )
     is_single_device = (mesh_device == (1, 1)) if isinstance(mesh_device, tuple) else (mesh_device == 1)
 
@@ -85,7 +86,7 @@ def device_params(request, galaxy_type):
 pytestmark = [
     pytest.mark.parametrize(
         "mesh_device",
-        [{"T3K": (1, 8)}.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))],
+        [{"T3K": (1, 8)}.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))],
         indirect=True,
     ),
     pytest.mark.parametrize("device_params", [{"fabric_config": True}], indirect=True),
@@ -94,7 +95,7 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def hf_model_id():
-    return os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    return _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
 
 
 _slow = pytest.mark.slow
@@ -105,7 +106,7 @@ _slow = pytest.mark.slow
 def test_qwen25_coder_32b_prefill_smoke(mesh_device, hf_model_id, seq_len: int, tmp_path_factory):
     """One prefill pass (truncated layers via env) and LM head → greedy token (internal KV)."""
     _skip_unless_t3k(mesh_device, hf_model_id)
-    num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
+    num_layers = int(_tt_public_getenv("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
     cache = tmp_path_factory.mktemp("qwen25_coder_32b_cache")
     model = None
     try:
@@ -149,7 +150,7 @@ def test_qwen25_coder_32b_decode_one_step(mesh_device, hf_model_id, tmp_path_fac
     (``num_indices == batch_size``) requires the model be built at batch=1.
     """
     _skip_unless_t3k(mesh_device, hf_model_id)
-    num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
+    num_layers = int(_tt_public_getenv("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
     cache = tmp_path_factory.mktemp("qwen25_coder_32b_decode_cache")
     seq_len = 128
     model = None
@@ -189,7 +190,7 @@ def test_qwen25_coder_32b_decode_one_step(mesh_device, hf_model_id, tmp_path_fac
 def test_qwen25_coder_32b_executor_prefill_smoke(mesh_device, hf_model_id, seq_len: int, tmp_path_factory):
     """``EagerQwen25Coder32BExecutor`` + paged KV: prefill returns host logits."""
     _skip_unless_t3k(mesh_device, hf_model_id)
-    num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
+    num_layers = int(_tt_public_getenv("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
     cache = tmp_path_factory.mktemp("qwen25_coder_32b_exec_cache")
     model = None
     try:
@@ -239,7 +240,7 @@ def test_qwen25_coder_32b_teacher_forcing_prefill_vs_hf(mesh_device, hf_model_id
     _skip_unless_t3k(mesh_device, hf_model_id)
     hf_cfg = AutoConfig.from_pretrained(hf_model_id)
     n_hf = int(hf_cfg.num_hidden_layers)
-    env_layers = os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS")
+    env_layers = _tt_public_getenv("QWEN25_CODER_32B_DEMO_NUM_LAYERS")
     if env_layers is not None:
         num_layers = int(env_layers)
         if num_layers != n_hf:
@@ -304,7 +305,7 @@ def test_qwen25_coder_32b_eager_traced_prefill_logits_match(mesh_device, hf_mode
     device cache will be tight. Use ``QWEN25_CODER_32B_DEMO_NUM_LAYERS=1`` for fast iteration.
     """
     _skip_unless_t3k(mesh_device, hf_model_id)
-    num_layers = int(os.environ.get("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
+    num_layers = int(_tt_public_getenv("QWEN25_CODER_32B_DEMO_NUM_LAYERS", "1"))
     cache_a = tmp_path_factory.mktemp("qwen25_coder_32b_par_e")
     cache_b = tmp_path_factory.mktemp("qwen25_coder_32b_par_t")
     seq_len = 128
@@ -382,13 +383,13 @@ def test_qwen25_coder_32b_numerical_divergence_vs_hf(mesh_device, hf_model_id, t
     _skip_unless_t3k(mesh_device, hf_model_id)
     hf_cfg = AutoConfig.from_pretrained(hf_model_id)
     n_hf = int(hf_cfg.num_hidden_layers)
-    num_layers = int(os.environ.get("QWEN25_CODER_32B_NUMDIV_LAYERS", n_hf))
+    num_layers = int(_tt_public_getenv("QWEN25_CODER_32B_NUMDIV_LAYERS", n_hf))
     if num_layers > n_hf:
         num_layers = n_hf
-    seq_len = int(os.environ.get("QWEN25_CODER_32B_NUMDIV_SEQ", "128"))
+    seq_len = int(_tt_public_getenv("QWEN25_CODER_32B_NUMDIV_SEQ", "128"))
     assert seq_len % 128 == 0, f"seq_len must be multiple of 128, got {seq_len}"
 
-    out_csv = os.environ.get("QWEN25_CODER_32B_NUMDIV_OUT", "/tmp/qwen25_coder_32b_numdiv.csv")
+    out_csv = _tt_public_getenv("QWEN25_CODER_32B_NUMDIV_OUT", "/tmp/qwen25_coder_32b_numdiv.csv")
     cache = tmp_path_factory.mktemp("qwen25_coder_32b_numdiv")
 
     input_ids = torch.zeros(1, seq_len, dtype=torch.long)

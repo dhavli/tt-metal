@@ -16,6 +16,7 @@ Updated to use refactored TestFactory and MeshConfig patterns:
 - Uses TestFactory.setup_test() for unified configuration
 - Passes mesh_config to create_tt_model for proper sharding
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -126,7 +127,7 @@ def prepare_gpt_oss_generator_args(
     # on the last layer. ModelArgs stamps n_layers into the weight-cache metadata
     # (model_config.py:349), so a partial build cannot be mistaken for a full one. Generated text
     # is meaningless with N < n_layers -- this is for getting ops to run, not for accuracy.
-    n_layers_override = os.getenv("QSR_N_LAYERS")
+    n_layers_override = _tt_public_getenv("QSR_N_LAYERS")
     num_layers = int(n_layers_override) if n_layers_override else None
     if num_layers is not None:
         logger.info(f"QSR_N_LAYERS={num_layers}: building only the first {num_layers} decoder layers")
@@ -527,7 +528,7 @@ def test_gpt_oss_demo(
         )
     if long_context_mode:
         assert batch_size >= mesh_shape[0], "Long-context mode requires batch_size >= number of mesh rows"
-    if os.environ.get("CI", None) and not run_in_ci:
+    if _tt_public_getenv("CI", None) and not run_in_ci:
         config_id = request.node.callspec.id if hasattr(request.node, "callspec") else request.node.name
         pytest.skip(f"This test configuration is skipped in CI: {config_id}")
 

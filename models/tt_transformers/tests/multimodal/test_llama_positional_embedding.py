@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -24,7 +25,7 @@ from ttnn import ConcatMeshToTensor, ReplicateTensorToMesh
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -89,7 +90,7 @@ def test_positional_embedding_inference(
     tt_aspect_ratios = aspect_ratios.tolist()
 
     # config contains parameters for the whole multimodal network the subeset of vision branch is chosen instead
-    model_repo_name = os.getenv("HF_MODEL")
+    model_repo_name = _tt_public_getenv("HF_MODEL")
     config = AutoConfig.from_pretrained(model_repo_name)
     reference_model = MllamaPrecomputedPositionEmbedding(config.vision_config)
     # partial loading of HF safetensors to match model graph expected dimensionality of the loaded weights

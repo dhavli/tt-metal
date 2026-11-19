@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 from pathlib import Path
@@ -30,7 +31,7 @@ from models.demos.deepseek_v3_d_p.utils.kv_cache_utils import MlaKvCache, MlaKvC
 # ABSOLUTE times inflate vs an un-instrumented run — trust the MLA:FFN ratio and the per-layer shape,
 # NOT the totals. When off (default) there is no sync and no timing, so normal runs are unperturbed.
 # Keyed by global layer_idx -> {"mla": [seconds...], "ffn": [seconds...]} (one entry per forward call).
-_BLOCK_TIMING_ENABLED = os.environ.get("TT_PREFILL_BLOCK_TIMING", "0") == "1"
+_BLOCK_TIMING_ENABLED = _tt_public_getenv("TT_PREFILL_BLOCK_TIMING", "0") == "1"
 _BLOCK_TIMINGS: dict[int, dict[str, list[float]]] = {}
 
 

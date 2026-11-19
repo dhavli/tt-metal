@@ -13,6 +13,7 @@ It performs:
 
 This is a decode-only fused op (seq_len=1).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -428,7 +429,7 @@ def _run_prepare_expert_tensors_test(
         return (hidden_rm, indices_rm)
 
     # Device performance measurement mode (when env var is set)
-    if os.getenv(DEVICE_PERF_ENV_VAR) is not None:
+    if _tt_public_getenv(DEVICE_PERF_ENV_VAR) is not None:
         logger.info("Skipping e2e perf measurement during device-perf profiling.")
         from tracy import signpost
 

@@ -5,6 +5,7 @@
 """Gates for the MiniMax-H3 visual VAE: host tiling geometry, tiled encode/decode vs the
 pinned diffusers reference, per-conv/resnet parity, the ViT decoder, and the chunked
 roundtrip. Uses the real checkpoint's encoder tensors when present, random otherwise."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -40,7 +41,7 @@ PRODUCTION_CONFIGS = [
 
 
 def _weights_dir() -> str | None:
-    base = os.environ.get("MINIMAX_H3_MODEL_PATH")
+    base = _tt_public_getenv("MINIMAX_H3_MODEL_PATH")
     if not base:
         return None
     candidate = os.path.join(base, "vae")

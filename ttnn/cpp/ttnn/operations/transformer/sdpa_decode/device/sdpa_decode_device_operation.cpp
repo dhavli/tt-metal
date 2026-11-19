@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "sdpa_decode_device_operation.hpp"
+#include "sdpa_decode_spec_fold.hpp"
 #include "ttnn/tensor/tensor_ops.hpp"
 #include "ttnn/device_operation.hpp"
 
@@ -211,12 +212,36 @@ void SdpaDecodeDeviceOperation::validate_on_program_cache_miss(
                 cur_pos_tensor.layout());
             const auto cur_pos_shape = cur_pos_tensor.padded_shape();
 
-            if (!cur_pos_tensor.is_sharded()) {
+            // cfx (tt-stack 0034): a fold call carries T*B candidate positions (sdpa_decode_spec_fold.hpp).
+            const uint32_t spec_fold_T = sdpa_spec_fold::fold_T(operation_attributes, tensor_args);
+            if (!cur_pos_tensor.is_sharded() && spec_fold_T == 0) {
                 TT_FATAL(
                     cur_pos_shape[-1] == B,
                     "cur_pos must have batch size equal to Q, got {} and {}",
                     cur_pos_shape[0],
                     B);
+            }
+            if (spec_fold_T > 0) {
+                // Everything the fold kernels assume; a violation would be silently wrong attention, so check it all.
+                const auto& q = tensor_args.q;
+                TT_FATAL(spec_fold_T <= 16, "TT_SDPA_DEC_SPEC_FOLD: T={} candidates per user, at most 16", spec_fold_T);
+                TT_FATAL(!use_mla, "TT_SDPA_DEC_SPEC_FOLD: not with multi-latent attention");
+                TT_FATAL(tensor_args.v.has_value(), "TT_SDPA_DEC_SPEC_FOLD: needs a separate V cache");
+                TT_FATAL(!tensor_args.attn_mask.has_value(), "TT_SDPA_DEC_SPEC_FOLD: not with an explicit attn_mask");
+                TT_FATAL(!tensor_args.attention_sink.has_value(), "TT_SDPA_DEC_SPEC_FOLD: not with an attention sink");
+                TT_FATAL(
+                    operation_attributes.sliding_window_size.value_or(0) == 0,
+                    "TT_SDPA_DEC_SPEC_FOLD: not with a sliding window");
+                TT_FATAL(!q.is_sharded(), "TT_SDPA_DEC_SPEC_FOLD: Q must be interleaved (DRAM), not sharded");
+                TT_FATAL(q.layout() == Layout::TILE, "TT_SDPA_DEC_SPEC_FOLD: Q must be TILE layout");
+                TT_FATAL(q.dtype() == DataType::BFLOAT16, "TT_SDPA_DEC_SPEC_FOLD: Q must be BFLOAT16");
+                TT_FATAL(
+                    !operation_attributes.output_mem_config.is_sharded(),
+                    "TT_SDPA_DEC_SPEC_FOLD: the output must be interleaved, not sharded");
+                TT_FATAL(
+                    input_tensors.at(1).logical_shape()[2] >= tt::constants::TILE_HEIGHT,
+                    "TT_SDPA_DEC_SPEC_FOLD: paged block size {} < 32 (block padding) is not supported",
+                    input_tensors.at(1).logical_shape()[2]);
             }
         }
 
@@ -490,7 +515,8 @@ tt::tt_metal::TensorSpec SdpaDecodeDeviceOperation::compute_output_specs(
     }
     Layout output_layout = input.layout() == Layout::ROW_MAJOR ? Layout::ROW_MAJOR : Layout::TILE;
     ttnn::Shape output_shape = input.logical_shape();
-    output_shape[1] = B;
+    // cfx (tt-stack 0034): a fold call's output keeps Q's candidate-major T*B rows.
+    output_shape[1] = sdpa_spec_fold::fold_T(operation_attributes, tensor_args) > 0 ? q_shape_unpadded[1] : B;
     output_shape[2] = num_q_heads;
 
     // Preserve logical head_dim by default; only override in MLA mode.

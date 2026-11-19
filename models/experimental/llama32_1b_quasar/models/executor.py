@@ -17,6 +17,7 @@ Design principle: Thick engine, thin model executor.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import contextlib
 import json
@@ -115,7 +116,7 @@ MAX_BATCHED_PREFILL_SEQ_LEN = 128 * 1024
 # Default (unset) uses the on-device selection-matmul gather, which keeps the hidden on device and
 # reads back only the [1,1,32,vocab] logits — closing the batch-32 prefill-TTFT gap vs TTTv1. Kept
 # only for before/after measurement; the on-device path is bit-identical (see _gather_last_tokens_*).
-_BATCHED_EXTRACT_HOST_GATHER = bool(os.environ.get("TTT_BATCHED_EXTRACT_HOST_GATHER"))
+_BATCHED_EXTRACT_HOST_GATHER = bool(_tt_public_getenv("TTT_BATCHED_EXTRACT_HOST_GATHER"))
 
 
 def select_batched_prefill_padded_batch(model_args, batch_size, prefill_seq_lens, num_cached_per_user):

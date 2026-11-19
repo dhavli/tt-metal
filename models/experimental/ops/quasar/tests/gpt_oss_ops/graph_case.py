@@ -57,6 +57,7 @@ suspicion, or on an emulator where PCC of a bfloat8_b path is not the point).
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -140,7 +141,7 @@ _REDUCTION_OPS = frozenset({"ttnn.linear", "ttnn.experimental.minimal_matmul", "
 _DEEP_K = 4096
 _DEEP_K_PCC = 0.98
 
-NO_GOLDEN = os.environ.get("TTNN_GRAPH_OPS_NO_GOLDEN", "") not in ("", "0", "false", "False")
+NO_GOLDEN = _tt_public_getenv("TTNN_GRAPH_OPS_NO_GOLDEN", "") not in ("", "0", "false", "False")
 
 
 # =============================================================================

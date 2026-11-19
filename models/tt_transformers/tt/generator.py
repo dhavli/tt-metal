@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 from collections import defaultdict
@@ -117,7 +118,7 @@ def max_prefill_chunk_size_cutoff(sequence_length, max_prefill_chunk_size):
 
 
 def _deepseek_kvdbg_enabled() -> bool:
-    return os.getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
+    return _tt_public_getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
 
 
 def _get_max_blocks_prefill(kv_cache):
@@ -947,6 +948,8 @@ class Generator(ModelCapabilitiesMixin, WarmupForwardMixin):
         self._slots_prefilled_since_decode.update(
             range(tokens.shape[0]) if empty_slots is None else [int(s) for s in empty_slots]
         )
+        if hasattr(self, "_trace_buffer_last_step"):
+            self._trace_buffer_last_step.clear()
 
         on_device_sampling_requested = sampling_params is not None
 
@@ -1839,6 +1842,24 @@ class Generator(ModelCapabilitiesMixin, WarmupForwardMixin):
         # either side asserting authority is enough.
         if kwargs.get("reload_inputs"):
             reload_inputs = True
+        # FALSIFIER (test-only). The previous fault injection lived in qwen36_vllm's
+        # decode_forward and popped kwargs["reload_inputs"] / forced reset_batch=False.
+        # That is vacuous: reload_inputs is an OR, kwargs only ever ADDS True to it, and
+        # reset_batch is dominated by mode_switched, which fires on the same transitions.
+        # R3 therefore passed at every batch width and schedule -- it could not reach the
+        # chain. To actually stale the resident chain the OR's RESULT must be overridden.
+        if reload_inputs and _tt_public_getenv("QWEN36_RESIDENT_FORCE_NO_RELOAD") == "1":
+            self._force_no_reload_hits = getattr(self, "_force_no_reload_hits", 0) + 1
+            # f-string, not %-args: this module logs through loguru, which does NOT do
+            # %-interpolation, so lazy args render the literal "%d" and the suppressed
+            # count -- the whole point of the banner -- is lost.
+            logger.warning(
+                f"QWEN36_RESIDENT_FORCE_NO_RELOAD engaged: suppressing a genuine reload "
+                f"(reset_batch={reset_batch} mode_switched={mode_switched} "
+                f"on_device_sampling={on_device_sampling}); suppressed={self._force_no_reload_hits}. "
+                f"Decode output is expected to be WRONG. Never set this outside a gate."
+            )
+            reload_inputs = False
         # Deferred sampling calls sample_decode_on_device() out of band; stash the
         # flag so that call need not thread it.
         self._decode_reload_inputs = reload_inputs
@@ -1912,7 +1933,65 @@ class Generator(ModelCapabilitiesMixin, WarmupForwardMixin):
                     new_tokens.append(tok_chunk)
                     new_start_pos.append(start_pos[i])
                     continue
-                use_dev = (dev_pos == host_pos) | (dev_pos == host_pos + 1)
+                # QWEN36_MERGE_BATCH_GUARD: the device token/position buffer is
+                # NOT guaranteed to come from the previous decode step. The merge
+                # block runs only on reset_batch/mode_switched steps, so the buffer
+                # can be many steps -- and a whole request generation -- old. When
+                # it is, a stale dev_pos can coincidentally satisfy the bare
+                # comparison and hand this slot a token belonging to a finished request.
+                # In addition, uninitialized entries in the device position
+                # buffer can contain large garbage integers (e.g. 1206993233).
+                # Bounding dev_pos to [0, max_ctx) and verifying active slot composition
+                # guards both defects.
+                max_ctx = getattr(self.args, "max_context_len", 262144) if hasattr(self, "args") else 262144
+                if _tt_public_getenv("QWEN36_MERGE_LIFETIME_GUARD", "0") == "1":
+                    if not getattr(self, "_merge_lifetime_banner", False):
+                        self._merge_lifetime_banner = True
+                        self._merge_lifetime_rejects = 0
+                        logger.info(
+                            "QWEN36_MERGE_LIFETIME_GUARD engaged: async-ahead merge requires "
+                            "device buffer from immediately preceding decode step"
+                        )
+                    _last_step = getattr(self, "_trace_buffer_last_step", {}).get(id(trace_in))
+                    _curr_step = getattr(self, "_decode_step_counter", 0)
+                    if _last_step is None or _last_step != _curr_step - 1 or mode_switched:
+                        self._merge_lifetime_rejects += 1
+                        logger.warning(
+                            f"QWEN36_MERGE_LIFETIME_GUARD reject #{self._merge_lifetime_rejects}: "
+                            f"buffer outlives previous step (last_step={_last_step}, curr={_curr_step}, "
+                            f"mode_switched={mode_switched}), using host tokens. "
+                            f"dev_pos={dev_pos.tolist()[:8]} host_pos={host_pos.tolist()[:8]}"
+                        )
+                        new_tokens.append(tok_chunk)
+                        new_start_pos.append(start_pos[i])
+                        continue
+                if _tt_public_getenv("QWEN36_MERGE_BATCH_GUARD", "0") == "1":
+                    if not getattr(self, "_merge_guard_banner", False):
+                        self._merge_guard_banner = True
+                        self._merge_guard_rejects = 0
+                        logger.info(
+                            "QWEN36_MERGE_BATCH_GUARD engaged: async-ahead merge will "
+                            "reject a device buffer whose active-slot pattern does not "
+                            "match the current batch"
+                        )
+                    dev_valid = (dev_pos >= 0) & (dev_pos < max_ctx)
+                    host_valid = (host_pos != -1)
+                    if not torch.equal(dev_valid, host_valid):
+                        self._merge_guard_rejects += 1
+                        _would = ((dev_pos == host_pos) | (dev_pos == host_pos + 1)) & dev_valid
+                        _harm = int((_would & (dev_toks.view(-1) != tok_chunk.view(-1))).sum())
+                        self._merge_guard_harm = getattr(self, "_merge_guard_harm", 0) + _harm
+                        logger.warning(
+                            f"QWEN36_MERGE_BATCH_GUARD reject #{self._merge_guard_rejects}: "
+                            f"buffer predates this batch or has uninitialized entries, using host tokens. "
+                            f"slots_saved_from_a_DIFFERENT_token={_harm} "
+                            f"(cumulative {self._merge_guard_harm}) "
+                            f"dev_pos={dev_pos.tolist()[:8]} host_pos={host_pos.tolist()[:8]}"
+                        )
+                        new_tokens.append(tok_chunk)
+                        new_start_pos.append(start_pos[i])
+                        continue
+                use_dev = ((dev_pos == host_pos) | (dev_pos == host_pos + 1)) & (dev_pos >= 0) & (dev_pos < max_ctx)
                 prefilled = getattr(self, "_slots_prefilled_since_decode", None)
                 if prefilled:
                     bs = tok_chunk.shape[0]
@@ -2241,8 +2320,29 @@ class Generator(ModelCapabilitiesMixin, WarmupForwardMixin):
 
         if page_table_changed:
             self.prev_page_table = tuple(pt.clone() for pt in page_table)
+        if on_device_sampling and _tt_public_getenv("QWEN36_RESIDENT_PROBE") == "1":
+            # Debug-only: read the device token/position trace inputs right before
+            # each execute. Blocks on the previous trace, so a hang shows the last good state.
+            for i in range(self.data_parallel):
+                tr_in = self.trace_inputs_decode[on_device_sampling][i]
+                d_tok = ttnn.to_torch(ttnn.get_device_tensors(tr_in[0])[0]).reshape(-1).tolist()
+                d_pos = ttnn.to_torch(ttnn.get_device_tensors(tr_in[1])[0]).reshape(-1).tolist()
+                vocab = getattr(self.model_args[i], "vocab_size", 1 << 30)
+                bad = any(t < 0 or t >= vocab for t in d_tok)
+                logger.info(
+                    f"QWEN36_RESIDENT_PROBE step={getattr(self, '_decode_step_counter', 0)} "
+                    f"reload={reload_inputs} tok={d_tok} pos={d_pos}{' BAD_TOKEN' if bad else ''}"
+                )
         for i, trace_id in self.trace_ids_decode[on_device_sampling].items():
             ttnn.execute_trace(self.model_args[i].mesh_device, trace_id, cq_id=0, blocking=False)
+        curr_step = getattr(self, "_decode_step_counter", 0)
+        if not hasattr(self, "_trace_buffer_last_step"):
+            self._trace_buffer_last_step = {}
+        for i in range(self.data_parallel):
+            if on_device_sampling and self.trace_inputs_decode[on_device_sampling]:
+                tr_in = self.trace_inputs_decode[on_device_sampling][i]
+                self._trace_buffer_last_step[id(tr_in)] = curr_step
+        self._decode_step_counter = curr_step + 1
         return self.trace_output_decode[on_device_sampling]
 
     def sample_decode_on_device(

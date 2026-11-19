@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import torch
 
@@ -30,7 +31,7 @@ def load_partial_state(torch_model: torch.nn.Module, state_dict, layer_name: str
 
 
 def load_torch_model_state(torch_model: torch.nn.Module = None, layer_name: str = "", model_location_generator=None):
-    if model_location_generator is None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator is None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         model_path = "models"
     else:
         model_path = model_location_generator("vision-models/detr3d", model_subdir="", download_if_ci_v2=True)

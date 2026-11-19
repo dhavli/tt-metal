@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import os
 import time
@@ -37,7 +38,7 @@ PRED_DIR = "models/demos/vision/segmentation/vanilla_unet/demo/pred"
 
 def get_weights_path(model_location_generator):
     """Get the path to model weights, downloading if necessary."""
-    if model_location_generator is None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator is None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         if not os.path.exists(WEIGHTS_PATH):
             logger.info("Downloading weights...")
             os.system(f"bash {WEIGHTS_DOWNLOAD_SCRIPT}")

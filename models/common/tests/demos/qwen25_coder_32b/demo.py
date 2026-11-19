@@ -35,6 +35,7 @@ Usage:
 LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when ``TT_CACHE_PATH`` is set, otherwise
 ``model_cache/<HF_MODEL>/<device_name>`` under the current working directory.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -177,7 +178,7 @@ def _sampling_bucket() -> str:
     """Map SAMPLING_MODE to a perf-gate bucket. Defaults to ``on_device_topk`` (the perf-case default
     for this T3K model), so the bucket always agrees with the runner. Non-topk on-device modes (e.g.
     force-argmax) also fall into ``on_device_topk`` so they stay gated, never silently un-gated."""
-    return "host" if os.environ.get("SAMPLING_MODE", "on_device_topk").lower() == "host" else "on_device_topk"
+    return "host" if _tt_public_getenv("SAMPLING_MODE", "on_device_topk").lower() == "host" else "on_device_topk"
 
 
 # Qwen2.5-Coder-32B needs at least this many devices of tensor parallelism: the 32B weights + KV cache
@@ -205,7 +206,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 
 def _ttnn_mesh_device_param_from_env() -> dict:
-    env = os.environ.get("MESH_DEVICE", "").strip()
+    env = _tt_public_getenv("MESH_DEVICE", "").strip()
     if not env:
         pytest.skip(
             "MESH_DEVICE must be set to T3K. See module docstring.",
@@ -237,7 +238,7 @@ pytestmark = [
         "ttnn_mesh_device",
         [_ttnn_mesh_device_param_from_env()],
         indirect=True,
-        ids=[os.environ.get("MESH_DEVICE", "mesh").strip() or "mesh"],
+        ids=[_tt_public_getenv("MESH_DEVICE", "mesh").strip() or "mesh"],
     ),
 ]
 
@@ -280,7 +281,7 @@ def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: st
     """
     device_name = get_device_name(mesh_device)
     hf = hf_model_id.strip("/")
-    tt_cache = os.getenv("TT_CACHE_PATH")
+    tt_cache = _tt_public_getenv("TT_CACHE_PATH")
     if tt_cache:
         root = Path(tt_cache) / device_name
     else:
@@ -309,7 +310,7 @@ def _load_tokenizer(hf_model_id: str):
         msg = str(e)
         if "Permission" not in msg and "permission" not in msg:
             raise
-        fallback = os.environ.get("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
+        fallback = _tt_public_getenv("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
         logger.warning(
             f"Default HF cache not writable for tokenizer download ({e!s:.120}); " f"retrying with cache_dir={fallback}"
         )
@@ -472,7 +473,7 @@ def create_model(
     ``max_seq_len`` overrides the default. Default (``None``): ``min(131072 // max_batch_size, 4096)``.
     The ``batch-32-ci`` leg passes an explicit value (see ``_BATCH32_CI_MAX_SEQ_LEN``).
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     _skip_below_min_tp_devices(mesh_device.get_num_devices())
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
 
@@ -563,7 +564,7 @@ def assert_no_special_tokens(
     hard-fails only under CI (``CI == "true"``), so local runs finish while CI stays strict.
     """
     if is_ci_env is None:
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
     special = set(tokenizer.all_special_ids)
     stop = set()
     if tokenizer.eos_token_id is not None:
@@ -608,7 +609,7 @@ def _run_dp_smoke(
     # hardware-capacity guard (matches TTTv1's T3K-only support — TTTv1 can't DP a 32B on T3K either).
     _skip_below_min_tp_devices(mesh_device.get_num_devices() // data_parallel)
 
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
     tokenizer = _load_tokenizer(hf_model)
     precision = QWEN25_CODER_32B_PERFORMANCE if optimizations == "performance" else QWEN25_CODER_32B_ACCURACY
@@ -618,7 +619,7 @@ def _run_dp_smoke(
     # One prompt per DP group (load_input_prompts pads/truncates to the requested count).
     prompts = load_input_prompts(data_parallel)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -725,7 +726,7 @@ def test_qwen25_coder_32b(test_config, mesh_device, optimizations):
     device_name = get_device_name(mesh_device)
     expected = EXPECTED_METRICS.get(optimizations, {}).get(device_name, {})
     model = None
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     cache_dir = lazy_weight_cache_dir_for_demo(mesh_device, hf_model)
 
     try:
@@ -809,7 +810,7 @@ def test_qwen25_coder_32b(test_config, mesh_device, optimizations):
 
 def _run_token_accuracy(model, mesh_device, expected):
     """Teacher-forcing token accuracy vs ``.refpt`` (HF-generated)."""
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     reference_tokens, top5_tokens, prompt_len, metadata = load_reference_data(hf_model)
     tokenizer = _load_tokenizer(hf_model)
 
@@ -856,7 +857,7 @@ def _run_token_accuracy(model, mesh_device, expected):
         prompt_len,
         metadata_aligned=has_prompt_len_metadata,
     )
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     profiler = BenchmarkProfiler()
     profiler.start("run")
     # run_teacher_forcing times the prefill + per-step (teacher-forced) decode loop and, given the
@@ -963,7 +964,7 @@ def _run_perf_benchmark(
     ``effective = min(requested, max_seq_len - prompt_bucket - margin)`` so the high-water decode
     position never overruns the page table (the ``batch-32-ci`` leg requests 1024).
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     tokenizer = _load_tokenizer(hf_model)
 
     # On-device sampling toggle (see the rebase / sampling handoff docs):
@@ -974,7 +975,7 @@ def _run_perf_benchmark(
     #                      [*,32] tuples; PERF.md-parity recipe, faster on >=8-dev meshes)
     # DEFAULT is on_device_topk: on T3K (8 devices) the vocab shards 8-ways and TTTv1 auto-uses on-device
     # sampling, so this is the apples-to-apples TTTv1-comparable path the gate measures.
-    sampling_mode = os.environ.get("SAMPLING_MODE", "on_device_topk").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "on_device_topk").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -988,7 +989,7 @@ def _run_perf_benchmark(
 
     # Batched-prefill A/B knob (parity caveat #12): set DISABLE_BATCHED_PREFILL=1 to force the
     # sequential per-user prefill loop (the pre-feature baseline) for before/after TTFT comparison.
-    if os.environ.get("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
+    if _tt_public_getenv("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
         model.model_args.disable_batched_prefill = True
 
     # Free-running perf run: enable the executor's on-device decode loop on the on-device sampling path
@@ -1036,7 +1037,7 @@ def _run_perf_benchmark(
 
         # BenchmarkProfiler brackets the timed prefill/decode regions inside run_perf_benchmark
         # (default-None ⇒ byte-inert for every other caller) so we can emit CI perf telemetry.
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_perf_benchmark(
@@ -1126,7 +1127,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
     profiles with batched prefill ON and OFF, and any on-device flip is identical ON vs OFF
     (prefill-independent, so unrelated to batched prefill). See the port worklog.
     """
-    hf_model = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct")
     tokenizer = _load_tokenizer(hf_model)
 
     # Qwen2.5 chat generation ends at <|im_end|>; the model opening a NEW turn (<|im_start|>) is a
@@ -1149,7 +1150,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
 
     # Batched-prefill A/B knob (parity caveat #12): DISABLE_BATCHED_PREFILL=1 forces the pure per-bucket
     # sequential prefill so eval-32 can be validated both ON and OFF.
-    if os.environ.get("DISABLE_BATCHED_PREFILL"):
+    if _tt_public_getenv("DISABLE_BATCHED_PREFILL"):
         ma.disable_batched_prefill = True
 
     block_size = 32
@@ -1175,7 +1176,7 @@ def _run_eval_repeat_batch32(model, mesh_device):
     def tokenize_fn(ps):
         return tokenize_prompts(ps, tokenizer)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),

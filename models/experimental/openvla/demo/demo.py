@@ -16,6 +16,7 @@ Usage:
     # Performance benchmark (100 iterations)
     python models/experimental/openvla/demo/demo.py --benchmark
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import sys
@@ -35,12 +36,12 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Check required env vars
-if not os.environ.get("OPENVLA_WEIGHTS"):
+if not _tt_public_getenv("OPENVLA_WEIGHTS"):
     print("❌ OPENVLA_WEIGHTS not set")
     print("   export OPENVLA_WEIGHTS=<path_to_weights>")
     sys.exit(1)
 
-if not os.environ.get("HF_MODEL"):
+if not _tt_public_getenv("HF_MODEL"):
     print("❌ HF_MODEL not set")
     print("   export HF_MODEL=meta-llama/Llama-2-7b-hf")
     sys.exit(1)

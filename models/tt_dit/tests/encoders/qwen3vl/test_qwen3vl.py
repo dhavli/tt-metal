@@ -6,6 +6,7 @@
 # no qkv bias, and the 13-layer feature tap. HF reference is built from config
 # (no 8B pull); "real" overlays the shipped Ideogram fp8 text_encoder weights.
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -27,7 +28,7 @@ from ....utils.tensor import bf16_tensor
 from .common import capture_layer_outputs, encoder_from_hf_config, hf_rope_params
 
 REPO = "Qwen/Qwen3-VL-8B-Instruct"
-FP8 = os.environ.get("IDEOGRAM4_WEIGHTS")
+FP8 = _tt_public_getenv("IDEOGRAM4_WEIGHTS")
 _NEEDS_WEIGHTS = pytest.mark.skipif(not FP8, reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)")
 
 

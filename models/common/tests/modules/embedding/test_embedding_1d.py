@@ -10,6 +10,7 @@ This test suite verifies:
 3. Embedding1D correctly rejects TG/Galaxy devices
 4. from_model_args backward compatibility
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -321,7 +322,7 @@ def test_embedding_1d_vs_reference(
     weight_4d = weight_torch.unsqueeze(0).unsqueeze(0)  # [1, 1, vocab_size, dim]
 
     ttnn.SetDefaultDevice(ttnn_mesh_device)
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/embedding"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/embedding"))
     lazy_weights = LazyWeight(
         source=weight_4d,
         dtype=ttnn.bfloat16,

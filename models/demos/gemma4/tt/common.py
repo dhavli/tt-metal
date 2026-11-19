@@ -9,6 +9,7 @@ Usage:
         mesh_device, max_batch_size=1, max_seq_len=8192,
     )
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -63,8 +64,8 @@ def create_tt_model(
     """
     model_path = (
         model_path
-        or os.getenv("HF_MODEL")
-        or os.getenv("GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it")
+        or _tt_public_getenv("HF_MODEL")
+        or _tt_public_getenv("GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it")
     )
 
     hf_config = Gemma4ModelArgs.load_hf_config(model_path)
@@ -181,7 +182,7 @@ def create_assistant_model(
     Returns:
         (assistant_args, assistant_model)
     """
-    assistant_path = assistant_path or os.getenv("GEMMA4_ASSISTANT_MODEL")
+    assistant_path = assistant_path or _tt_public_getenv("GEMMA4_ASSISTANT_MODEL")
     if not assistant_path:
         raise ValueError(
             "No assistant model path. Set GEMMA4_ASSISTANT_MODEL (e.g. google/gemma-4-31B-it-assistant) "

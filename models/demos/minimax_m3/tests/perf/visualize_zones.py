@@ -16,6 +16,7 @@ a self-contained HTML page (no external assets) alongside a text summary. Both c
 
 Run the profile first with ./run_prefill_profile.sh, which prints the CSV path when it finishes.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -664,7 +665,7 @@ def serve(path, port, bind):
         print(f"[visualize] could not bind a port in {port}..{port+9}; pass --port")
         return
 
-    host, user = socket.gethostname(), os.environ.get("USER", "you")
+    host, user = socket.gethostname(), _tt_public_getenv("USER", "you")
     print("")
     print("=" * 78)
     print(f"  REPORT: http://localhost:{port}/{name}")

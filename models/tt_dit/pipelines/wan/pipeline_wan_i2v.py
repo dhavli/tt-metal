@@ -5,6 +5,7 @@
 # Adapted from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/wan/pipeline_wan.py
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -41,7 +42,7 @@ _ENCODER_T_CHUNK_BY_MESH = {
 
 # Truncated VAE encode: encode only the first I2V_ENCODE_FRAMES pixel frames and
 # replicate the last latent to fill the remaining slots.
-_I2V_ENCODE_FRAMES = int(os.environ.get("I2V_ENCODE_FRAMES", 81))
+_I2V_ENCODE_FRAMES = int(_tt_public_getenv("I2V_ENCODE_FRAMES", 81))
 
 
 def _resolve_checkpoint(repo_id: str) -> str:
@@ -55,7 +56,7 @@ def _resolve_checkpoint(repo_id: str) -> str:
     os.path.basename(checkpoint_name), so a different basename orphans the compiled cache.
     Falls back to the repo id when unset, missing, or mismatched.
     """
-    local = os.environ.get(_CHECKPOINT_DIR_ENV)
+    local = _tt_public_getenv(_CHECKPOINT_DIR_ENV)
     if not local:
         return repo_id
     if not os.path.isdir(local):

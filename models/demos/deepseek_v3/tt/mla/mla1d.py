@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 from pathlib import Path
@@ -186,7 +187,7 @@ def build_prefill_matmul_program_config(
 
 
 def _deepseek_kvdbg_enabled() -> bool:
-    return os.getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
+    return _tt_public_getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
 
 
 class MLA1D(AbstractModule):

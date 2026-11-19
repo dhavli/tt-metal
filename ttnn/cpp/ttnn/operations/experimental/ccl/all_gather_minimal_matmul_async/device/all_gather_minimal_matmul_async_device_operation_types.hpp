@@ -51,6 +51,23 @@ struct AllGatherMinimalMatmulAsyncParams {
     // fused_activation / ternary.
     bool fuse_swiglu = false;
 
+    // cfx 0049: QWEN36_AGMM_SWIGLU_PACK, read per call by the host invoke (so one process can A/B it) and hashed.
+    // Bits: 1 = pack-thread SwiGLU in the last K block (fuse_swiglu without a bias only), 2 = injector cores defer their
+    // output writes and no writer defers to K block 0, 4 = must-fail (the pack-thread path skips the partial-sum add).
+    uint32_t swiglu_pack = 0;
+
+    // cfx 0057: QWEN36_AGMM_GBS, read per call by the host invoke and hashed. Bit 1: the activation gather buffer is
+    // DRAM height-sharded with full-width shards, so the injector reads a K-block row of the gathered half in one NoC
+    // read and the chain end forwards it to the peer as contiguous multi-tile unicast packets. Bit 2: must-fail (the
+    // last tile of every forwarded row is dropped).
+    uint32_t gbs = 0;
+
+    // cfx 0063: QWEN36_AGMM_FWO, read per call by the host invoke and hashed. Bit 1: the in0 forward to the peer chip
+    // runs on one extra forwarder core per in0 row (row full_grid.y - 2), which reads the local K blocks from the local
+    // input and is that row's mux client; the chain cores no longer forward. Bit 2: must-fail (the last tile of every
+    // forwarded block is zeroed).
+    uint32_t fwo = 0;
+
     AllGatherMinimalMatmulAsyncParams(
         std::optional<const MinimalMatmulConfig> config,
         std::optional<ttnn::operations::unary::UnaryWithParam> fused_activation,
@@ -120,7 +137,10 @@ struct AllGatherMinimalMatmulAsyncParams {
         "fsdp_cluster_axis",
         "fsdp_ring_size",
         "using_persistent_weight_buffer",
-        "fuse_swiglu");
+        "fuse_swiglu",
+        "swiglu_pack",
+        "gbs",
+        "fwo");
 
     auto attribute_values() const {
         return std::forward_as_tuple(
@@ -139,7 +159,10 @@ struct AllGatherMinimalMatmulAsyncParams {
             this->fsdp_cluster_axis,
             this->fsdp_ring_size,
             this->using_persistent_weight_buffer,
-            this->fuse_swiglu);
+            this->fuse_swiglu,
+            this->swiglu_pack,
+            this->gbs,
+            this->fwo);
     }
 };
 

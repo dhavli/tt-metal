@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import concurrent.futures
 import os
@@ -19,8 +20,8 @@ from models.demos.deepseek_v3.utils.hf_model_utils import (
     load_tokenizer,
 )
 
-DEEPSEEK_V3_HF_MODEL_PATH = Path(os.getenv("DEEPSEEK_V3_HF_MODEL", "/proj_sw/user_dev/deepseek-ai"))
-DEEPSEEK_V3_CACHE_PATH = Path(os.getenv("DEEPSEEK_V3_CACHE", "/proj_sw/user_dev/deepseek-v3-cache"))
+DEEPSEEK_V3_HF_MODEL_PATH = Path(_tt_public_getenv("DEEPSEEK_V3_HF_MODEL", "/proj_sw/user_dev/deepseek-ai"))
+DEEPSEEK_V3_CACHE_PATH = Path(_tt_public_getenv("DEEPSEEK_V3_CACHE", "/proj_sw/user_dev/deepseek-v3-cache"))
 
 
 class CaptureFinished(Exception):

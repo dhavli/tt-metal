@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 
@@ -66,7 +67,7 @@ def test_transformer_accuracy(
     On each iteration, we print the PCC, RMSE, ATOL, RTOL between the TT and ground truth outputs, for the above 2 cases.
     """
     # Get ground truth directory from environment
-    ground_truth_dir = os.environ.get("MOCHI_GROUND_TRUTH_DIR")
+    ground_truth_dir = _tt_public_getenv("MOCHI_GROUND_TRUTH_DIR")
     if ground_truth_dir is None:
         pytest.skip("MOCHI_GROUND_TRUTH_DIR environment variable not set")
 

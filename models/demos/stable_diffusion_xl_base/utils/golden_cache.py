@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -21,7 +22,7 @@ def golden_ci_mode(is_ci_env, is_ci_v2_env):
 
 
 def mlperf_writable():
-    return os.getenv("MLPERF_READ_ONLY", "true").strip().lower() == "false"
+    return _tt_public_getenv("MLPERF_READ_ONLY", "true").strip().lower() == "false"
 
 
 def load_golden(name, expected_metadata):

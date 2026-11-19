@@ -1,19 +1,26 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2024 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "sdpa_decode_device_operation.hpp"
+#include "sdpa_decode_spec_fold.hpp"
 
 #include <bit>
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 
+#include <tt-metalium/allocator.hpp>
 #include <tt-metalium/buffer.hpp>
 #include <tt-metalium/constants.hpp>
+#include <tt-metalium/hal_types.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/program_descriptors.hpp>
 #include <tt-metalium/tensor_accessor_args.hpp>
@@ -25,6 +32,36 @@ using namespace tt::constants;
 using namespace tt::tt_metal;
 
 namespace ttnn::prim {
+
+// TT_SDPA_DEC_KV_DUAL_NOC (patches/tt-metal/0033, read once per process): paged decode SDPA reads K on the reader
+// RISC's NoC and V on the writer RISC's NoC, concurrently, instead of both on the reader's. Every core stays in
+// DM_DEDICATED_NOC and each RISC issues only on its own NoC (0032 rev 1/2 hung with one RISC on both NoCs).
+//   unset / "" / "0"  off: the stock kernels, compile args and runtime args (byte-identical programs)
+//   "1"               on, for paged programs with a separate V tensor (not MLA reuse_k); others stay stock
+//   "mustfail"        on, and the writer reads every V tile twice into the same slot (same numerics, slower), to
+//                     prove the engaged ELFs ran
+// Anything else is an error, so a typo cannot silently run the default arm.
+namespace {
+enum class SdpaDecKvDualNoc { OFF, ON, MUSTFAIL };
+
+SdpaDecKvDualNoc sdpa_dec_kv_dual_noc_mode() {
+    static const SdpaDecKvDualNoc mode = [] {
+        const char* raw = tt_stack_public::getenv("TT_SDPA_DEC_KV_DUAL_NOC");
+        const std::string_view v = raw == nullptr ? std::string_view{} : std::string_view{raw};
+        if (v.empty() || v == "0") {
+            return SdpaDecKvDualNoc::OFF;
+        }
+        if (v == "1") {
+            return SdpaDecKvDualNoc::ON;
+        }
+        if (v == "mustfail") {
+            return SdpaDecKvDualNoc::MUSTFAIL;
+        }
+        TT_THROW("TT_SDPA_DEC_KV_DUAL_NOC must be unset, 0, 1 or mustfail; got '{}'", v);
+    }();
+    return mode;
+}
+}  // namespace
 
 ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     const operation_attributes_t& operation_attributes,
@@ -159,7 +196,12 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     const uint32_t St = S / TILE_HEIGHT;
     const uint32_t DHt = DH / TILE_WIDTH;
     const uint32_t vDHt = vDH / TILE_WIDTH;
-    const uint32_t PNHt = PNH / q_heads_parallel_factor / TILE_HEIGHT;
+    // cfx (tt-stack 0034, TT_SDPA_DEC_SPEC_FOLD): a fold call runs the T candidates of each user as T*PNHt_cand
+    // row-tiles of one Q block (sdpa_decode_spec_fold.hpp). PNHt_cand is the legacy per-row PNHt.
+    const uint32_t PNHt_cand = PNH / q_heads_parallel_factor / TILE_HEIGHT;
+    const uint32_t spec_fold_T = sdpa_spec_fold::fold_T(operation_attributes, tensor_args);
+    const bool spec_fold = spec_fold_T > 0;
+    const uint32_t PNHt = spec_fold ? spec_fold_T * PNHt_cand : PNHt_cand;
     const uint32_t Sk_chunk_t = k_chunk_size / TILE_HEIGHT;
 
     // ========== Grid & Core Configuration ==========
@@ -392,9 +434,18 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     const uint32_t qk_in0_block_w = DHt;
     const uint32_t qk_num_blocks = 1;
     uint32_t qk_out_subblock_w = 0, qk_out_subblock_h = 0, qk_in0_num_subblocks = 0, qk_in1_num_subblocks = 0;
+    // Fold: PNHt = T*PNHt_cand need not be a power of 2 (T = 3 at K = 2), and matmul_blocks drops the tail row-tiles
+    // when the subblock height does not divide it, so take the largest divisor. Legacy values are unchanged.
+    auto subblock_h_for = [&](uint32_t cap) {
+        uint32_t h = std::min(PNHt, cap);
+        while (spec_fold && h > 1 && PNHt % h != 0) {
+            h--;
+        }
+        return h;
+    };
     if (Sk_chunk_t > 0) {
         qk_out_subblock_w = std::min(Sk_chunk_t, dst_size);
-        qk_out_subblock_h = (qk_out_subblock_w == Sk_chunk_t) ? std::min(PNHt, dst_size / qk_out_subblock_w) : 1;
+        qk_out_subblock_h = (qk_out_subblock_w == Sk_chunk_t) ? subblock_h_for(dst_size / qk_out_subblock_w) : 1;
         qk_in0_num_subblocks = PNHt / qk_out_subblock_h;
         qk_in1_num_subblocks = Sk_chunk_t / qk_out_subblock_w;
     }
@@ -403,8 +454,7 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     uint32_t out_in0_block_w = Sk_chunk_t > 0 ? Sk_chunk_t : 0;
     uint32_t out_num_blocks = Sk_chunk_t > 0 ? 1 : 0;
     const uint32_t out_out_subblock_w = std::min(vDHt, dst_size);
-    const uint32_t out_out_subblock_h =
-        (out_out_subblock_w == vDHt) ? std::min(PNHt, dst_size / out_out_subblock_w) : 1;
+    const uint32_t out_out_subblock_h = (out_out_subblock_w == vDHt) ? subblock_h_for(dst_size / out_out_subblock_w) : 1;
     const uint32_t out_in0_num_subblocks = PNHt / out_out_subblock_h;
     const uint32_t out_in1_num_subblocks = vDHt / out_out_subblock_w;
 
@@ -424,7 +474,15 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     const uint32_t out_tiles = PNHt * vDHt;
     const uint32_t scale_tiles = 1;
     const uint32_t statistics_tiles = PNHt;
-    const uint32_t intermed_output_tiles = (out_tiles + 2 * PNHt) * (num_cores_per_head - 1);
+    // Fold: c_19 is addressed by tree-reduction ROUND (block_offset = round * block), so num_tree_reduction_rounds
+    // blocks suffice; the legacy (num_cores_per_head - 1) sizing is kept off the fold path. Each fold block is T
+    // times larger, and the over-provisioning alone would cost ~T*50 KB of L1 at 6 cores per head.
+    const uint32_t intermed_output_blocks =
+        spec_fold ? std::min(num_cores_per_head - 1, num_tree_reduction_rounds) : (num_cores_per_head - 1);
+    const uint32_t intermed_output_tiles = (out_tiles + 2 * PNHt) * intermed_output_blocks;
+    // Fold: the mask CB holds two chunk blocks (a fold core owns at most two masked chunks), so the writer never
+    // waits on compute for mask space (in the dual-NoC program the writer also streams V).
+    const uint32_t mask_cb_tiles = spec_fold ? 2 * qk_tiles : qk_tiles;
 
     // ========== Data Formats ==========
     const tt::DataFormat q_df = tt_metal::datatype_to_dataformat_converter(input_tensor_q.dtype());
@@ -540,7 +598,7 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     add_cb(CBIndex::c_0, q_tiles * q_tile_size, q_df, q_tile_size, &q_tile, q_locally_available ? q_buffer : nullptr);
     add_cb(CBIndex::c_1, k_tiles * k_tile_size, k_df, k_tile_size);                        // K input
     add_cb(CBIndex::c_2, v_tiles * v_tile_size, v_df, v_tile_size);                        // V input
-    add_cb(CBIndex::c_3, qk_tiles * mask_tile_size, mask_df, mask_tile_size, &mask_tile);  // attn_mask
+    add_cb(CBIndex::c_3, mask_cb_tiles * mask_tile_size, mask_df, mask_tile_size, &mask_tile);  // attn_mask
     if (use_attention_sink) {
         add_cb(CBIndex::c_4, statistics_tiles * stats_tile_size, stats_df, stats_tile_size, &stats_tile);
     }
@@ -575,7 +633,8 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
             nullptr,
             is_page_table_sharded ? page_table_buffer : nullptr);
     }
-    add_cb(CBIndex::c_10, q_tiles * q_tile_size, q_df, q_tile_size, &q_tile);  // tilized Q
+    // c_10 (row-major Q staging) is used only when tilize_q; a fold call has a TILE Q, so one tile keeps it addressable.
+    add_cb(CBIndex::c_10, (spec_fold ? 1 : q_tiles) * q_tile_size, q_df, q_tile_size, &q_tile);  // tilized Q
 
     // Scalar/identity CBs
     const uint32_t col_identity_tile_size = full_tile.get_tile_size(scalar_df);
@@ -616,6 +675,45 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
         out_tile_size,
         &out_tile,
         is_output_sharded ? out_buffer : nullptr);
+
+    if (spec_fold) {
+        TT_FATAL(spec_fold_T >= 2 && spec_fold_T <= 16, "TT_SDPA_DEC_SPEC_FOLD: T={} (2..16)", spec_fold_T);
+        TT_FATAL(is_causal && is_paged_attention && use_cur_pos_tensor, "TT_SDPA_DEC_SPEC_FOLD: causal paged with cur_pos");
+        TT_FATAL(!is_q_sharded && !tilize_q, "TT_SDPA_DEC_SPEC_FOLD: Q must be interleaved TILE");
+        TT_FATAL(!is_output_sharded, "TT_SDPA_DEC_SPEC_FOLD: output must be interleaved");
+        TT_FATAL(!is_page_table_sharded && !is_cur_pos_tensor_sharded, "TT_SDPA_DEC_SPEC_FOLD: interleaved page table/cur_pos");
+        TT_FATAL(!use_mla && tensor_args.v.has_value(), "TT_SDPA_DEC_SPEC_FOLD: separate V, no MLA");
+        TT_FATAL(!use_attention_mask && !use_attention_sink, "TT_SDPA_DEC_SPEC_FOLD: no attn_mask / attention sink");
+        TT_FATAL(sliding_window_size == 0 && !has_block_padding, "TT_SDPA_DEC_SPEC_FOLD: no sliding window / block pad");
+        TT_FATAL(q_heads_parallel_factor == 1 && !use_col_major_group_indexing && !on_subcoregrid,
+                 "TT_SDPA_DEC_SPEC_FOLD: no q-head parallelism / sub core grids");
+        TT_FATAL(num_heads_per_core == 1, "TT_SDPA_DEC_SPEC_FOLD: needs one kv head per core, got {} (B={}, grid {})",
+                 num_heads_per_core, B, num_cores_available);
+        TT_FATAL(q_shape[1] == spec_fold_T * B, "TT_SDPA_DEC_SPEC_FOLD: Q batch {} != T {} x B {}", q_shape[1],
+                 spec_fold_T, B);
+        TT_FATAL(PNHt * DHt <= 256, "TT_SDPA_DEC_SPEC_FOLD: Q block {} tiles too large", PNHt * DHt);
+        uint64_t total_cb_bytes = 0;
+        for (const auto& cb : desc.cbs) {
+            total_cb_bytes += cb.total_size;
+        }
+        const uint64_t l1_budget =
+            device->l1_size_per_core() - device->allocator()->get_base_allocator_addr(HalMemType::L1);
+        TT_FATAL(
+            total_cb_bytes <= l1_budget,
+            "TT_SDPA_DEC_SPEC_FOLD T={}: circular buffers need {} B per core, L1 has {} B above the allocator base "
+            "(B={} cores_per_head={} Sk_chunk_cap={} PNHt={} vDHt={}). Use fewer candidates or cores per head.",
+            spec_fold_T, total_cb_bytes, l1_budget, B, num_cores_per_head, Sk_chunk_t_cb_size, PNHt, vDHt);
+        static std::once_flag spec_fold_banner;
+        std::call_once(spec_fold_banner, [&] {
+            log_info(
+                tt::LogOp,
+                "TT_SDPA_DEC_SPEC_FOLD engaged mode={} (paged decode SDPA: T candidates per user in one program, KV "
+                "read once per user and kv head, per-candidate causal mask; first program T={} B={} kv_heads={} "
+                "q_heads={} PNHt={} cores_per_head={} active_cores={} Sk_chunk_cap={} half_tile={} CB={} B of {} B)",
+                sdpa_spec_fold::mode_name(), spec_fold_T, B, num_kv_heads, num_q_heads, PNHt, num_cores_per_head,
+                num_active_cores, Sk_chunk_t_cb_size, use_half_tile, total_cb_bytes, l1_budget);
+        });
+    }
 
     // ========== Kernel Scalars ==========
     const bfloat16 bfloat_identity_scalar(1.0f);
@@ -729,6 +827,35 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
     };
     tt_metal::TensorAccessorArgs(output_tensor.buffer()).append_to(writer_compile_time_args_common);
 
+    // TT_SDPA_DEC_KV_DUAL_NOC: V page reads move from the reader to the writer (its own NoC). Paged programs with a
+    // separate V tensor only; the writer gets V's accessor and the page-table geometry, appended after out_args.
+    const SdpaDecKvDualNoc kv_dual_noc_mode =
+        (is_paged_attention && reuse_k == 0) ? sdpa_dec_kv_dual_noc_mode() : SdpaDecKvDualNoc::OFF;
+    const bool kv_dual_noc = kv_dual_noc_mode != SdpaDecKvDualNoc::OFF;
+    if (kv_dual_noc) {
+        tt_metal::TensorAccessorArgs(input_tensor_v.buffer()).append_to(writer_compile_time_args_common);
+        writer_compile_time_args_common.push_back(page_block_size_t);
+        writer_compile_time_args_common.push_back(static_cast<uint32_t>(is_page_table_sharded));
+        writer_compile_time_args_common.push_back(capacity_t);
+        writer_compile_time_args_common.push_back(kv_dual_noc_mode == SdpaDecKvDualNoc::MUSTFAIL ? 2u : 1u);
+        static std::once_flag engaged_banner;
+        std::call_once(engaged_banner, [&] {
+            log_info(
+                tt::LogOp,
+                "TT_SDPA_DEC_KV_DUAL_NOC engaged mode={} (paged decode SDPA: K on the reader NoC, V on the writer NoC, "
+                "DM_DEDICATED_NOC; first program B={} kv_heads={} cores_per_head={} active_cores={} Sk_chunk_t={} "
+                "vDHt={} page_table_sharded={})",
+                kv_dual_noc_mode == SdpaDecKvDualNoc::MUSTFAIL ? "mustfail" : "1",
+                B,
+                num_kv_heads,
+                num_cores_per_head,
+                num_active_cores,
+                Sk_chunk_t,
+                vDHt,
+                is_page_table_sharded);
+        });
+    }
+
     std::vector<uint32_t> compute_compile_time_args_common = {
         St,
         DHt,
@@ -784,6 +911,19 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
         compute_defines["DYNAMIC_CHUNK_SIZE"] = "1";
     }
 
+    // cfx (tt-stack 0034): the fold program's kernel defines (absent on every other program: legacy code).
+    KernelDescriptor::Defines spec_fold_defines;
+    if (spec_fold) {
+        spec_fold_defines.emplace_back("SDPA_SPEC_FOLD_T", std::to_string(spec_fold_T));
+        spec_fold_defines.emplace_back("SDPA_SPEC_FOLD_B", std::to_string(B));
+        spec_fold_defines.emplace_back("SDPA_SPEC_FOLD_PNHT_CAND", std::to_string(PNHt_cand));
+        spec_fold_defines.emplace_back(
+            "SDPA_SPEC_FOLD_MUSTFAIL", sdpa_spec_fold::mode() == sdpa_spec_fold::Mode::MUSTFAIL ? "1" : "0");
+        for (const auto& d : spec_fold_defines) {
+            compute_defines[d.first] = d.second;
+        }
+    }
+
     KernelDescriptor::Defines compute_defines_vec;
     compute_defines_vec.reserve(compute_defines.size());
     for (auto& [k, v] : compute_defines) {
@@ -792,19 +932,25 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
 
     // ========== Kernel Creation ==========
     const std::string kernel_path = "ttnn/cpp/ttnn/operations/transformer/sdpa_decode/device/kernels/";
+    const std::string kv_dual_noc_kernel_path =
+        "ttnn/cpp/ttnn/operations/transformer/sdpa_decode/device/kernels_kv_dual_noc/";
 
     KernelDescriptor reader_desc;
-    reader_desc.kernel_source = kernel_path + "dataflow/reader_decode_all.cpp";
+    reader_desc.kernel_source = kv_dual_noc ? kv_dual_noc_kernel_path + "dataflow/reader_decode_all_kv_dual_noc.cpp"
+                                            : kernel_path + "dataflow/reader_decode_all.cpp";
     reader_desc.source_type = KernelDescriptor::SourceType::FILE_PATH;
     reader_desc.core_ranges = core_grid;
     reader_desc.compile_time_args = std::move(reader_compile_time_args_common);
+    reader_desc.defines = spec_fold_defines;
     reader_desc.config = ReaderConfigDescriptor{};
 
     KernelDescriptor writer_desc;
-    writer_desc.kernel_source = kernel_path + "dataflow/writer_decode_all.cpp";
+    writer_desc.kernel_source = kv_dual_noc ? kv_dual_noc_kernel_path + "dataflow/writer_decode_all_kv_dual_noc.cpp"
+                                            : kernel_path + "dataflow/writer_decode_all.cpp";
     writer_desc.source_type = KernelDescriptor::SourceType::FILE_PATH;
     writer_desc.core_ranges = core_grid;
     writer_desc.compile_time_args = std::move(writer_compile_time_args_common);
+    writer_desc.defines = spec_fold_defines;
     writer_desc.config = WriterConfigDescriptor{};
 
     KernelDescriptor compute_desc;
@@ -944,6 +1090,11 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
         // cache-hit path.  cur_pos and tree_params are functions of hashed attributes (see the
         // reader note above), so they never go stale on a hit.
         KernelDescriptor::RTArgList writer_rt_args;
+        if (kv_dual_noc) {
+            // TT_SDPA_DEC_KV_DUAL_NOC: V address (bound, re-patched on cache hits) and page-table stick size first.
+            writer_rt_args.push_back(v_buffer);
+            writer_rt_args.push_back(page_table_stick_size);
+        }
         writer_rt_args.push_back(out_buffer);
         writer_rt_args.push_back(worker_id_for_reduce);
         writer_rt_args.push_back(worker_id_for_output);
@@ -1015,7 +1166,7 @@ ProgramDescriptor SdpaDecodeDeviceOperation::create_descriptor(
             // (2*num_cores_per_head)
             // + reducer coords + output coords
             KernelDescriptor::CoreRuntimeArgs writer_rt_args(
-                10 + 6 + MAX_TREE_REDUCTION_ROUNDS + (2 * num_cores_per_head), 0);
+                10 + 6 + MAX_TREE_REDUCTION_ROUNDS + (2 * num_cores_per_head) + (kv_dual_noc ? 2 : 0), 0);
 
             // Compute runtime args - 65 indicates idle core
             // Base args (7) + tree params (5) + children_per_round (MAX_TREE_REDUCTION_ROUNDS)

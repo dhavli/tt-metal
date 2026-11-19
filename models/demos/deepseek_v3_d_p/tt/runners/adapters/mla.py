@@ -18,6 +18,7 @@ diverge (e.g. Kimi's L1-small routing semaphores). A non-MLA architecture subcla
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -63,7 +64,7 @@ class MLAPrefillAdapter(PrefillModelAdapter):
     def load_hf_config(self):
         from transformers import AutoConfig
 
-        model_path = os.environ.get("PREFILL_HF_MODEL") or self.hf_model_default
+        model_path = _tt_public_getenv("PREFILL_HF_MODEL") or self.hf_model_default
         logger.info(f"Loading HF config for model={self.name!r} from {model_path}")
         cfg = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         return unwrap_multimodal_config(cfg)
@@ -76,7 +77,7 @@ class MLAPrefillAdapter(PrefillModelAdapter):
         files the cache-populate run wrote:
           $PREFILL_TTNN_CACHE / {name}_{arch}_{N}dev / {sp}x{tp}
         Defaults to ``ttnn_cache_default``; None only if explicitly empty."""
-        env_cache = os.environ.get("PREFILL_TTNN_CACHE", self.ttnn_cache_default)
+        env_cache = _tt_public_getenv("PREFILL_TTNN_CACHE", self.ttnn_cache_default)
         if not env_cache:
             return None
         arch = "bh" if is_blackhole() else "wh"

@@ -25,6 +25,7 @@ set (so it never auto-runs in a suite while the galaxy is occupied). Runnable la
 
     RUN_INDEXER_ACCURACY=1 pytest models/demos/minimax_m3/tests/unit/test_indexer_score_msa_accuracy.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -91,7 +92,7 @@ def _compute_pcc(a, b):
 
 
 @pytest.mark.skipif(
-    os.getenv("RUN_INDEXER_ACCURACY") != "1",
+    _tt_public_getenv("RUN_INDEXER_ACCURACY") != "1",
     reason="opens the mesh device; set RUN_INDEXER_ACCURACY=1 to run (kept device-free by default)",
 )
 @parametrize_mesh_with_fabric(mesh_shapes=[(1, 1)])

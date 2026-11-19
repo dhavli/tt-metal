@@ -9,6 +9,7 @@ into rotary_embedding_llama (INTERLEAVED + trans_mat) with a load-time Q/K permu
 TT freq feed is INTERLEAVED. Modality axis selects video vs av; set LTX_SKIP_PCC=1 to assert
 shape/finiteness only.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -84,7 +85,7 @@ _CHECKPOINT_22B_HF_FILENAMES = {
 
 def _resolve_checkpoint_22b(variant: str) -> str:
     """Path for the 22B variant: LTX_CHECKPOINT env, then local cache, then huggingface_hub snapshot."""
-    env = os.environ.get("LTX_CHECKPOINT")
+    env = _tt_public_getenv("LTX_CHECKPOINT")
     if env:
         return env
     local = _CHECKPOINT_22B_VARIANTS[variant]
@@ -105,7 +106,7 @@ INPUT_SEED = 42
 TIMESTEP_VAL = 0.01
 
 # Toggle PCC verification via env (mirrors Wan's `dit_unit_test`). Default ON.
-_RUN_PCC_DEFAULT = {"1": False, "0": True}.get(os.environ.get("LTX_SKIP_PCC"), True)
+_RUN_PCC_DEFAULT = {"1": False, "0": True}.get(_tt_public_getenv("LTX_SKIP_PCC"), True)
 
 
 # ---------------------------------------------------------------------------
@@ -1424,7 +1425,7 @@ def test_ltx_per_token_timestep_nonuniform(
     video_N_real = F * H * W
     video_N = _sp_pad_len(video_N_real, sp_factor)
     frame0_tokens = H * W  # token order is f*H*W + h*W + w, so frame 0 == first H*W tokens
-    sigma_high = float(os.environ.get("LTX_TEST_SIGMA", "0.7"))
+    sigma_high = float(_tt_public_getenv("LTX_TEST_SIGMA", "0.7"))
 
     # Shared random-scaled weights (1 layer) from the diffusers 3D video model.
     torch_model = _make_diffusers_video_model(num_layers=1)
@@ -1758,7 +1759,7 @@ def test_ltx_transformer_crossstage_hang(
         W=60,
         has_audio=has_audio,
         checkpoint_variant=checkpoint_variant,
-        num_layers=int(os.environ.get("CROSSSTAGE_NUM_LAYERS", "48")),
+        num_layers=int(_tt_public_getenv("CROSSSTAGE_NUM_LAYERS", "48")),
     )
     # Stage-1 shape (half spatial res, like the e2e's height//2,width//2) on the SAME model.
     kwargs_s1, vN1 = _build_trace_inner_kwargs(
@@ -1767,7 +1768,7 @@ def test_ltx_transformer_crossstage_hang(
     logger.info(f"cross-stage: stage-1 vN={vN1} then stage-2 vN={vN2} (shared CCLManager)")
 
     # CROSSSTAGE_SKIP_S1=1 -> run only stage-2, isolating the stage transition from full-depth big-M.
-    skip_s1 = os.environ.get("CROSSSTAGE_SKIP_S1", "0") != "0"
+    skip_s1 = _tt_public_getenv("CROSSSTAGE_SKIP_S1", "0") != "0"
     if not skip_s1:
         # Stage 1 first (eager) — populate/rotate the shared strided-AGMM semaphore pool at stage-1 M.
         for i in range(3):
@@ -1833,8 +1834,8 @@ def test_ltx_transformer_trace_perf(
     )
 
     # AV emits far more markers than video
-    n_warm = int(os.environ.get("LTX_PERF_N_WARM", "1" if has_audio else "2"))
-    n_replay = int(os.environ.get("LTX_PERF_N_REPLAY", "3" if has_audio else "5"))
+    n_warm = int(_tt_public_getenv("LTX_PERF_N_WARM", "1" if has_audio else "2"))
+    n_replay = int(_tt_public_getenv("LTX_PERF_N_REPLAY", "3" if has_audio else "5"))
 
     # Warm / compile: eager (untraced) calls precompile kernels (prep_run=False on inner_step).
     t0 = time.time()

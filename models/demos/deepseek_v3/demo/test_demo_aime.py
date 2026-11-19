@@ -4,6 +4,7 @@
 """AIME-24 regression tests for the DeepSeek-V3 demo."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -19,17 +20,17 @@ from models.demos.deepseek_v3.demo.score_lmeval_outputs import (
 )
 
 MODEL_PATH = Path(
-    os.getenv("DEEPSEEK_V3_HF_MODEL", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked")
+    _tt_public_getenv("DEEPSEEK_V3_HF_MODEL", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked")
 )
-CACHE_DIR = Path(os.getenv("DEEPSEEK_V3_CACHE", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-Cache/CI"))
+CACHE_DIR = Path(_tt_public_getenv("DEEPSEEK_V3_CACHE", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-Cache/CI"))
 
 FAST_PROMPTS_FILE = Path(__file__).resolve().parent / "aime_under_8k_prompts.json"
-FULL_PROMPTS_FILE = Path(os.getenv("DEEPSEEK_AIME24_PROMPTS_FILE", "/data/deepseek/prompts/demo_aime24_full.json"))
-ARTIFACT_DIR = Path(os.getenv("DEEPSEEK_AIME24_ARTIFACT_DIR", "generated/artifacts"))
+FULL_PROMPTS_FILE = Path(_tt_public_getenv("DEEPSEEK_AIME24_PROMPTS_FILE", "/data/deepseek/prompts/demo_aime24_full.json"))
+ARTIFACT_DIR = Path(_tt_public_getenv("DEEPSEEK_AIME24_ARTIFACT_DIR", "generated/artifacts"))
 
 
 def _env_int(name: str, default: int) -> int:
-    return int(os.getenv(name, str(default)))
+    return int(_tt_public_getenv(name, str(default)))
 
 
 def _load_prompt_items(path: Path) -> list[dict]:

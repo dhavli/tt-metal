@@ -7,6 +7,7 @@ Uses ``reference/functional.short_conv`` (rather than instantiating the HF ``Lfm
 module directly) so this test also works in environments where the installed
 ``transformers`` does not yet ship LFM2-VL support -- see ``README.md``.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -30,7 +31,7 @@ from models.tt_transformers.tt.common import Mode
             "N150": (1, 1),
             "N300": (1, 2),
             "P150": (1, 1),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 import torch
@@ -600,7 +601,7 @@ class TtBEVFormerEncoder:
         TT_UNIAD_DISABLE_TRACE=1 bypasses replay so Tracy / device
         profiler can see per-op kernel timings (begin_trace_capture and
         the device profiler are incompatible)."""
-        if os.environ.get("TT_UNIAD_DISABLE_TRACE") == "1":
+        if _tt_public_getenv("TT_UNIAD_DISABLE_TRACE") == "1":
             output, _ = self._run_layers(**args_dict)
             return output
         shape_key = self._trace_shape_key(args_dict)

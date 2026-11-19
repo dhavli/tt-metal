@@ -19,6 +19,7 @@ so the returned dict matches what ``WanTransformer3DModel._prepare_torch_state``
 expects.
 """
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -124,7 +125,7 @@ class WeightsNotFoundError(FileNotFoundError):
 
 
 def _hf_cache_root() -> Path:
-    return Path(os.environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface")
+    return Path(_tt_public_getenv("HF_HOME") or Path.home() / ".cache" / "huggingface")
 
 
 def _resolve_path(

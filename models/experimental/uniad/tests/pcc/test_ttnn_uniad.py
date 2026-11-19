@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import torch
 import pytest
 from loguru import logger
@@ -540,7 +541,7 @@ def test_uniad(device, reset_seeds, model_location_generator):
     # via ttnn_model.reset_test_state()) before the PCC-asserted final
     # pass, so TT_UNIAD_TIMING=1 sees warm-cache phase timings instead of
     # only the cold call.
-    _warm_iters = int(_os.environ.get("TT_UNIAD_WARM_ITERS", "0"))
+    _warm_iters = int(_tt_public_getenv("TT_UNIAD_WARM_ITERS", "0"))
 
     def _forward():
         return ttnn_model(
@@ -574,9 +575,9 @@ def test_uniad(device, reset_seeds, model_location_generator):
     # to silence the gate while keeping the timing prints (useful while
     # iterating on a known regression).
     _perf_gate_enabled = (
-        _os.environ.get("TT_UNIAD_TIMING") == "1"
+        _tt_public_getenv("TT_UNIAD_TIMING") == "1"
         and _warm_iters >= 1
-        and _os.environ.get("TT_UNIAD_PERF_GATE", "1") != "0"
+        and _tt_public_getenv("TT_UNIAD_PERF_GATE", "1") != "0"
     )
     if _perf_gate_enabled:
         from models.experimental.uniad.tt.ttnn_uniad import get_timing_stats, reset_timing_stats

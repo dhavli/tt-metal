@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 from pathlib import Path
 from typing import Optional
@@ -174,7 +175,7 @@ def create_multimodal_model(
     from models.tt_transformers.tt.multimodal.llama_vision_model import CrossAttentionTransformer
     from models.tt_transformers.tt.multimodal.mistral_24b.mistral_e2e_model import MistralTransformer
 
-    hf_tail = os.environ.get("HF_MODEL", "").strip("/").split("/")[-1]
+    hf_tail = _tt_public_getenv("HF_MODEL", "").strip("/").split("/")[-1]
     if get_base_model_name(hf_tail) == _MISTRAL_SMALL_31_24B_BASE:
         max_seq_len = max(max_seq_len, _MISTRAL_VISION_MAX_SEQ_LEN_FLOOR)
 
@@ -259,7 +260,7 @@ def prepare_generator_args(
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -362,7 +363,7 @@ def test_multimodal_demo_text(
     profiler = BenchmarkProfiler()
     profiler.start("run")
 
-    ckpt_dir = os.environ["HF_MODEL"]
+    ckpt_dir = _tt_public_getitem('HF_MODEL')
 
     max_batch_size *= data_parallel  # input batch_size is interpreted as size per DP group
 

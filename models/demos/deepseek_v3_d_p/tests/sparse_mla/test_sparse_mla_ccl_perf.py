@@ -12,6 +12,7 @@ new driver code.
 The KVPE-prefix benchmark evaluates ``high_bw_all_gather``. The GLM head/sequence redistribution
 benchmarks continue to measure the production ``all_to_all_async_generic`` paths.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -288,7 +289,7 @@ def resolve_runtime_system(mesh_device, path: CollectivePath, fabric_config) -> 
     mesh_shape = tuple(mesh_device.shape)
     topology = per_axis_topology(fabric_config)[path.collective_axis]
     default_gbps = _GALAXY_LINK_GBPS_PER_DIRECTION if math.prod(mesh_shape) == 32 else _LOUDBOX_LINK_GBPS_PER_DIRECTION
-    link_gbps = float(os.environ.get("MLA_CCL_LINK_GBPS_PER_DIRECTION", default_gbps))
+    link_gbps = float(_tt_public_getenv("MLA_CCL_LINK_GBPS_PER_DIRECTION", default_gbps))
     return RuntimeSystem(mesh_shape, topology, NUM_LINKS, link_gbps)
 
 
@@ -585,7 +586,7 @@ def report(path: CollectivePath, scenario: str, mesh_device, measurement: Measur
 pytestmark = [
     pytest.mark.perf,
     pytest.mark.timeout(0),
-    pytest.mark.skipif(os.environ.get("CI") == "true", reason="performance test - run locally"),
+    pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="performance test - run locally"),
 ]
 
 # Single-chunk scenarios only; the looping (cold prefill) scenario is not a single CCL measurement.

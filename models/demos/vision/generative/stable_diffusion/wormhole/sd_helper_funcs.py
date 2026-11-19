@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import warnings
 from dataclasses import dataclass
@@ -285,7 +286,7 @@ STABLE_DIFFUSION_V1_4_MODEL_LOCATION = "CompVis/stable-diffusion-v1-4"
 CLIP_VIT_LARGE_PATCH14_MODEL_LOCATION = "openai/clip-vit-large-patch14"
 STABLE_DIFFUSION_CIV2_MODEL_LOCATION = "stable-diffusion-v1-4"
 CLIP_VIT_LARGE_PATCH14_CIV2_MODEL_LOCATION = "clip-vit-large-patch14"
-SD_HF_DOWNLOAD_OVERRIDE = os.getenv("SD_HF_DOWNLOAD_OVERRIDE", "0") == "1"
+SD_HF_DOWNLOAD_OVERRIDE = _tt_public_getenv("SD_HF_DOWNLOAD_OVERRIDE", "0") == "1"
 
 
 def sd_use_local_files_only(is_ci_env, is_ci_v2_env):

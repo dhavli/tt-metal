@@ -4,6 +4,7 @@
 """Critical serving lifecycle, row-contract, and device regressions."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from types import SimpleNamespace
@@ -13,8 +14,8 @@ import torch
 
 serving = pytest.importorskip("models.experimental.diffusion_gemma.tt.serving")
 
-DEVICE_GATED = os.environ.get("DG_RUN_DEVICE", "0") == "1"
-DG_CKPT = os.environ.get("DG_CKPT", "/home/zni/dg_models/diffusiongemma-26B-A4B-it")
+DEVICE_GATED = _tt_public_getenv("DG_RUN_DEVICE", "0") == "1"
+DG_CKPT = _tt_public_getenv("DG_CKPT", "/home/zni/dg_models/diffusiongemma-26B-A4B-it")
 
 
 def test_session_reset_releases_eager_logits_state():
@@ -96,9 +97,9 @@ def test_serving_smoke_emits_blocks_and_advances_position():
             "--checkpoint",
             DG_CKPT,
             "--mesh",
-            os.environ.get("DG_MESH", "P150x4"),
+            _tt_public_getenv("DG_MESH", "P150x4"),
             "--num-layers",
-            os.environ.get("DG_VLLM_SMOKE_NUM_LAYERS", "1"),
+            _tt_public_getenv("DG_VLLM_SMOKE_NUM_LAYERS", "1"),
             "--max-seq-len",
             "1024",
             "--num-blocks",
@@ -106,9 +107,9 @@ def test_serving_smoke_emits_blocks_and_advances_position():
             "--canvas-length",
             str(canvas),
             "--max-denoising-steps",
-            os.environ.get("DG_VLLM_SMOKE_STEPS", "2"),
+            _tt_public_getenv("DG_VLLM_SMOKE_STEPS", "2"),
             "--gumbel-mode",
-            os.environ.get("DG_VLLM_SMOKE_GUMBEL", "argmax"),
+            _tt_public_getenv("DG_VLLM_SMOKE_GUMBEL", "argmax"),
             "--local-files-only",
         ]
     )

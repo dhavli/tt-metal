@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import json
 import os
@@ -601,7 +602,7 @@ def main():
         if args.root:
             root_path = Path(args.root)
         else:
-            cache_env = os.getenv("DEEPSEEK_V3_CACHE")
+            cache_env = _tt_public_getenv("DEEPSEEK_V3_CACHE")
             if cache_env:
                 root_path = Path(cache_env)
             else:

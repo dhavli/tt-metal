@@ -6,6 +6,7 @@
 the wall-time ledger, the stall Watchdog, and the per-kernel-compile env opt-in."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import importlib
 import os
@@ -78,7 +79,7 @@ def test_dit_model_import_opts_in(monkeypatch):
     import models.tt_dit.models as dit_models
 
     importlib.reload(dit_models)  # re-run the package __init__ side effect deterministically
-    assert os.environ.get("TT_METAL_LOG_KERNEL_COMPILE") == "1"
+    assert _tt_public_getenv("TT_METAL_LOG_KERNEL_COMPILE") == "1"
 
 
 def test_bare_util_import_stays_quiet(monkeypatch):
@@ -86,7 +87,7 @@ def test_bare_util_import_stays_quiet(monkeypatch):
     tt_dit.utils.tensor) — otherwise it defeats the build.cpp default-off gate. Only models/ opts in."""
     monkeypatch.delenv("TT_METAL_LOG_KERNEL_COMPILE", raising=False)
     importlib.reload(progress)  # a representative tt_dit util — re-running it must not set the flag
-    assert "TT_METAL_LOG_KERNEL_COMPILE" not in os.environ
+    assert (not _tt_public_contains('TT_METAL_LOG_KERNEL_COMPILE'))
 
 
 def test_explicit_opt_out_wins(monkeypatch):
@@ -95,4 +96,4 @@ def test_explicit_opt_out_wins(monkeypatch):
     import models.tt_dit.models as dit_models
 
     importlib.reload(dit_models)
-    assert os.environ.get("TT_METAL_LOG_KERNEL_COMPILE") == "0"
+    assert _tt_public_getenv("TT_METAL_LOG_KERNEL_COMPILE") == "0"

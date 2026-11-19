@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -25,7 +26,7 @@ from models.demos.multimodal.gemma3.tt.multi_modal_projector import TtGemma3Mult
             "T3K": (1, 8),
             "TG": (8, 4),
             "P150": (1, 1),
-        }.get(os.environ.get("device"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("device"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )

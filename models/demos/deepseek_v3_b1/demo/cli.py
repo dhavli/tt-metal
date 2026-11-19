@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -21,11 +22,11 @@ HYBRID_ALLOCATOR_ENV = "TT_METAL_ALLOCATOR_MODE_HYBRID"
 
 def configure_runtime_env(*, enable_sram_hot_experts: bool) -> None:
     """Set demo-required TT-Metal environment before TTNN/device initialization."""
-    if os.environ.get(SLOW_DISPATCH_ENV) != "1":
+    if _tt_public_getenv(SLOW_DISPATCH_ENV) != "1":
         os.environ[SLOW_DISPATCH_ENV] = "1"
         logger.info("Enabled {}=1 for the DeepSeek demo", SLOW_DISPATCH_ENV)
 
-    if enable_sram_hot_experts and os.environ.get(HYBRID_ALLOCATOR_ENV) != "1":
+    if enable_sram_hot_experts and _tt_public_getenv(HYBRID_ALLOCATOR_ENV) != "1":
         os.environ[HYBRID_ALLOCATOR_ENV] = "1"
         logger.info("Enabled {}=1 for --enable-sram-hot-experts", HYBRID_ALLOCATOR_ENV)
 

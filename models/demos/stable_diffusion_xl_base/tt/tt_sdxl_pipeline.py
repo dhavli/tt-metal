@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from dataclasses import dataclass
 
@@ -102,7 +103,7 @@ class TtSDXLPipeline(LightweightModule):
                 logger.warning(f"Throttle level was {prev_throttle}, unsetting it for blackhole")
 
         if pipeline_config.is_galaxy:
-            grid_override = os.environ.get("TT_METAL_CORE_GRID_OVERRIDE_TODEPRECATE")
+            grid_override = _tt_public_getenv("TT_METAL_CORE_GRID_OVERRIDE_TODEPRECATE")
             logger.info(f"Checking TT_METAL_CORE_GRID_OVERRIDE_TODEPRECATE for Galaxy, current value: {grid_override}")
             expected = "7,7" if is_wormhole_b0() else "10,9"
             assert (

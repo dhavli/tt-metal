@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Shared Gemma4 prefill trace policy for standalone and vLLM generators."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -39,7 +40,7 @@ _DEFAULT_TRACE_PREFILL_SEQ_LENS = [128, 512, 1024, 2048, 4096]
 
 
 def _resolve_trace_prefill_seq_lens() -> list[int]:
-    override = os.environ.get("GEMMA4_TRACE_PREFILL_SEQ_LENS")
+    override = _tt_public_getenv("GEMMA4_TRACE_PREFILL_SEQ_LENS")
     if override is None:
         return list(_DEFAULT_TRACE_PREFILL_SEQ_LENS)
     return [int(x) for x in override.split(",") if x.strip()]
@@ -82,7 +83,7 @@ def _resolve_max_trace_batched_prefill_tokens() -> int:
     ``GEMMA4_TRACE_PREFILL_SEQ_LENS`` is pinned to [128] on the T3K nightly,
     so 2048-wide prefills are never trace-eligible there regardless of batch.
     """
-    raw = os.environ.get("GEMMA4_MAX_TRACE_BATCHED_PREFILL_TOKENS")
+    raw = _tt_public_getenv("GEMMA4_MAX_TRACE_BATCHED_PREFILL_TOKENS")
     if raw is None:
         return 128 * 1024
     val = int(raw)
@@ -101,7 +102,7 @@ def chunked_prefill_trace_enabled() -> bool:
     vLLM APC / remnant JIT ``sp1`` captures — those stay eager via
     :func:`can_gemma4_enable_prefill_trace`.
     """
-    return os.environ.get("GEMMA4_CHUNKED_PREFILL_TRACE", "0").lower() in ("1", "true", "yes")
+    return _tt_public_getenv("GEMMA4_CHUNKED_PREFILL_TRACE", "0").lower() in ("1", "true", "yes")
 
 
 # Default generator-level prefill chunk when GEMMA4_GEN_PREFILL_CHUNK is unset,
@@ -472,7 +473,7 @@ def get_gemma4_long_context_policy(mesh_device=None, model_name_or_path=None) ->
     model_key = normalize_gemma4_model_key(model_name_or_path)
     # Prefer live mesh; fall back to MESH_DEVICE so server/vLLM config-time
     # resolution (before mesh open) still picks the right board entry.
-    device = _canonical_device_name(_device_name(mesh_device) or os.environ.get("MESH_DEVICE")) or _QB2
+    device = _canonical_device_name(_device_name(mesh_device) or _tt_public_getenv("MESH_DEVICE")) or _QB2
     by_model = GEMMA4_LONG_CONTEXT_POLICY.get(model_key)
     family = _device_arch_family(device)
     if by_model is not None:
@@ -523,7 +524,7 @@ def resolve_gemma4_bounded_sliding(
     Set to 1/true/yes → force on; any other value → force off.
     Always requires paged attention.
     """
-    _bs_env = os.environ.get("GEMMA4_BOUNDED_SLIDING")
+    _bs_env = _tt_public_getenv("GEMMA4_BOUNDED_SLIDING")
     if _bs_env is None:
         bounded = should_auto_enable_bounded_sliding(max_seq_len, mesh_device, model_name_or_path)
     else:
@@ -580,7 +581,7 @@ def resolve_gemma4_demo_long_context(
 
 def _is_qb2(mesh_device) -> bool:
     """True only for the QB2 board (P150x4 or P300x2, 1x4 Blackhole)."""
-    name = _device_name(mesh_device) or os.environ.get("MESH_DEVICE")
+    name = _device_name(mesh_device) or _tt_public_getenv("MESH_DEVICE")
     return name in _QB2_ALIASES or _canonical_device_name(name) == _QB2
 
 
@@ -622,7 +623,7 @@ def resolve_gemma4_prefill_chunk_size(
     P150x8 / 31B: unbounded chunk=4096 is fast (~31s TTFT) but quality collapses
     at 128k; bounded + chunk=2048 (same tier as QB2) is the coherency path.
     """
-    override = int(os.environ.get("GEMMA4_GEN_PREFILL_CHUNK", "0"))
+    override = int(_tt_public_getenv("GEMMA4_GEN_PREFILL_CHUNK", "0"))
     if override > 0:
         return override
     policy = get_gemma4_long_context_policy(mesh_device, model_name_or_path)
@@ -873,7 +874,7 @@ def warmup_gemma4_batched_prefill_traces(
     from models.demos.gemma4.tt.generator import max_batched_prefill_users
 
     user_cap = max_batched_prefill_users()
-    override = os.environ.get("GEMMA4_WARMUP_PREFILL_BATCHES")
+    override = _tt_public_getenv("GEMMA4_WARMUP_PREFILL_BATCHES")
     if override:
         warmup_batch_sizes = tuple(
             b
@@ -1096,7 +1097,7 @@ def warmup_gemma4_model_prefill(
     # would otherwise warm max_prefill_chunk_size (== max_seq_len, e.g. 131072)
     # which exceeds practical server boot timeouts. Honor the same override here
     # so nightly's GEMMA4_TRACE_PREFILL_SEQ_LENS=128 actually shortens boot.
-    override = os.environ.get("GEMMA4_TRACE_PREFILL_SEQ_LENS")
+    override = _tt_public_getenv("GEMMA4_TRACE_PREFILL_SEQ_LENS")
     if override is not None:
         lengths = []
         for raw in override.split(","):
@@ -1150,7 +1151,7 @@ def warmup_gemma4_model_prefill(
 
     # Demo-only opt-in: compile B>1 CCL once. Server / chunked-prefill product
     # path stays batch-1 (tt_transformers pattern).
-    batch_override = os.environ.get("GEMMA4_WARMUP_PREFILL_BATCHES")
+    batch_override = _tt_public_getenv("GEMMA4_WARMUP_PREFILL_BATCHES")
     if batch_override:
         from models.demos.gemma4.tt.generator import max_batched_prefill_users
 

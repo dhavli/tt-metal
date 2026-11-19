@@ -4,6 +4,7 @@
 """Hugging Face product adaptor for the TTTv2 Llama-3.2-3B path."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass, field
@@ -138,7 +139,7 @@ class Llama32_3BForCausalLM:
 
 
 def load_tokenizer(hf_model: str):
-    tokenizer = AutoTokenizer.from_pretrained(hf_model, local_files_only=os.getenv("CI") == "true")
+    tokenizer = AutoTokenizer.from_pretrained(hf_model, local_files_only=_tt_public_getenv("CI") == "true")
     if not hasattr(tokenizer, "stop_tokens") or tokenizer.stop_tokens is None:
         stops = getattr(tokenizer, "eos_token_id", None)
         tokenizer.stop_tokens = [] if stops is None else ([stops] if isinstance(stops, int) else list(stops))
@@ -156,8 +157,8 @@ def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: 
 def _cache_path(hf_model: str, mesh_device, cache_dir: Path | str | None) -> Path:
     if cache_dir is not None:
         path = Path(cache_dir)
-    elif os.getenv("TT_CACHE_PATH"):
-        path = Path(os.environ["TT_CACHE_PATH"])
+    elif _tt_public_getenv("TT_CACHE_PATH"):
+        path = Path(_tt_public_getitem('TT_CACHE_PATH'))
     else:
         path = Path("model_cache") / hf_model / {1: "N150", 2: "N300", 8: "T3K"}[mesh_device.get_num_devices()]
     path.mkdir(parents=True, exist_ok=True)
@@ -220,9 +221,9 @@ def from_pretrained(
 ) -> Llama32_3BForCausalLM:
     del dtype
     ttnn.SetDefaultDevice(mesh_device)
-    hf_config = AutoConfig.from_pretrained(hf_model, local_files_only=os.getenv("CI") == "true")
+    hf_config = AutoConfig.from_pretrained(hf_model, local_files_only=_tt_public_getenv("CI") == "true")
     hf = AutoModelForCausalLM.from_pretrained(
-        hf_model, torch_dtype=torch.bfloat16, local_files_only=os.getenv("CI") == "true"
+        hf_model, torch_dtype=torch.bfloat16, local_files_only=_tt_public_getenv("CI") == "true"
     )
     hf.eval()
     resolved_layers = hf_config.num_hidden_layers if n_layers is None else n_layers
@@ -282,7 +283,7 @@ def from_pretrained(
         trace_prefill_supported_seq_lens=_trace_seq_lens(
             mesh_device.get_num_devices(), max_prefill_chunk_size, max_seq_len
         ),
-        disable_batched_prefill=bool(os.getenv("DISABLE_BATCHED_PREFILL")),
+        disable_batched_prefill=bool(_tt_public_getenv("DISABLE_BATCHED_PREFILL")),
     )
     del hf
     return Llama32_3BForCausalLM(

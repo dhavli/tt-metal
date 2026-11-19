@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Critical config, weight-remap, checkpoint-shape, and QB2 memory-budget gates."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import glob
 import json
@@ -103,12 +104,12 @@ def test_qb2_canvas_kv_scratch_estimate_matches_gemma4_tp4_shapes():
     assert estimate.total_bytes == 15 * 2**20
 
 
-PROBE_KV = os.getenv("PROBE_KV", "1") == "1"
-PROBE_CTX = int(os.getenv("PROBE_CTX", "262144"))
-PROBE_BATCH = int(os.getenv("PROBE_BATCH", "1"))
-MODEL_PATH = os.getenv("HF_MODEL")
-PROBE_PREFILL = os.getenv("PROBE_PREFILL", "0") == "1"
-PREFILL_LEN = int(os.getenv("PROBE_PREFILL_LEN", str(PROBE_CTX)))
+PROBE_KV = _tt_public_getenv("PROBE_KV", "1") == "1"
+PROBE_CTX = int(_tt_public_getenv("PROBE_CTX", "262144"))
+PROBE_BATCH = int(_tt_public_getenv("PROBE_BATCH", "1"))
+MODEL_PATH = _tt_public_getenv("HF_MODEL")
+PROBE_PREFILL = _tt_public_getenv("PROBE_PREFILL", "0") == "1"
+PREFILL_LEN = int(_tt_public_getenv("PROBE_PREFILL_LEN", str(PROBE_CTX)))
 BLOCK = 64
 G = 2**30
 
@@ -138,7 +139,7 @@ def _dram(mesh_device, label):
 
 
 @pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run on a Tenstorrent device (QB2, MESH_DEVICE=P150x4)",
 )
 @_mesh_parametrize()

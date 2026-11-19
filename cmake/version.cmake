@@ -8,11 +8,12 @@ function(ParseGitDescribe)
     # These will be filled in by `git archive`.
     # Building the source outside of git from something that was not exported via `git archive`
     # is left as an exercise to whoever is wanting to do that.
-    set(fallbackVersion "$Format:%(describe)$")
-    set(fallbackHash "$Format:%h$")
-    set(fallbackSha "$Format:%H$")
+    set(fallbackVersion "v0.79.0-dev20260903-dirty")
+    set(fallbackHash "3b31bad4ee")
+    set(fallbackSha "3b31bad4ee08f7db85139d83411148e3c7c5222d")
 
-    find_package(Git)
+    # Immutable flat archive: Git metadata belongs to the base only.
+    set(Git_FOUND FALSE)
     if(Git_FOUND)
         execute_process(
             COMMAND
@@ -67,7 +68,7 @@ function(ParseGitDescribe)
         set(VERSION_DESCRIBE_DIRTY TRUE)
         string(REGEX REPLACE "^(.*)${dirtyFlagRegex}$" "\\1" version "${version}")
     endif()
-    set(VERSION_DIRTY FALSE)
+    set(VERSION_DIRTY TRUE)
     if(Git_FOUND)
         execute_process(
             COMMAND

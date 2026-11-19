@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 from pathlib import Path
@@ -145,7 +146,7 @@ def run_test_perplexity(
     # Prepare dataset
     logger.info("Preparing dataset...")
     dataset = prepare_textgen_dataset(dataset_name, dataset_config, split)
-    tokenizer = AutoTokenizer.from_pretrained(model_version, local_files_only=os.getenv("CI") == "true")
+    tokenizer = AutoTokenizer.from_pretrained(model_version, local_files_only=_tt_public_getenv("CI") == "true")
     encodings = tokenizer(dataset, return_tensors="pt")["input_ids"].squeeze(0)
     dataloader = prepare_textgen_dataloader(encodings, batch_size, max_seq_len, num_samples, stride)
 

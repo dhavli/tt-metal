@@ -18,6 +18,7 @@ Parametrized over:
   with pretrained weights; everything else is smoke-only.
 - n_routed_experts / gate_fallback_mode: MoE configurations
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import json
@@ -820,7 +821,7 @@ def run_model(
         # PCC plots are opt-in (TT_PREFILL_PCC_PLOTS=1). generate_pcc_plots renders a PNG into trace_dir,
         # which for a pinned golden is a read-only shared mount (/mnt/models/...) -> PermissionError. Off by
         # default so trace-backed runs don't crash on artifact write; still skipped under GitHub Actions.
-        if os.getenv("TT_PREFILL_PCC_PLOTS") == "1" and not os.getenv("GITHUB_ACTIONS") and trace_dir is not None:
+        if _tt_public_getenv("TT_PREFILL_PCC_PLOTS") == "1" and not _tt_public_getenv("GITHUB_ACTIONS") and trace_dir is not None:
             generate_pcc_plots(summary_result, output_dir=str(trace_dir))
 
     # Deferred PCC failure check (after timing report)

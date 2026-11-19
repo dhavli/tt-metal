@@ -6,6 +6,7 @@ Pytest test cases for the windowed scaled dot product attention operation.
 This demonstrates how cu_window_seqlens can be used to create block-diagonal
 attention patterns without explicitly passing an attention mask.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -38,7 +39,7 @@ def timer(description="Operation"):
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,

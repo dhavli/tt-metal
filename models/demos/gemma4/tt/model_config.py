@@ -12,6 +12,7 @@ Supports all Gemma4 variants:
 Config is automatically loaded from the model checkpoint's config.json
 via HF AutoConfig. Specify model path via HF_MODEL env var.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import errno
 import os
@@ -38,7 +39,7 @@ def _weight_cache_dir_populated(path: Path) -> bool:
 
 def _writable_cache_mirror(preferred: Path) -> Path:
     """Writable mirror for a preferred cache dir on RO mounts (CI MLPerf :ro)."""
-    root = Path(os.environ.get("TT_METAL_HOME") or os.environ.get("HOME") or "/tmp")
+    root = Path(_tt_public_getenv("TT_METAL_HOME") or _tt_public_getenv("HOME") or "/tmp")
     suffix = Path(*preferred.parts[-2:]) if len(preferred.parts) >= 2 else Path(preferred.name)
     return root / "generated" / "gemma4_tt_cache" / suffix
 
@@ -87,7 +88,7 @@ def _resolve_mesh_qualified_weight_cache(model_cache_path: Path, dtype_str: str,
     """
     legacy = model_cache_path / f"tensor_cache_{dtype_str}"
     mesh = model_cache_path / (f"tensor_cache_{dtype_str}_mesh" + "x".join(str(d) for d in shape))
-    mesh_only = os.environ.get("GEMMA4_WEIGHT_CACHE_MESH_ONLY", "0").lower() in ("1", "true", "yes")
+    mesh_only = _tt_public_getenv("GEMMA4_WEIGHT_CACHE_MESH_ONLY", "0").lower() in ("1", "true", "yes")
     if not mesh_only and _weight_cache_dir_populated(legacy) and not _weight_cache_dir_populated(mesh):
         logger.warning(
             "Gemma4 weight cache: mesh-qualified dir {} is empty; reusing legacy {}. "
@@ -294,7 +295,7 @@ class Gemma4ModelArgs:
     @staticmethod
     def resolve_model_cache_path(model_path):
         """Resolve the cache root for model artifacts."""
-        cache_dir = os.getenv("TT_CACHE_PATH")
+        cache_dir = _tt_public_getenv("TT_CACHE_PATH")
         if cache_dir:
             cache_dir = Path(cache_dir)
         elif Path(model_path).is_dir():
@@ -306,7 +307,7 @@ class Gemma4ModelArgs:
             # in cwd, which then makes transformers' AutoConfig.from_pretrained
             # treat the id as a local path (os.path.isdir returns True) and fail
             # to find config.json. Fall back to an HF_HOME-based cache instead.
-            hf_home = os.getenv("HF_HOME") or os.path.expanduser("~/.cache/huggingface")
+            hf_home = _tt_public_getenv("HF_HOME") or os.path.expanduser("~/.cache/huggingface")
             sanitized = str(model_path).replace("/", "--")
             cache_dir = Path(hf_home) / "tt_cache" / sanitized
         return _ensure_cache_dir(cache_dir)
@@ -393,7 +394,7 @@ class Gemma4AssistantArgs:
             mesh = self.model_cache_path / (
                 f"assistant_tensor_cache_{dtype_str}_mesh" + "x".join(str(d) for d in shape)
             )
-            mesh_only = os.environ.get("GEMMA4_WEIGHT_CACHE_MESH_ONLY", "0").lower() in ("1", "true", "yes")
+            mesh_only = _tt_public_getenv("GEMMA4_WEIGHT_CACHE_MESH_ONLY", "0").lower() in ("1", "true", "yes")
             if not mesh_only and _weight_cache_dir_populated(legacy) and not _weight_cache_dir_populated(mesh):
                 logger.warning(
                     "Gemma4 assistant weight cache: reusing legacy {} (mesh path {} empty).",

@@ -3,17 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Process-start configuration for trace allocation tracking."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import warnings
 
 
 def _env_enabled(name: str) -> bool:
-    return os.environ.get(name) == "1"
+    return _tt_public_getenv(name) == "1"
 
 
 def _env_nonnegative_int(name: str, default: int) -> int:
-    value = os.environ.get(name)
+    value = _tt_public_getenv(name)
     if value is None:
         return default
     try:

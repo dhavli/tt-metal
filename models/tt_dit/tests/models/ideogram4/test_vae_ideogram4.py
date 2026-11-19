@@ -12,6 +12,7 @@
 # weights="real" loads the shipped VAE checkpoint for a fidelity check.
 # =============================================================================
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -30,7 +31,7 @@ from ....utils.tensor import bf16_tensor
 from ....utils.test import line_params, ring_params
 
 Z_CHANNELS = 32
-FP8 = os.environ.get("IDEOGRAM4_WEIGHTS")
+FP8 = _tt_public_getenv("IDEOGRAM4_WEIGHTS")
 # Real-weight cases need the gated fp8 checkpoint; skip (don't error) when it isn't configured.
 _NEEDS_WEIGHTS = pytest.mark.skipif(not FP8, reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)")
 _L1 = {"l1_small_size": 32768}

@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import glob
 import os
 import socket
@@ -25,11 +26,11 @@ class KvCacheStage(NamedTuple):
 
 
 def migration_file_export_enabled() -> bool:
-    return os.environ.get("PREFILL_MIGRATION_EXPORT_TO_FILE", "0") == "1"
+    return _tt_public_getenv("PREFILL_MIGRATION_EXPORT_TO_FILE", "0") == "1"
 
 
 def migration_device_map_file_path() -> str:
-    return os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", _DEFAULT_DEVICE_MAP_FILE)
+    return _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", _DEFAULT_DEVICE_MAP_FILE)
 
 
 def _disaggregation():
@@ -44,14 +45,14 @@ def _serialize_table_to_path(table, path: str) -> None:
 
 def _resolve_queue_names() -> tuple[str, str, str]:
     return (
-        os.environ.get("PREFILL_MIGRATION_CMD_QUEUE", "/prefill_mig_cmd_1"),
-        os.environ.get("PREFILL_MIGRATION_TABLE_QUEUE", "/prefill_mig_tbl_1"),
-        os.environ.get("PREFILL_MIGRATION_RESP_QUEUE", "/prefill_mig_rsp_1"),
+        _tt_public_getenv("PREFILL_MIGRATION_CMD_QUEUE", "/prefill_mig_cmd_1"),
+        _tt_public_getenv("PREFILL_MIGRATION_TABLE_QUEUE", "/prefill_mig_tbl_1"),
+        _tt_public_getenv("PREFILL_MIGRATION_RESP_QUEUE", "/prefill_mig_rsp_1"),
     )
 
 
 def _import_migration_client():
-    client_dir = os.environ.get("PREFILL_MIGRATION_CLIENT_DIR")
+    client_dir = _tt_public_getenv("PREFILL_MIGRATION_CLIENT_DIR")
     if client_dir and client_dir not in sys.path:
         sys.path.insert(0, client_dir)
     try:

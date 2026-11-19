@@ -7,6 +7,7 @@
 This module provides functionality to serialize operation parameters and return values
 to JSON files for debugging and analysis purposes.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import pathlib
@@ -488,8 +489,8 @@ def wrap_function_for_tracing(original_function: Any, operation_name: str) -> An
             # Determine log directory - use config if available, otherwise default
             log_dir = None
             # First check environment variable (highest priority for custom trace directory)
-            if os.environ.get("TTNN_OPERATION_TRACE_DIR"):
-                log_dir = pathlib.Path(os.environ["TTNN_OPERATION_TRACE_DIR"])
+            if _tt_public_getenv("TTNN_OPERATION_TRACE_DIR"):
+                log_dir = pathlib.Path(_tt_public_getitem('TTNN_OPERATION_TRACE_DIR'))
             elif hasattr(ttnn.CONFIG, "operation_parameter_log_dir") and ttnn.CONFIG.operation_parameter_log_dir:
                 log_dir = pathlib.Path(ttnn.CONFIG.operation_parameter_log_dir)
             elif hasattr(ttnn.CONFIG, "root_report_path") and ttnn.CONFIG.root_report_path:

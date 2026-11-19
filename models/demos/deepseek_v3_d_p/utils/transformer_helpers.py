@@ -11,6 +11,7 @@ Provides:
 - Host reference caching for PCC validation
 - InfiniteBench dataset download and caching
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import inspect
@@ -64,7 +65,7 @@ PIE960_PATH = Path("models/demos/deepseek_v3_d_p/demo/test_pie_960tok.json")
 PROMPT_5K_PATH = Path("models/demos/deepseek_v3_d_p/demo/test_prompt_5k.json")
 PROMPT_25K_PATH = Path("models/demos/deepseek_v3_d_p/demo/test_prompt_25k.json")
 
-TRACE_DIR_BASE = Path(os.getenv("DEEPSEEK_V3_TRACE_DIR", "/mnt/MLPerf/deepseek-prefill-cache")).resolve()
+TRACE_DIR_BASE = Path(_tt_public_getenv("DEEPSEEK_V3_TRACE_DIR", "/mnt/MLPerf/deepseek-prefill-cache")).resolve()
 LONGBOOK_QA_ENG_5120 = TRACE_DIR_BASE / "longbook_qa_eng_prefill_5120_nopad"
 LONGBOOK_QA_ENG_25600 = TRACE_DIR_BASE / "longbook_qa_eng_prefill_25600_nopad"
 LONGBOOK_QA_ENG_56320 = TRACE_DIR_BASE / "longbook_qa_eng_prefill_56320_nopad"
@@ -187,10 +188,10 @@ INFINITEBENCH_SUBSETS = {
 
 def _default_infinitebench_cache_dir() -> str:
     # Prefer a test-specific override, then HF_HOME/infinitebench, then a temp dir.
-    explicit = os.environ.get("TT_DS_PREFILL_INFINITEBENCH_CACHE")
+    explicit = _tt_public_getenv("TT_DS_PREFILL_INFINITEBENCH_CACHE")
     if explicit:
         return explicit
-    hf_home = os.environ.get("HF_HOME")
+    hf_home = _tt_public_getenv("HF_HOME")
     if hf_home:
         return os.path.join(hf_home, "infinitebench")
     return "/tmp/deepseek_v3_transformer_inputs"
@@ -989,7 +990,7 @@ class ReferenceCacheKey:
 
 def _ref_cache_dir(variant) -> Path:
     env = variant.ref_cache_env or "TT_DS_PREFILL_HOST_REF_CACHE"
-    return Path(os.environ.get(env, f"/tmp/{variant.name}_transformer_ref_cache"))
+    return Path(_tt_public_getenv(env, f"/tmp/{variant.name}_transformer_ref_cache"))
 
 
 def _ref_cache_kvpe_width(cache_path: Path) -> int | None:

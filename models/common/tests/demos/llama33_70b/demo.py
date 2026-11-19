@@ -37,6 +37,7 @@ reference at ``models/tt_transformers/tests/reference_outputs/<model>.refpt``
 (ground-truth real-text targets, single teacher-forced pass), which is the
 PERF.md-comparable methodology.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -153,7 +154,7 @@ EXPECTED_METRICS_BATCH32_CI: dict = {
 # Perf workload: natural-length prefill (these sample prompts are ~90-125 tokens -> 128 bucket,
 # matching TTTv1's traced-prefill seq len for Llama-3.3-70B on T3K), 200 decode steps.
 # Accuracy uses the 511-token teacher-forcing refpt.
-_PERF_NUM_DECODE_TOKENS = int(os.environ.get("PERF_NUM_DECODE_TOKENS", "200"))
+_PERF_NUM_DECODE_TOKENS = int(_tt_public_getenv("PERF_NUM_DECODE_TOKENS", "200"))
 
 PERF_TOLERANCE = 0.05
 
@@ -171,7 +172,7 @@ _BATCH32_CI_MAX_SEQ_LEN: dict[str, int] = {
 def _sampling_bucket() -> str:
     """Map SAMPLING_MODE to a perf-gate bucket. Non-topk on-device modes (e.g. force-argmax)
     fall into ``on_device_topk`` so they stay gated, never silently un-gated."""
-    return "host" if os.environ.get("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
+    return "host" if _tt_public_getenv("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
 
 
 _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
@@ -180,7 +181,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 
 def _ttnn_mesh_device_param_from_env() -> dict:
-    env = os.environ.get("MESH_DEVICE", "").strip()
+    env = _tt_public_getenv("MESH_DEVICE", "").strip()
     if not env:
         pytest.skip(
             "MESH_DEVICE must be set to T3K. See module docstring.",
@@ -211,7 +212,7 @@ pytestmark = [
         "ttnn_mesh_device",
         [_ttnn_mesh_device_param_from_env()],
         indirect=True,
-        ids=[os.environ.get("MESH_DEVICE", "mesh").strip() or "mesh"],
+        ids=[_tt_public_getenv("MESH_DEVICE", "mesh").strip() or "mesh"],
     ),
 ]
 
@@ -241,7 +242,7 @@ def get_device_name(mesh_device: ttnn.MeshDevice) -> str:
 def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> Path:
     device_name = get_device_name(mesh_device)
     hf = hf_model_id.strip("/")
-    tt_cache = os.getenv("TT_CACHE_PATH")
+    tt_cache = _tt_public_getenv("TT_CACHE_PATH")
     if tt_cache:
         root = Path(tt_cache) / device_name
     else:
@@ -377,7 +378,7 @@ def create_model(
     max_seq_len: int = 4096,
 ) -> Llama33_70BTransformer1D:
     """Build the provider-neutral graph through the Llama 3.3 HF adaptor."""
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     _skip_unless_heads_divide_mesh(mesh_device)
 
     precision = LLAMA33_70B_PERFORMANCE if optimizations == "performance" else LLAMA33_70B_ACCURACY
@@ -543,7 +544,7 @@ def test_llama33_70b(test_config, mesh_device, optimizations):
     device_name = get_device_name(mesh_device)
     expected = EXPECTED_METRICS.get(optimizations, {}).get(device_name, {})
     model = None
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     cache_dir = lazy_weight_cache_dir_for_demo(mesh_device, hf_model)
 
     try:
@@ -622,7 +623,7 @@ def test_llama33_70b(test_config, mesh_device, optimizations):
 
 def _run_token_accuracy(model: Llama33_70BTransformer1D, mesh_device, expected):
     """Teacher-forcing token accuracy vs ``.refpt``."""
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     reference_tokens, top5_tokens, prompt_len, metadata = load_reference_data(hf_model)
     tokenizer = model.demo_tokenizer
 
@@ -657,7 +658,7 @@ def _run_token_accuracy(model: Llama33_70BTransformer1D, mesh_device, expected):
             prompt_len,
             metadata_aligned=has_prompt_len_metadata,
         )
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_teacher_forcing(
@@ -761,14 +762,14 @@ def _run_perf_benchmark(
     ``effective = min(requested, max_seq_len - prompt_bucket - margin)`` so the high-water
     decode position never overruns the page table (the ``batch-32-ci`` leg requests 1024).
     """
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # Batched-prefill A/B knob (parity caveat #12): set DISABLE_BATCHED_PREFILL=1 to force the
     # sequential per-user prefill loop (the pre-feature baseline) for before/after TTFT comparison.
     # Companion knob (PLAN_01): DISABLE_MINIMAL_MATMUL=1 forces QKV/W2 prefill back to ttnn.linear
     # (read at model build time, so it must be in the env before from_pretrained — it already is).
-    if os.environ.get("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
+    if _tt_public_getenv("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
         model.model_args.disable_batched_prefill = True
 
     # On-device sampling toggle for SKU evidence-gathering:
@@ -780,7 +781,7 @@ def _run_perf_benchmark(
     #   on_device_topk  -> temp=0,k=32,p=0.08    => trace-captured top-k op path with k=32
     #                      (gathers only the [*,32] tuples). On T3K (8 dev) the vocab
     #                      shards 8-ways so on-device top-k is the faster path vs host readback.
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -832,7 +833,7 @@ def _run_perf_benchmark(
 
         # BenchmarkProfiler brackets the timed prefill/decode regions inside run_perf_benchmark
         # (default-None ⇒ byte-inert for every other caller) so we can emit CI perf telemetry.
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_perf_benchmark(
@@ -845,7 +846,7 @@ def _run_perf_benchmark(
             prompt_lens=prompt_lens,
             sampling_params=sampling_params,
             prefill_sampling_params=prefill_sampling_params,
-            pipeline_readback=os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no"),
+            pipeline_readback=_tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no"),
             profiler=profiler,
         )
         profiler.end("run")
@@ -918,12 +919,12 @@ def _run_eval_repeat_batch32(model: Llama33_70BTransformer1D, mesh_device):
     Honors the same ``SAMPLING_MODE`` knob as ``_run_perf_benchmark`` (default host argmax —
     deterministic and mesh-agnostic, the recommended default for the determinism assert).
     """
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # Batched-prefill A/B knob (parity caveat #12): DISABLE_BATCHED_PREFILL=1 forces the pure
     # per-bucket sequential prefill (the Phase-1 path) so eval-32 can be validated both ON and OFF.
-    if os.environ.get("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
+    if _tt_public_getenv("DISABLE_BATCHED_PREFILL") and model.model_args is not None:
         model.model_args.disable_batched_prefill = True
 
     block_size = 32
@@ -959,7 +960,7 @@ def _run_eval_repeat_batch32(model: Llama33_70BTransformer1D, mesh_device):
     def tokenize_fn(ps):
         return tokenize_prompts(ps, tokenizer)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),

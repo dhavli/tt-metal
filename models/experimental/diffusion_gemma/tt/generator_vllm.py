@@ -54,6 +54,7 @@ imported) so this adapter stays self-contained.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -94,7 +95,7 @@ def _resolve_checkpoint_dir(hf_config):
         path = getattr(hf_config, attr, None)
         if path:
             return path
-    env_path = os.environ.get("DG_CKPT")
+    env_path = _tt_public_getenv("DG_CKPT")
     if env_path:
         return env_path
     raise ValueError("DiffusionGemma checkpoint path not found on hf_config (_name_or_path) or DG_CKPT env var")
@@ -138,7 +139,7 @@ def _validate_upfront_capture_configuration(
     # it as an open-time constructor argument and exposes no getter), so the operator must
     # mirror the reservation here. Defaulting it would silence the guard without reserving
     # anything, and a trace-region overflow poisons the device (needs `tt-smi -r`).
-    raw_trace_region = os.environ.get("DG_TRACE_REGION_SIZE", "").strip()
+    raw_trace_region = _tt_public_getenv("DG_TRACE_REGION_SIZE", "").strip()
     _trace_region_remedy = (
         " Reserve it with the vLLM --additional-config tt.trace_region_size and mirror the "
         "same value in DG_TRACE_REGION_SIZE, or set DG_UPFRONT_CAPTURE=0 to run the eager loop."
@@ -156,7 +157,7 @@ def _validate_upfront_capture_configuration(
     if trace_region_size <= 0:
         raise RuntimeError("DG_UPFRONT_CAPTURE requires DG_TRACE_REGION_SIZE > 0." + _trace_region_remedy)
 
-    raw_pmax = os.environ.get("DG_DENOISE_REVEAL_PMAX", "").strip()
+    raw_pmax = _tt_public_getenv("DG_DENOISE_REVEAL_PMAX", "").strip()
     if not raw_pmax:
         if max_model_len is None:
             raise RuntimeError(
@@ -203,7 +204,7 @@ def _strict_prefill_lens() -> bool:
     wants the server to survive one bad request. Since the raise is engine-fatal, that has to be a
     choice rather than the default.
     """
-    return os.environ.get("DG_UPFRONT_STRICT_PREFILL_LENS", "0").strip().lower() in ("1", "true", "yes", "on")
+    return _tt_public_getenv("DG_UPFRONT_STRICT_PREFILL_LENS", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _lazy_prefill_recapture_enabled() -> bool:
@@ -214,7 +215,7 @@ def _lazy_prefill_recapture_enabled() -> bool:
     ``DG_UPFRONT_LAZY_PREFILL_RECAPTURE=0`` to restore the legacy per-request
     rejection path.
     """
-    return os.environ.get("DG_UPFRONT_LAZY_PREFILL_RECAPTURE", "0").strip().lower() in (
+    return _tt_public_getenv("DG_UPFRONT_LAZY_PREFILL_RECAPTURE", "0").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -224,7 +225,7 @@ def _lazy_prefill_recapture_enabled() -> bool:
 
 def _coarse_prefill_buckets_enabled() -> bool:
     """Whether prefill compute shapes use 128..256K power-of-two buckets."""
-    return os.environ.get("DG_UPFRONT_COARSE_PREFILL_BUCKETS", "0").strip().lower() in (
+    return _tt_public_getenv("DG_UPFRONT_COARSE_PREFILL_BUCKETS", "0").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -244,7 +245,7 @@ def _reveal_buckets_enabled() -> bool:
     engine). DG_DENOISE_REVEAL_BUCKETS=0 restores the single deployment-wide
     span outright.
     """
-    return os.environ.get("DG_DENOISE_REVEAL_BUCKETS", "1").strip().lower() in (
+    return _tt_public_getenv("DG_DENOISE_REVEAL_BUCKETS", "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -254,7 +255,7 @@ def _reveal_buckets_enabled() -> bool:
 
 def _reveal_bucket_floor() -> int:
     """Smallest reveal bucket (default 4096): below this the span no longer dominates."""
-    raw = os.environ.get("DG_REVEAL_BUCKET_FLOOR", "").strip()
+    raw = _tt_public_getenv("DG_REVEAL_BUCKET_FLOOR", "").strip()
     floor = int(raw) if raw else 4096
     if floor <= 0 or floor % ttnn.TILE_SIZE:
         raise RuntimeError(f"DG_REVEAL_BUCKET_FLOOR must be a positive {ttnn.TILE_SIZE}-token multiple, got {floor}")
@@ -268,7 +269,7 @@ def _reveal_bucket_downshift_enabled() -> bool:
     bucket high; the 4x hysteresis in ``_resolve_reveal_bucket_change`` keeps
     alternating short/long traffic from recapturing on every request.
     """
-    return os.environ.get("DG_REVEAL_BUCKET_DOWNSHIFT", "1").strip().lower() in (
+    return _tt_public_getenv("DG_REVEAL_BUCKET_DOWNSHIFT", "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -287,7 +288,7 @@ def _reveal_output_budget() -> int | None:
     between requests, where memory is quiet. Mid-request upshift remains only
     the fallback for requests that exceed the budget.
     """
-    raw = os.environ.get("DG_REVEAL_OUTPUT_BUDGET", "").strip()
+    raw = _tt_public_getenv("DG_REVEAL_OUTPUT_BUDGET", "").strip()
     if not raw:
         return None
     budget = int(raw)
@@ -476,7 +477,7 @@ class DiffusionGemmaForCausalLM(HybridAttentionForCausalLM):
         # captured path raises on any other mode than "device"). The torch-noise
         # INJECTION helpers in tt/generate.py replay a torch run's exact noise for
         # HF<->TT determinism; they are not a serving mode.
-        self._gumbel_mode = os.environ.get("DG_VLLM_GUMBEL_MODE", gumbel_mode)
+        self._gumbel_mode = _tt_public_getenv("DG_VLLM_GUMBEL_MODE", gumbel_mode)
         # One active session per batch row. A single model-owned hybrid cache backs
         # one active sequence today (see module docstring); the dict is keyed by
         # row so output formatting never assumes batch size 1.
@@ -571,19 +572,19 @@ class DiffusionGemmaForCausalLM(HybridAttentionForCausalLM):
             f"[DiffusionGemma vLLM] built model: max_seq_len={max_seq_len} "
             f"n_layers={n_layers or 'full'} "
             f"model_owned_hybrid_kv=True "
-            f"gumbel_mode={os.environ.get('DG_VLLM_GUMBEL_MODE', DEFAULT_VLLM_GUMBEL_MODE)}"
+            f"gumbel_mode={_tt_public_getenv('DG_VLLM_GUMBEL_MODE', DEFAULT_VLLM_GUMBEL_MODE)}"
         )
         _metric(
             "model_build",
             max_seq_len=max_seq_len,
             num_layers=n_layers or 30,
             model_build_s=round(model_build_s, 6),
-            gumbel_mode=os.environ.get("DG_VLLM_GUMBEL_MODE", DEFAULT_VLLM_GUMBEL_MODE),
+            gumbel_mode=_tt_public_getenv("DG_VLLM_GUMBEL_MODE", DEFAULT_VLLM_GUMBEL_MODE),
             max_denoise_steps=diffusion_config.max_denoise_steps,
             model_owned_hybrid_kv=True,
-            trace_region_size_env=int(os.environ.get("DG_TRACE_REGION_SIZE", "0")),
-            selfcond_prechunk_embed=os.environ.get("DG_SELFCOND_PRECHUNK_EMBED", "1"),
-            selfcond_logits_l1=os.environ.get("DG_SELFCOND_LOGITS_L1", "chain"),
+            trace_region_size_env=int(_tt_public_getenv("DG_TRACE_REGION_SIZE", "0")),
+            selfcond_prechunk_embed=_tt_public_getenv("DG_SELFCOND_PRECHUNK_EMBED", "1"),
+            selfcond_logits_l1=_tt_public_getenv("DG_SELFCOND_LOGITS_L1", "chain"),
             dram=dram,
         )
         return cls(
@@ -731,7 +732,7 @@ class DiffusionGemmaForCausalLM(HybridAttentionForCausalLM):
             # The denoise controller already warms its exact programs immediately before capture;
             # defer here so later runner warmups cannot allocate buffers after an active trace.
             self._upfront_compile_phase_seen = True
-            raw_warmup_lens = os.environ.get("DG_UPFRONT_PREFILL_WARMUP_LENS", "").strip()
+            raw_warmup_lens = _tt_public_getenv("DG_UPFRONT_PREFILL_WARMUP_LENS", "").strip()
             # Keep the exact one-tile shape for the BOS capture session. Coarse
             # buckets apply to real requests, whose minimum execution shape is 128.
             warmup_lens = {ttnn.TILE_SIZE}

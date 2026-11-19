@@ -15,6 +15,7 @@ This fused op prepares routing weights for element-wise multiplication with expe
 This is a decode and prefill fused op (same code path for both modes).
 Does not contain CCL ops, so single device test is applicable.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -409,7 +410,7 @@ def _run_prepare_expert_weights_test(
         )
 
     # Device performance measurement mode
-    if os.getenv(DEVICE_PERF_ENV_VAR) is not None:
+    if _tt_public_getenv(DEVICE_PERF_ENV_VAR) is not None:
         logger.info("Skipping e2e perf measurement during device-perf profiling.")
         from tracy import signpost
 

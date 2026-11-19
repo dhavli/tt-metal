@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -10,7 +11,7 @@ import torch
 
 import ttnn
 
-optimal_topology = ttnn.Topology.Ring if (os.getenv("USE_TORUS_MODE", "0") != "0") else ttnn.Topology.Linear
+optimal_topology = ttnn.Topology.Ring if (_tt_public_getenv("USE_TORUS_MODE", "0") != "0") else ttnn.Topology.Linear
 
 # Union type for all possible program configs used with ttnn.linear
 ProgramConfig = Union[

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -109,7 +110,7 @@ def _is_primary_artifact_writer() -> bool:
     # Prefer global launcher ranks when available; TT_MESH_HOST_RANK is mesh-local
     # and can repeat across submeshes in a multi-mesh launch.
     for rank_env in ("OMPI_COMM_WORLD_RANK", "PMI_RANK", "RANK", "TT_MESH_HOST_RANK"):
-        rank_value = os.getenv(rank_env)
+        rank_value = _tt_public_getenv(rank_env)
         if rank_value is None:
             continue
         try:
@@ -523,7 +524,7 @@ def run_demo(
         require_safetensors=not random_weights,
         require_tokenizer=not random_weights,
     )
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError("Environment variable $MESH_DEVICE is not set. Please set it to DUAL, QUAD, or TG.")
     mesh_shape = system_name_to_mesh_shape(requested_system_name.upper())

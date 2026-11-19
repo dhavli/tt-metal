@@ -21,6 +21,7 @@ Run:
   export EXPERT_DTYPE=bf4
   python3 models/demos/minimax_m3/tests/galaxy_generate_m3.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import sys
@@ -29,7 +30,7 @@ import torch
 
 import ttnn
 
-NUM_GEN = int(os.getenv("NUM_GEN", "6"))
+NUM_GEN = int(_tt_public_getenv("NUM_GEN", "6"))
 TARGET_LEN = 5120  # 8 * 640 — divisible by SP=8 and by 32 (tile)
 
 # A coherent long passage; repeated to ~TARGET_LEN tokens so MSA has real blocks to select over.
@@ -54,7 +55,7 @@ def main():
     from models.demos.minimax_m3.tt.model_config import ModelArgs
     from models.demos.minimax_m3.utils.general_utils import get_default_num_links
 
-    expert_dtype = ttnn.bfloat8_b if os.getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
+    expert_dtype = ttnn.bfloat8_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
     rows, cols = 8, 4
     sp, tp = rows, cols
     print(
@@ -72,8 +73,8 @@ def main():
         # LOCALIZATION KNOB: FORCE_DENSE=1 zeroes sparse_attention_freq -> all layers use dense (full-GQA)
         # attention, NO MSA. Lets us test whether the degenerate token-0 is MSA-specific or a general SP
         # real-weights issue. Also TARGET_LEN overridable (default 5120).
-        target_len = int(os.getenv("TARGET_LEN", str(TARGET_LEN)))
-        if os.getenv("FORCE_DENSE") == "1":
+        target_len = int(_tt_public_getenv("TARGET_LEN", str(TARGET_LEN)))
+        if _tt_public_getenv("FORCE_DENSE") == "1":
             sa = hf_config.sparse_attention_config
             n = hf_config.num_hidden_layers
             if isinstance(sa, dict):
@@ -85,7 +86,7 @@ def main():
         # SPEED/ISOLATION KNOB: NLAYERS=K builds only the first K real layers (and M3_LOAD_NLAYERS makes
         # load_state_dict read only the shards for those layers -> ~minutes, not ~2hr). For isolating
         # where the real-weights SP residual degrades, e.g. NLAYERS=1 (just the dense layer 0).
-        nlayers = int(os.getenv("NLAYERS", str(hf_config.num_hidden_layers)))
+        nlayers = int(_tt_public_getenv("NLAYERS", str(hf_config.num_hidden_layers)))
         if nlayers < hf_config.num_hidden_layers:
             os.environ["M3_LOAD_NLAYERS"] = str(nlayers)  # consumed by ModelArgs._load_text_backbone_safetensors
             hf_config.num_hidden_layers = nlayers
@@ -132,8 +133,8 @@ def main():
         cache = model_args.weight_cache_path(ttnn.bfloat8_b)
         from models.demos.minimax_m3.tt.weight_cache import weight_cache_is_complete
 
-        if os.getenv("M3_FORCE_LOAD_WEIGHTS") != "1" and (
-            os.getenv("M3_WEIGHTS_FROM_CACHE") == "1"
+        if _tt_public_getenv("M3_FORCE_LOAD_WEIGHTS") != "1" and (
+            _tt_public_getenv("M3_WEIGHTS_FROM_CACHE") == "1"
             or weight_cache_is_complete(cache, hf_config, hf_config.num_hidden_layers, expert_dtype)
         ):
             print("[sp-gen] tilized weight cache complete -> cache-only (skip ~869GB source read)", flush=True)
@@ -144,7 +145,7 @@ def main():
         ccl = CCLManager(mesh, num_links=get_default_num_links(mesh), topology=ttnn.Topology.Linear)
         # ep_seq_len_per_chip = per-device token count (640 for SP). DP uses the full seq (5120).
         # Override via EP_SEQ_PER_CHIP to isolate dispatch-buffer sizing issues.
-        ep_seq = int(os.getenv("EP_SEQ_PER_CHIP", str(seq // sp)))
+        ep_seq = int(_tt_public_getenv("EP_SEQ_PER_CHIP", str(seq // sp)))
         print(f"[sp-gen] ep_seq_len_per_chip={ep_seq} (per-device tokens={seq//sp})", flush=True)
         model = Model(
             mesh_device=mesh,
@@ -154,7 +155,7 @@ def main():
             mesh_config=mesh_config,
             tensor_cache_path=cache,
             max_local_batch_size=1,
-            sequence_parallel=(os.getenv("NO_SP") != "1"),
+            sequence_parallel=(_tt_public_getenv("NO_SP") != "1"),
             use_ep_moe=True,
             ep_seq_len_per_chip=ep_seq,
             expert_weight_dtype=expert_dtype,

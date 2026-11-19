@@ -5,6 +5,7 @@
 
 Uses HuggingFace Gemma4 classes as reference for PCC comparison.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 from pathlib import Path
 
@@ -331,7 +332,7 @@ def test_full_model(mesh_device, reset_seeds, request):
 
     from models.demos.gemma4.tt.common import create_tt_model
 
-    model_path = os.getenv("HF_MODEL") or os.getenv(
+    model_path = _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
 
@@ -493,7 +494,7 @@ def test_full_model_decode(mesh_device, reset_seeds, request):
 
     from models.demos.gemma4.tt.common import create_tt_model
 
-    model_path = os.getenv("HF_MODEL") or os.getenv(
+    model_path = _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
     tp = mesh_device.shape[1] if hasattr(mesh_device, "shape") else 1
@@ -713,7 +714,7 @@ def test_single_decode_perf(mesh_device, reset_seeds, request):
         def signpost(*_a, **_k):
             pass
 
-    model_path = os.getenv("HF_MODEL") or os.getenv(
+    model_path = _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
     _skip_if_config_only_model(model_path)
@@ -794,7 +795,7 @@ def test_single_prefill_perf(mesh_device, reset_seeds, request):
     from models.demos.gemma4.tt.common import create_tt_model
     from models.tt_transformers.tt.common import PagedAttentionConfig
 
-    model_path = os.getenv("HF_MODEL") or os.getenv(
+    model_path = _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
     _skip_if_config_only_model(model_path)
@@ -807,7 +808,7 @@ def test_single_prefill_perf(mesh_device, reset_seeds, request):
     if hf_config_check.hidden_size > 4096 and tp < 2:
         pytest.skip(f"Model too large for single device (hidden={hf_config_check.hidden_size})")
 
-    seq_len = int(os.getenv("GEMMA4_PREFILL_PERF_SEQ_LEN", "4096"))
+    seq_len = int(_tt_public_getenv("GEMMA4_PREFILL_PERF_SEQ_LEN", "4096"))
     page_block_size = 64
     max_seq_len = max(8192, 1 << (seq_len - 1).bit_length())
     paged_attention_config = PagedAttentionConfig(
@@ -947,7 +948,7 @@ def test_single_decode(mesh_device, reset_seeds, request):
     from models.demos.gemma4.tt.common import create_tt_model
     from models.tt_transformers.tt.common import PagedAttentionConfig
 
-    model_path = os.getenv("HF_MODEL") or os.getenv(
+    model_path = _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
     _skip_if_config_only_model(model_path)

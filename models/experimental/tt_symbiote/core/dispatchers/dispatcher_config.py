@@ -7,6 +7,7 @@
 This module provides a pluggable dispatcher system similar to run_config.py,
 allowing users to switch between different dispatcher implementations at runtime.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import Any, Dict
@@ -57,7 +58,7 @@ def get_active_dispatcher() -> Any:
         Dispatcher module with can_dispatch_to_ttnn and dispatch_to_ttnn functions
     """
     # Check environment variable first (similar to run_config)
-    env_dispatcher = os.environ.get("TT_SYMBIOTE_DISPATCHER", "CPU")
+    env_dispatcher = _tt_public_getenv("TT_SYMBIOTE_DISPATCHER", "CPU")
     if env_dispatcher is not None and env_dispatcher in _DISPATCHER_REGISTRY:
         return _DISPATCHER_REGISTRY[env_dispatcher]
 

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Shared helpers for resolving Python stack traces to on-disk source and SQLite source_files rows."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import functools
 import os
@@ -134,7 +135,7 @@ def _allowed_stack_trace_source_roots(
 
 def _stack_trace_read_allowlist_roots() -> frozenset[str]:
     """Resolved directory prefixes under which stack-trace source reads are permitted."""
-    venv = os.environ.get("VIRTUAL_ENV")
+    venv = _tt_public_getenv("VIRTUAL_ENV")
     if venv:
         venv = _realpath(venv)
     return _allowed_stack_trace_source_roots(

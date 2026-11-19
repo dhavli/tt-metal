@@ -12,6 +12,7 @@ Timed with the realtime (lightweight) profiler, like test_mla_chunked_perf_check
 Blaze pipeline builds without the Tracy tools. Every program contributes its MAX duration across chips, so
 these numbers are NOT comparable to a Tracy merge, which averages collectives. HCA's forward is ~17% CCL,
 so the two disagree by more than K3's ~7% does."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -42,7 +43,7 @@ _BASELINES = [
 
 # The team gates perf on the 14kW hosts. Set this to run anywhere for bring-up, where the baselines
 # describe nothing and only "does it run" is being checked.
-_IGNORE_POWER = os.environ.get("HCA_PERF_IGNORE_POWER") == "1"
+_IGNORE_POWER = _tt_public_getenv("HCA_PERF_IGNORE_POWER") == "1"
 
 
 @pytest.mark.skipif(not is_blackhole(), reason="V4 HCA requires Blackhole")

@@ -19,6 +19,7 @@ empty state_dict when the cache is complete. Requires an 8x4 Blackhole mesh and:
     DEEPSEEK_V3_HF_MODEL=/mnt/models/deepseek-ai/DeepSeek-R1-0528
     TT_DS_PREFILL_HOST_REF_CACHE=/mnt/models/deepseek-prefill-cache/goldened
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass
@@ -86,7 +87,7 @@ def _resolve_trace_dir(variant) -> Path:
     overrides the variant's prefill_trace_default. A vllm trace nests metadata.json + kv_cache under
     one run-hash subdir, so if the dir itself has no metadata.json, descend into the sole subdir that
     does."""
-    path = Path(os.environ.get("PREFILL_TRACE_DIR", variant.test_prefill_trace_default))
+    path = Path(_tt_public_getenv("PREFILL_TRACE_DIR", variant.test_prefill_trace_default))
     if (path / "metadata.json").exists():
         return path
     subs = [d for d in sorted(path.iterdir()) if d.is_dir() and (d / "metadata.json").exists()]

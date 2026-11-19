@@ -2,7 +2,9 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import json
 import math
+import os
 
 from loguru import logger
 
@@ -137,13 +139,57 @@ class VisionModelArgs(ModelArgs):
         return layer_prefix + module_map[module_name]
 
     def reference_vision_model(self, depth=None):
-        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5ForConditionalGeneration as AutoModelForCausalLM
+        """The HF vision tower, built standalone from its own ``vision_config`` and loaded from the
+        ``model.visual.*`` safetensors entries only.
 
-        print("Loading Qwen3.5 model: ", AutoModelForCausalLM)
-        config = AutoModelForCausalLM.config_class.from_pretrained(self.CKPT_DIR)
-        config.vision_config.depth = depth if depth is not None else config.vision_config.depth
-        model = AutoModelForCausalLM.from_pretrained(self.CKPT_DIR, config=config)
-        return model.model.visual
+        The previous form -- ``Qwen3_5ForConditionalGeneration.from_pretrained(...).model.visual`` --
+        instantiated the WHOLE checkpoint (27B text tower included, dequantized to bf16 on a CPU
+        host) to reach a ~1 GB submodule, and was the largest single host-RAM consumer of model
+        init: 111 GB of virtual memory and a guaranteed OOM on a 16 GB host. The tower's runtime
+        dependencies on the reference module are ``patch_embed`` and ``fast_pos_embed_interpolate``
+        (plus ``.dtype``), all satisfied by the standalone module."""
+        import torch
+        from safetensors import safe_open
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5Config, Qwen3_5VisionModel
+
+        config = Qwen3_5Config.from_pretrained(self.CKPT_DIR)
+        vcfg = config.vision_config
+        if depth is not None:
+            vcfg.depth = depth
+        dtype = getattr(vcfg, "dtype", None) or getattr(config, "dtype", None) or torch.bfloat16
+        if isinstance(dtype, str):
+            dtype = getattr(torch, dtype)
+        logger.info(f"Loading Qwen3.5 vision tower standalone ({vcfg.depth} blocks, {dtype}) from model.visual.*")
+        with torch.device("cpu"):
+            model = Qwen3_5VisionModel._from_config(vcfg, dtype=dtype)
+
+        prefix = "model.visual."
+        ckpt = self.CKPT_DIR
+        index = os.path.join(ckpt, "model.safetensors.index.json")
+        if os.path.isfile(index):
+            with open(index) as f:
+                weight_map = json.load(f)["weight_map"]
+            files = sorted({fn for k, fn in weight_map.items() if k.startswith(prefix)})
+        else:
+            files = sorted(fn for fn in os.listdir(ckpt) if fn.endswith(".safetensors"))
+        keep_blocks = {f"blocks.{i}." for i in range(vcfg.depth)}
+        state = {}
+        for fn in files:
+            with safe_open(os.path.join(ckpt, fn), framework="pt") as sf:
+                for k in sf.keys():
+                    if not k.startswith(prefix):
+                        continue
+                    rel = k[len(prefix) :]
+                    if rel.startswith("blocks.") and not any(rel.startswith(b) for b in keep_blocks):
+                        continue  # depth-truncated tower (tests)
+                    state[rel] = sf.get_tensor(k).to(dtype)
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        # inv_freq is a non-persistent buffer computed in __init__; nothing else may be missing.
+        missing = [m for m in missing if not m.endswith("inv_freq")]
+        if missing or unexpected:
+            raise RuntimeError(f"vision tower state_dict mismatch: missing={missing[:5]} unexpected={unexpected[:5]}")
+        model.eval()
+        return model
 
     def reference_vision_block(self, layer_num=0):
         return self.reference_vision_model().blocks[layer_num]

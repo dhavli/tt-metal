@@ -52,6 +52,7 @@ zai-org/GLM-5.1 via the identical HF→MLACPU map. Trace dir: $GLM51_REF_DIR (de
 <repo>/bit_sculpt/results/glm-51); layers 0/30/60/77. The CPU-only block at
 the bottom validates the trace bundle (no weights/device).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import glob
 import os
@@ -103,7 +104,7 @@ OUTPUT_PCC = 0.98
 
 
 GLM_REF_LAYERS = [0, 30, 60, 77]  # indexer_logits captured for these (topk/kv exist for all 78)
-GLM_REPO = os.environ.get("GLM51_REPO", "zai-org/GLM-5.1")  # bf16 master; "-FP8" also works (loader dequants)
+GLM_REPO = _tt_public_getenv("GLM51_REPO", "zai-org/GLM-5.1")  # bf16 master; "-FP8" also works (loader dequants)
 _CASES = [("glm_5_1", l) for l in GLM_REF_LAYERS]
 _CASE_IDS = [f"{m}-L{l}" for m, l in _CASES]
 
@@ -125,7 +126,7 @@ def _ref_dir(model: str) -> Path:
     """Trace bundle dir for `model`: $GLM51_REF_DIR, else the in-tree bit_sculpt checkout at the
     repo root. This file lives at tests/sparse_mla/, so the repo root (<...>/tt-metal, which holds
     bit_sculpt/) is parents[5]."""
-    env = os.environ.get("GLM51_REF_DIR")
+    env = _tt_public_getenv("GLM51_REF_DIR")
     return Path(env) if env else Path(__file__).resolve().parents[5] / "bit_sculpt" / "results" / "glm-51"
 
 
@@ -258,8 +259,8 @@ def _assert_kv(ref_kv: torch.Tensor, kvpe: torch.Tensor, tag: str, kpe_layout: s
 _WORKER_L1_SIZE = ttnn._ttnn.device.DEFAULT_WORKER_L1_SIZE if is_blackhole() else WH_WORKER_L1_SIZE
 _TORUS_XY_CERTIFIED = (
     detect_num_devices() == 32
-    and os.environ.get("PREFILL_TORUS_XY_CERTIFIED") == "1"
-    and bool(os.environ.get("TT_MESH_GRAPH_DESC_PATH"))
+    and _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") == "1"
+    and bool(_tt_public_getenv("TT_MESH_GRAPH_DESC_PATH"))
 )
 
 

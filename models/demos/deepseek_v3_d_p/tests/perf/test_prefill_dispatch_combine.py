@@ -17,6 +17,7 @@ Required env vars (set by the parent perf test via extra_env):
                                   chunked-prefill capture holding every model's cases
                                   (required; there is no default capture)
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -96,8 +97,8 @@ def test_ttnn_dispatch_combine(
     experts_per_chip_override,
     model,
 ):
-    layer_str = os.getenv("TT_DS_CAPTURED_LAYER")
-    col_str = os.getenv("TT_DS_CAPTURED_COL")
+    layer_str = _tt_public_getenv("TT_DS_CAPTURED_LAYER")
+    col_str = _tt_public_getenv("TT_DS_CAPTURED_COL")
     if layer_str is None or col_str is None:
         pytest.skip("Requires TT_DS_CAPTURED_LAYER and TT_DS_CAPTURED_COL env vars")
 
@@ -146,7 +147,7 @@ def test_ttnn_dispatch_combine(
         layer=int(layer_str),
         col=int(col_str),
         model=model,
-        captured_indices_path=os.getenv("TT_DS_USE_CAPTURED_INDICES"),
+        captured_indices_path=_tt_public_getenv("TT_DS_USE_CAPTURED_INDICES"),
     )
     # get_gate_outputs produces Galaxy-global rows; keep the selected proxy column only.
     expert_offsets, expert_token_counts, expert_region_offsets, _ = get_gate_outputs(

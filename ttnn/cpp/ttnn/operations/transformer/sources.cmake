@@ -35,7 +35,21 @@ set(TTNN_OP_TRANSFORMER_SRCS
     chunk_gated_delta_rule/device/chunk_gated_delta_rule_program_factory.cpp
     chunk_gated_delta_rule/device/chunk_gdn_phased.cpp
     chunk_gated_delta_rule/device/chunk_gdn_phased_program_factory.cpp
+    chunk_gated_delta_rule/device/chunk_gdn_fused.cpp
+    chunk_gated_delta_rule/device/chunk_gdn_fused_program_factory.cpp
     chunk_gated_delta_rule/chunk_gated_delta_rule.cpp
+    decode_gated_delta_rule/device/decode_gated_delta_rule_device_operation.cpp
+    decode_gated_delta_rule/device/decode_gated_delta_rule_program_factory.cpp
+    decode_gated_delta_rule/decode_gated_delta_rule.cpp
+    gdn_conv_gates/gdn_conv_gates.cpp
+    gdn_conv_gates/device/gdn_conv_gates_device_operation.cpp
+    gdn_conv_gates/device/gdn_conv_gates_program_factory.cpp
+    gdn_norm_gate/gdn_norm_gate.cpp
+    gdn_norm_gate/device/gdn_norm_gate_device_operation.cpp
+    gdn_norm_gate/device/gdn_norm_gate_program_factory.cpp
+    attn_prep/attn_prep.cpp
+    attn_prep/device/attn_prep_device_operation.cpp
+    attn_prep/device/attn_prep_program_factory.cpp
 )
 
 # Registered on the shared `ttnn` Python module target from
@@ -51,5 +65,9 @@ set(TTNN_OP_TRANSFORMER_NANOBIND_SRCS
     split_query_key_value_and_split_heads/split_query_key_value_and_split_heads_nanobind.cpp
     gated_delta_attn/gated_delta_attn_nanobind.cpp
     chunk_gated_delta_rule/chunk_gated_delta_rule_nanobind.cpp
+    decode_gated_delta_rule/decode_gated_delta_rule_nanobind.cpp
+    gdn_conv_gates/gdn_conv_gates_nanobind.cpp
+    gdn_norm_gate/gdn_norm_gate_nanobind.cpp
+    attn_prep/attn_prep_nanobind.cpp
     transformer_nanobind.cpp
 )

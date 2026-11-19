@@ -29,6 +29,7 @@ Run all:    pytest models/demos/blackhole/qwen36/demo/vision_demo.py -v -s
 Run single: pytest models/demos/blackhole/qwen36/demo/vision_demo.py -v -s -k "traced_single_image"
 Run TP:     MESH_DEVICE=P150x4 pytest models/demos/blackhole/qwen36/demo/vision_demo.py -v -s -k "traced_single_image"
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -48,7 +49,7 @@ from models.tt_transformers.tt.generator import Generator
 # (1,1) and the model runs its validated single-device path; on a multi-device mesh it needs
 # FABRIC_1D for the TP collectives. The vision splice buffers are allocated on whichever mesh.
 _MESH_SHAPE = {"N150": (1, 1), "N300": (1, 2), "P150x4": (1, 4), "N150x4": (1, 4), "T3K": (1, 8)}.get(
-    os.environ.get("MESH_DEVICE"), (1, 1)
+    _tt_public_getenv("MESH_DEVICE"), (1, 1)
 )
 _MULTI = _MESH_SHAPE != (1, 1)
 
@@ -87,11 +88,11 @@ VIDEO_LONGEST_EDGE = 1605632  # per-video total-pixel budget passed to the proce
 # QWEN35_NO_REPEAT_NGRAM (no truncation). Untruncated multinomial at moderate temperature samples
 # the long tail, which drifts on the (bfp8) image-conditioned logits — top-p/top-k cut that tail.
 # Reference-ish defaults once sampling is on: QWEN35_TOP_P≈0.8, QWEN35_TOP_K≈20.
-_TEMP = float(os.environ.get("QWEN35_TEMP", "0") or 0)
-_REP_PEN = float(os.environ.get("QWEN35_REP_PENALTY", "1.0") or 1.0)
-_NO_REPEAT = int(os.environ.get("QWEN35_NO_REPEAT_NGRAM", "0") or 0)
-_TOP_P = float(os.environ.get("QWEN35_TOP_P", "1.0") or 1.0)  # 1.0 => nucleus filtering off
-_TOP_K = int(os.environ.get("QWEN35_TOP_K", "0") or 0)  # 0 => top-k filtering off
+_TEMP = float(_tt_public_getenv("QWEN35_TEMP", "0") or 0)
+_REP_PEN = float(_tt_public_getenv("QWEN35_REP_PENALTY", "1.0") or 1.0)
+_NO_REPEAT = int(_tt_public_getenv("QWEN35_NO_REPEAT_NGRAM", "0") or 0)
+_TOP_P = float(_tt_public_getenv("QWEN35_TOP_P", "1.0") or 1.0)  # 1.0 => nucleus filtering off
+_TOP_K = int(_tt_public_getenv("QWEN35_TOP_K", "0") or 0)  # 0 => top-k filtering off
 logger.info(f"Sampling: temp={_TEMP} top_p={_TOP_P} top_k={_TOP_K} rep_pen={_REP_PEN} no_repeat={_NO_REPEAT}")
 
 

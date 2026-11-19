@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import glob
 import os
 from os import listdir
@@ -443,7 +444,7 @@ def run_demo_whisper_for_conditional_generation_dataset(
     # Use load_from_disk() when the Arrow cache exists under HF_HOME/datasets — pure
     # read, no lock file. Falls back to load_dataset() which writes a lock to
     # HF_DATASETS_CACHE (=/tmp in CI) if no Arrow cache is found.
-    _hf_datasets = os.path.join(os.environ.get("HF_HOME", ""), "datasets")
+    _hf_datasets = os.path.join(_tt_public_getenv("HF_HOME", ""), "datasets")
     _arrow_dirs = (
         [
             os.path.dirname(p)
@@ -696,7 +697,7 @@ def run_demo_whisper_for_translation_dataset(
 @pytest.mark.parametrize(
     "mesh_device",
     [available_devices]
-    if os.getenv("CI") != "true"
+    if _tt_public_getenv("CI") != "true"
     else ([1, available_devices] if available_devices != 1 else [available_devices]),
     indirect=True,
 )
@@ -723,7 +724,7 @@ def test_demo_for_audio_classification_inference(
 @pytest.mark.parametrize(
     "mesh_device",
     [available_devices]
-    if os.getenv("CI") != "true"
+    if _tt_public_getenv("CI") != "true"
     else ([1, available_devices] if available_devices != 1 else [available_devices]),
     indirect=True,
 )
@@ -760,7 +761,7 @@ def test_demo_for_audio_classification_dataset(
 @pytest.mark.parametrize(
     "mesh_device",
     [available_devices]
-    if os.getenv("CI") != "true"
+    if _tt_public_getenv("CI") != "true"
     else ([1, available_devices] if available_devices != 1 else [available_devices]),
     indirect=True,
 )
@@ -959,7 +960,7 @@ def test_demo_for_conditional_generation(
 @pytest.mark.parametrize(
     "mesh_device",
     [available_devices]
-    if os.getenv("CI") != "true"
+    if _tt_public_getenv("CI") != "true"
     else ([1, available_devices] if available_devices != 1 else [available_devices]),
     indirect=True,
 )
@@ -1040,7 +1041,7 @@ def test_demo_for_conditional_generation_dataset(
 @pytest.mark.parametrize(
     "mesh_device",
     [available_devices]
-    if os.getenv("CI") != "true"
+    if _tt_public_getenv("CI") != "true"
     else ([1, available_devices] if available_devices != 1 else [available_devices]),
     indirect=True,
 )

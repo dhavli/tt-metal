@@ -70,6 +70,14 @@ void kernel_main() {
     constexpr uint32_t num_tree_reduction_rounds = get_compile_time_arg_val(30);
     constexpr uint32_t original_block_size = get_compile_time_arg_val(31);
     constexpr bool has_block_padding = original_block_size > 0 && original_block_size < 32;
+    // cfx (tt-stack 0034): speculative-verify fold (rt_args_common.hpp). 0 = the legacy program. Sq_chunk_t == PNHt
+    // == T*PNHt_cand row-tiles, each candidate with its own causal bound (the writer's per-chunk mask blocks).
+    constexpr uint32_t spec_fold_T = SDPA_SPEC_FOLD_T;
+    constexpr uint32_t spec_fold_B = SDPA_SPEC_FOLD_B;
+    static_assert(spec_fold_T == 0 || (is_causal && !use_attention_mask && !use_attention_sink && !tilize_q &&
+                                       q_heads_parallel_factor == 1 && !has_block_padding && sliding_window_size == 0 &&
+                                       num_heads_per_core == 1),
+                  "SDPA_SPEC_FOLD_T: causal paged decode, no mask/sink/tilize/q-parallel/block padding/window");
 
     constexpr uint32_t q_chunk_tiles = Sq_chunk_t * DHt;
     constexpr uint32_t out_chunk_tiles = Sq_chunk_t * vDHt;
@@ -145,6 +153,7 @@ void kernel_main() {
     constexpr uint32_t cur_pos_base = St * 32 - 1;
     uint32_t cur_pos = cur_pos_base;  // default to non-causal, which we do attention on the entire kv cache. In this
                                       // case we set cur_pos to the last position
+    uint32_t spec_fold_pos_min = 0;   // fold: the group's smallest valid candidate position (mask predicate, split)
     if constexpr (is_causal) {
         // using UINT32_MAX as a flag to indicate that cur_pos is not provided as a list
         if (cur_pos_arg != UINT32_MAX) {
@@ -152,7 +161,14 @@ void kernel_main() {
         } else {
             // Read cur_pos from CB using mailbox-based synchronization (issue #27979).
             CircularBuffer(cb_cur_pos).wait_front(1);
-            cur_pos = read_tile_value(cb_cur_pos, 0, cur_batch / q_heads_parallel_factor);
+            if constexpr (spec_fold_T > 0) {
+                const SpecFoldPositions fp = spec_fold_positions<spec_fold_T>(
+                    cur_batch, spec_fold_B, [&](uint32_t i) -> uint32_t { return read_tile_value(cb_cur_pos, 0, i); });
+                cur_pos = fp.skip ? UINT32_MAX : fp.pos_max;
+                spec_fold_pos_min = fp.pos_min;
+            } else {
+                cur_pos = read_tile_value(cb_cur_pos, 0, cur_batch / q_heads_parallel_factor);
+            }
             CircularBuffer(cb_cur_pos).pop_front(1);
         }
         if (cur_pos == UINT32_MAX) {
@@ -173,8 +189,9 @@ void kernel_main() {
 
     // Get the sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end, window_start_unaligned, window_start_chunk] =
-        get_workload_for_core(
+        get_workload_for_core_spec_fold<spec_fold_T>(
             cur_pos,
+            spec_fold_pos_min,
             cur_batch,
             core_num_in_reduce,
             num_cores_per_head,
@@ -253,7 +270,9 @@ void kernel_main() {
 #ifdef DYNAMIC_CHUNK_SIZE
     const uint32_t qk_subblock_h_dynamic = 1;
     const uint32_t qk_subblock_w_dynamic = Sk_chunk_t_dynamic;  // Guaranteed < DST
-    const uint32_t qk_in0_num_subblocks_dynamic = 1;
+    // matmul_blocks walks in0 as in0_num_subblocks blocks of subblock_h (1) row-tiles, so it must be Sq_chunk_t to
+    // produce every row-tile of QK. The legacy literal 1 is kept off the fold path (byte-identical programs).
+    const uint32_t qk_in0_num_subblocks_dynamic = spec_fold_T > 0 ? Sq_chunk_t : 1;
     const uint32_t qk_in1_num_subblocks_dynamic = 1;
     const uint32_t out_in0_block_w_dynamic = Sk_chunk_t_dynamic;
     const uint32_t out_num_blocks_dynamic = 1;
@@ -348,7 +367,10 @@ void kernel_main() {
 
             // OPTIMIZATION: Add the attention mask directly on top of DST if chunk sizes are dynamic
 #ifdef DYNAMIC_CHUNK_SIZE
-                bool add_causal_mask_fusion = is_causal && k_chunk == k_chunk_end - 1 && apply_mask_at_last_chunk;
+                // Fold: never fused (the fused add waits on the mask without popping and reads only the first
+                // subblock's tiles); the per-candidate block is added and popped below instead.
+                bool add_causal_mask_fusion =
+                    spec_fold_T == 0 && is_causal && k_chunk == k_chunk_end - 1 && apply_mask_at_last_chunk;
                 bool add_sliding_window_mask_fusion = k_chunk == window_start_chunk && window_start_unaligned > 0;
                 bool add_mask_fusion = add_causal_mask_fusion || use_attention_mask || add_sliding_window_mask_fusion;
 #else
@@ -391,7 +413,14 @@ void kernel_main() {
                 }
 
                 if (!add_mask_fusion) {
-                    if constexpr (is_causal) {
+                    if constexpr (spec_fold_T > 0) {
+                        // One mask block per chunk the predicate selects (the writer's identical predicate, same
+                        // ascending order), popped after use.
+                        if (spec_fold_chunk_needs_mask(k_chunk, k_chunk_size_dynamic, spec_fold_pos_min)) {
+                            reconfig_data_format(cb_qk_im, cb_mask_in);
+                            add_block_inplace<true>(cb_qk_im, cb_mask_in, qk_chunk_tiles_dynamic);
+                        }
+                    } else if constexpr (is_causal) {
                         // For decode, we only apply mask at the last chunk for causal mode
                         if (k_chunk == k_chunk_end - 1 && apply_mask_at_last_chunk) {
                             reconfig_data_format(cb_qk_im, cb_mask_in);

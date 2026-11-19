@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -19,7 +20,7 @@ from ....pipelines.flux1.pipeline_flux1 import Flux1Pipeline, Flux1PipelineConfi
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), False)],
 )
 @pytest.mark.parametrize(
     "device_params",
@@ -110,7 +111,7 @@ def test_flux1_pipeline(
     logger.info(f"Encoder parallel config: {encoder_parallel_config}")
     logger.info(f"VAE parallel config: {vae_parallel_config}")
     logger.info(f"T5 enabled: {enable_t5_text_encoder}")
-    logger.info(f"HF_HUB_OFFLINE: {os.environ.get('HF_HUB_OFFLINE', '<unset>')}")
+    logger.info(f"HF_HUB_OFFLINE: {_tt_public_getenv('HF_HUB_OFFLINE', '<unset>')}")
 
     pipeline = Flux1Pipeline(
         device=mesh_device,

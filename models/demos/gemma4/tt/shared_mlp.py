@@ -13,6 +13,7 @@ HF weight shapes:
   up_proj.weight:   [intermediate_size, hidden_size] = [2112, 2816]
   down_proj.weight: [hidden_size, intermediate_size] = [2816, 2112]
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -28,7 +29,7 @@ from models.demos.gemma4.utils.general_utils import get_cache_file_name
 # multi-device (tp>1); the single width-sharded weight is the same size as the
 # interleaved one, so there is no memory cost. Set GEMMA4_MLP_DRAM_SHARD=0 to
 # fall back to plain interleaved matmuls.
-_DRAM_SHARD_MLP = os.environ.get("GEMMA4_MLP_DRAM_SHARD", "1") != "0"
+_DRAM_SHARD_MLP = _tt_public_getenv("GEMMA4_MLP_DRAM_SHARD", "1") != "0"
 
 
 def resolve_shared_mlp_intermediate_size(hf_config, state_dict=None, layer_idx=None) -> int:

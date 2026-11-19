@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import pytest
 from loguru import logger
 import os
@@ -109,7 +110,7 @@ def test_llama_demo(
         pytest.skip("Do not run the 'long-context' or accuracy tests on CI to reduce load")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("FAKE_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("FAKE_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
     if paged_attention:
@@ -213,7 +214,7 @@ def test_qwen_demo(
         pytest.skip("Do not run the 'long-context' or accuracy tests on CI to reduce load")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("FAKE_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("FAKE_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
     if paged_attention:

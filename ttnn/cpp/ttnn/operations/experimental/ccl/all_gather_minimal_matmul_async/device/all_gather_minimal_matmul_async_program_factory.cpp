@@ -206,7 +206,10 @@ all_gather_minimal_matmul_async_factory_helper(
     uint32_t fsdp_ring_index,
     const std::vector<ttnn::GlobalSemaphore>& fsdp_semaphore,
     ttnn::ccl::Topology fsdp_topology,
-    bool fuse_swiglu = false) {
+    bool fuse_swiglu = false,
+    uint32_t swiglu_pack = 0,
+    uint32_t gbs = 0,
+    uint32_t fwo = 0) {
     auto* device = input_tensor.device();
 
     if (!config.has_value()) {
@@ -405,12 +408,67 @@ all_gather_minimal_matmul_async_factory_helper(
     auto core_endx_1_0 = tt::tt_metal::CoreCoord{grid_size.x - 2, 0};
 
     auto in0_sender_cores = CoreRange(core_0_0, transpose_core_grid ? core_endx_0 : core_0_endy);
+    // cfx 0063: under FWO the chain's two former fabric-sender columns run the no-fabric kernel (no forward)
     auto in0_receiver_cores_no_fabric =
-        transpose_core_grid ? CoreRange(core_0_1, core_endx_endy_2) : CoreRange(core_1_0, core_endx_2_endy);
+        transpose_core_grid ? CoreRange(core_0_1, core_endx_endy_2)
+                            : CoreRange(core_1_0, ((fwo & 1u) != 0) ? core_endx_endy : core_endx_2_endy);
     auto in0_receiver_cores_fabric =
         transpose_core_grid ? CoreRange(core_0_endy_1, core_endx_endy) : CoreRange(core_endx_1_0, core_endx_endy);
     auto in1_sender_cores = CoreRange(core_0_0, transpose_core_grid ? core_0_endy : core_endx_0);
     auto in1_receiver_cores = CoreRange(transpose_core_grid ? core_1_0 : core_0_1, core_endx_endy);
+
+    // cfx 0063 (QWEN36_AGMM_FWO): one forwarder core per in0 row on the free row full_grid.y - 2, i.e. the row right
+    // above the in0 mux row (full_grid.y - 1). Row r's forwarder sits at x = mux_x - 1 + (r % num_workers_per_link),
+    // so a mux's num_workers_per_link clients are four adjacent cores straddling its column, one NoC hop up (nt11x8,
+    // 2 links x 4 workers: device 0 muxes at x 3 / 7 -> forwarders x 2-5 / 6-9; device 1 muxes at x 4 / 8 -> x 3-6 /
+    // 7-10). Only the untransposed, full-width, non-FSDP, two-device Linear layout qualifies (the in0 muxes are then on
+    // the bottom row at in0_mux_logical's x); anything else is refused. Off: nothing below runs, nothing changes.
+    const bool fwo_on = (fwo & 1u) != 0;
+    const auto fwo_full_grid = device->compute_with_storage_grid_size();
+    std::vector<tt::tt_metal::CoreCoord> fwo_cores;  // index = in0 row (core.y)
+    CoreRangeSet fwo_core_set;
+    if (fwo_on) {
+        TT_FATAL(
+            topology == ttnn::ccl::Topology::Linear && ring_size == 2,
+            "QWEN36_AGMM_FWO: Linear topology on exactly 2 devices only (ring_size {})",
+            ring_size);
+        TT_FATAL(!persistent_weight_buffer.has_value(), "QWEN36_AGMM_FWO: not with FSDP fusion");
+        TT_FATAL(
+            !transpose_core_grid,
+            "QWEN36_AGMM_FWO: untransposed grid only (in0 chains along rows; M={} N={} force_transpose={})",
+            M,
+            N,
+            force_transpose);
+        TT_FATAL(
+            grid_size.x == fwo_full_grid.x,
+            "QWEN36_AGMM_FWO: the matmul grid must span every column ({} of {}) so the in0 muxes sit on the bottom row",
+            grid_size.x,
+            fwo_full_grid.x);
+        TT_FATAL(
+            grid_size.y + 2 <= fwo_full_grid.y,
+            "QWEN36_AGMM_FWO: needs row {} free for the forwarders (grid has {} rows of {}; QWEN36_AGMM_GRID9 uses it)",
+            fwo_full_grid.y - 2,
+            grid_size.y,
+            fwo_full_grid.y);
+        const uint32_t fwo_dir = backward_coord.has_value() ? 1u : 0u;
+        std::vector<CoreRange> fwo_ranges;
+        for (uint32_t r = 0; r < grid_size.y; ++r) {
+            const uint32_t link = r / num_workers_per_link;
+            uint32_t mux_x = (num_workers_per_link * (link + 1)) - (1 - fwo_dir);  // in0_mux_logical, bottom row
+            if (mux_x >= fwo_full_grid.x) {
+                mux_x -= fwo_full_grid.x;
+            }
+            const uint32_t x = (mux_x >= 1 ? mux_x - 1 : 0) + (r % num_workers_per_link);
+            TT_FATAL(x < fwo_full_grid.x, "QWEN36_AGMM_FWO: forwarder of row {} at x={} is off the grid", r, x);
+            const tt::tt_metal::CoreCoord c(x, fwo_full_grid.y - 2);
+            for (const auto& o : fwo_cores) {
+                TT_FATAL(!(o == c), "QWEN36_AGMM_FWO: two rows map to forwarder core ({}, {})", c.x, c.y);
+            }
+            fwo_cores.push_back(c);
+            fwo_ranges.emplace_back(c);
+        }
+        fwo_core_set = CoreRangeSet(fwo_ranges);
+    }
 
     auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
     auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
@@ -424,7 +482,10 @@ all_gather_minimal_matmul_async_factory_helper(
     // increment it on the master's core. Per-core creation diverges when a core also carries
     // the other operand's mux semaphores (the in0/in1 sender overlap), which deadlocked teardown.
     // Separate ids for in0 vs in1 so an overlap core's two muxes don't share a termination slot.
-    auto in0_term_sync_id = tt::tt_metal::CreateSemaphore(program, core_grid, 0);
+    // cfx 0063: under FWO the in0 mux clients are the forwarders, so their termination slot exists there too (same id:
+    // the forwarder cores hold no semaphore yet, so the lowest id free on core_grid is free on them as well).
+    auto in0_term_sync_id = fwo_on ? tt::tt_metal::CreateSemaphore(program, CoreRangeSet(core_grid).merge(fwo_core_set), 0)
+                                   : tt::tt_metal::CreateSemaphore(program, core_grid, 0);
     auto in1_term_sync_id = tt::tt_metal::CreateSemaphore(program, core_grid, 0);
 
     uint32_t in0_cb_id = tt::CBIndex::c_0;
@@ -439,6 +500,13 @@ all_gather_minimal_matmul_async_factory_helper(
     uint32_t intermediate_cb_id = tt::CBIndex::c_3;
     tt::tt_metal::create_cb(
         intermediate_cb_id, program, core_grid, intermediate_tile_size, interm_cb_num_tiles, intermediate_data_format);
+
+    // cfx 0063: the forwarders' two in0 K-block slots (the next block's DRAM read overlaps the current forward)
+    const uint32_t fwo_cb_id = tt::CBIndex::c_7;
+    if (fwo_on) {
+        tt::tt_metal::create_cb(
+            fwo_cb_id, program, fwo_core_set, in0_tile_size, 2 * in0_block_num_tiles, in0_data_format);
+    }
 
     if (use_bias) {
         uint32_t in2_cb_id = tt::CBIndex::c_4;
@@ -584,6 +652,22 @@ all_gather_minimal_matmul_async_factory_helper(
         return (dir && backward_coord.has_value()) || (!dir && forward_coord.has_value());
     };
 
+    if (fwo_on) {
+        TT_FATAL(
+            !single_row_muxes && !in0_mux_in_column, "QWEN36_AGMM_FWO: the in0 muxes must be on the bottom row");
+        for (uint32_t r = 0; r < fwo_cores.size(); ++r) {
+            const auto m = in0_mux_logical(r / num_workers_per_link, in0_uni_dir);
+            TT_FATAL(
+                m.y == fwo_full_grid.y - 1 && fwo_cores[r].x + 1 >= m.x && fwo_cores[r].x + 1 <= m.x + num_workers_per_link,
+                "QWEN36_AGMM_FWO: forwarder ({}, {}) of row {} is not beside its mux ({}, {})",
+                fwo_cores[r].x,
+                fwo_cores[r].y,
+                r,
+                m.x,
+                m.y);
+        }
+    }
+
     std::vector<CoreRange> mux_core_ranges;
     mux_core_ranges.reserve(num_mux_cores);
     for (uint32_t mux_id = 0; mux_id < num_mux_cores; ++mux_id) {
@@ -662,6 +746,11 @@ all_gather_minimal_matmul_async_factory_helper(
     if (fuse_swiglu) {
         defines["FUSE_SWIGLU"] = "1";
     }
+    // cfx 0049 (QWEN36_AGMM_SWIGLU_PACK): injector cores defer their output writes too (read by every kernel that
+    // writes output; compute ignores it). Off adds nothing, so the stock programs are byte-identical.
+    if (swiglu_pack & 2u) {
+        defines["AGMM_DEFER_INJECTORS"] = "1";
+    }
     if (use_fused_ternary) {
         defines["FUSE_TERNARY"] = "1";
 
@@ -700,6 +789,18 @@ all_gather_minimal_matmul_async_factory_helper(
     in0_defines["IS_IN0"] = "1";
     in0_fabric_defines = in0_defines;
     in0_fabric_defines["USE_MUX"] = "1";
+    // cfx 0057 (QWEN36_AGMM_GBS): sharded gather buffer -> row reads and contiguous fabric packets of up to
+    // packet_size / tile_size tiles (the fabric payload cap, 4352 B = 4 bf8 tiles unless QWEN36_FABRIC_PAYLOAD raises it).
+    if (gbs & 1u) {
+        const uint32_t gbs_tiles_per_pkt = std::max<uint32_t>(1, num_pages_per_packet);
+        in0_defines["AGMM_GBS"] = "1";
+        in0_defines["AGMM_GBS_TILES_PER_PKT"] = std::to_string(gbs_tiles_per_pkt);
+        in0_fabric_defines["AGMM_GBS"] = "1";
+        in0_fabric_defines["AGMM_GBS_TILES_PER_PKT"] = std::to_string(gbs_tiles_per_pkt);
+        if (gbs & 2u) {
+            in0_fabric_defines["AGMM_GBS_MUSTFAIL"] = "1";
+        }
+    }
     auto in1_defines = defines;
     if (persistent_weight_buffer.has_value()) {
         in1_defines["FSDP_FUSED"] = "1";
@@ -958,15 +1059,59 @@ all_gather_minimal_matmul_async_factory_helper(
         fused_ternary_input_b,
         true);
 
-    auto in0_receiver_fabric_kernels_id = CreateKernel(
-        program,
-        "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_minimal_matmul_async/device/kernels/dm_in0_sender.cpp",
-        in0_receiver_cores_fabric,
-        tt::tt_metal::DataMovementConfig{
-            .processor = in0_risc,
-            .noc = in0_noc,
-            .compile_args = in0_receiver_fabric_compile_time_args,
-            .defines = in0_fabric_defines});
+    tt::tt_metal::KernelHandle in0_receiver_fabric_kernels_id{};
+    if (!fwo_on) {
+        in0_receiver_fabric_kernels_id = CreateKernel(
+            program,
+            "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_minimal_matmul_async/device/kernels/dm_in0_sender.cpp",
+            in0_receiver_cores_fabric,
+            tt::tt_metal::DataMovementConfig{
+                .processor = in0_risc,
+                .noc = in0_noc,
+                .compile_args = in0_receiver_fabric_compile_time_args,
+                .defines = in0_fabric_defines});
+    } else {
+        // cfx 0063: the forwarder kernel takes the receiver-fabric kernel's handle (same common runtime args, so
+        // override_runtime_arguments updates its buffer addresses unchanged).
+        std::vector<uint32_t> fwo_ct_args = {
+            M_tiles,
+            K_tiles,
+            M_block_tiles,
+            K_block_tiles,
+            M_blocks_per_core,
+            in0_tile_size,
+            ring_size,
+            skewed_rank,
+            in3_tile_size,
+            num_tiles_to_write_per_packet,
+            num_targets_forward,
+            num_targets_backward,
+            K_tiles_per_device,
+            K_block_tail_tiles,
+            fwo_cb_id,
+        };
+        fabric_mux_connection_ct_args(
+            num_workers_per_link, tt::tt_fabric::FabricMuxChannelType::FULL_SIZE_CHANNEL, mux_kernel_config, fwo_ct_args);
+        fwo_ct_args.insert(fwo_ct_args.end(), unicast_forward_args.begin(), unicast_forward_args.end());
+        fwo_ct_args.insert(fwo_ct_args.end(), unicast_backward_args.begin(), unicast_backward_args.end());
+        tt::tt_metal::TensorAccessorArgs(*ag_output_tensor.buffer()).append_to(fwo_ct_args);
+        tt::tt_metal::TensorAccessorArgs(*input_tensor.buffer()).append_to(fwo_ct_args);
+        auto fwo_defines = in0_fabric_defines;
+        fwo_defines["AGMM_FWO"] = "1";
+        if (fwo & 2u) {
+            fwo_defines["AGMM_FWO_MUSTFAIL"] = "1";
+        }
+        in0_receiver_fabric_kernels_id = CreateKernel(
+            program,
+            "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_minimal_matmul_async/device/kernels/"
+            "dm_in0_forwarder.cpp",
+            fwo_core_set,
+            tt::tt_metal::DataMovementConfig{
+                .processor = in0_risc,
+                .noc = in0_noc,
+                .compile_args = fwo_ct_args,
+                .defines = fwo_defines});
+    }
 
     // For in1's primary accessor: when fsdp_fused, the kernel reads from PWB (gathered weight),
     // so the main accessor describes the PWB. When not fsdp_fused, it describes the weight tensor
@@ -1078,6 +1223,15 @@ all_gather_minimal_matmul_async_factory_helper(
             mm_output_tensors[0].dtype());
     }
     compute_defines.merge(compute_activation_defines);
+    // cfx 0049: SwiGLU on the pack thread in each output block's last K block (fuse_swiglu without a bias only; the
+    // device operation masks the bit otherwise). MUSTFAIL drops the partial-sum add.
+    if ((swiglu_pack & 1u) && fuse_swiglu && !use_bias) {
+        TT_FATAL(subblock_w % 2 == 0, "QWEN36_AGMM_SWIGLU_PACK: subblock_w ({}) must be even", subblock_w);
+        compute_defines["SWIGLU_PACK"] = "1";
+        if (swiglu_pack & 4u) {
+            compute_defines["SWIGLU_PACK_MUSTFAIL"] = "1";
+        }
+    }
     auto compute_kernels_id = CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_minimal_matmul_async/device/kernels/compute.cpp",
@@ -1259,7 +1413,9 @@ all_gather_minimal_matmul_async_factory_helper(
         const bool in0_increasing = (in0_noc == tt::tt_metal::NOC::NOC_0);
         const uint32_t in0_fwd_idx = in0_increasing ? static_cast<uint32_t>(in0_core_order.size() - 1) : 1u;
         const uint32_t in0_bwd_idx = in0_increasing ? static_cast<uint32_t>(in0_core_order.size() - 2) : 2u;
-        const bool in0_is_fabric_core = (in0_core_order_index == in0_fwd_idx) || (in0_core_order_index == in0_bwd_idx);
+        // cfx 0063: under FWO no chain core forwards (the row's forwarder does), so none is a mux client
+        const bool in0_is_fabric_core =
+            !fwo_on && ((in0_core_order_index == in0_fwd_idx) || (in0_core_order_index == in0_bwd_idx));
         const auto in0_fwd_core = in0_core_order.at(in0_fwd_idx);
         const auto in0_bwd_core = in0_core_order.at(in0_bwd_idx);
 
@@ -1283,6 +1439,12 @@ all_gather_minimal_matmul_async_factory_helper(
         // The writer receiver cores always have core.x > 0
         uint32_t defer_write_k_block = core.y * k_blocks_per_core;
         defer_write_k_block = std::min(defer_write_k_block, K_blocks - 1);
+        // cfx 0049 (upstream #59325 f4ff3359): never K block 0 when there is a later one: a writer waits for the
+        // previous output block before it reads (and, on an injector, forwards) the operand of the K block it defers
+        // to, so deferring to K block 0 stalls the next block's first K block behind the previous block's write.
+        if ((swiglu_pack & 2u) && K_blocks > 1) {
+            defer_write_k_block = std::max(defer_write_k_block, 1u);
+        }
 
         bool is_in0_sink = core == in0_core_order.back();
         bool is_in1_sink = core == in1_core_order.back();
@@ -1554,6 +1716,41 @@ all_gather_minimal_matmul_async_factory_helper(
         SetRuntimeArgs(program, compute_kernels_id, core, compute_runtime_args);
     }
 
+    // cfx 0063: forwarder runtime args: the row's M range, the row's injector (the peer's out_ready_sem target, same
+    // coordinates on both devices), then the mux client args the chain's fabric sender used to get. The termination
+    // master is the forwarder of the group's first row (worker_idx 0), as it was the chain core of that row.
+    if (fwo_on) {
+        for (uint32_t r = 0; r < fwo_cores.size(); ++r) {
+            const uint32_t worker_idx = r % num_workers_per_link;
+            const uint32_t group_base = r - worker_idx;
+            const uint32_t mux_clients = std::min(group_base + num_workers_per_link, in0_parallel_axis_cores) - group_base;
+            const auto injector_virtual = device->worker_core_from_logical_core(tt::tt_metal::CoreCoord(0, r));
+            std::vector<uint32_t> fwo_args = {
+                M_tiles_per_core * r,
+                M_tiles_per_core * (r + 1),
+                (uint32_t)injector_virtual.x,
+                (uint32_t)injector_virtual.y,
+            };
+            const auto mux_virtual =
+                device->worker_core_from_logical_core(in0_mux_logical(r / num_workers_per_link, in0_uni_dir));
+            const auto term_master_virtual = device->worker_core_from_logical_core(fwo_cores.at(group_base));
+            fabric_mux_connection_rt_args(
+                mux_connection_valid(in0_uni_dir),
+                worker_idx == 0,
+                tt::tt_fabric::FabricMuxChannelType::FULL_SIZE_CHANNEL,
+                mux_virtual,
+                worker_idx,
+                fwo_cores[r],
+                mux_kernel_config,
+                program,
+                term_master_virtual,
+                mux_clients,
+                in0_term_sync_id,
+                fwo_args);
+            SetRuntimeArgs(program, in0_receiver_fabric_kernels_id, fwo_cores[r], fwo_args);
+        }
+    }
+
     return {
         num_cores,
         cores,
@@ -1723,7 +1920,10 @@ all_gather_minimal_matmul_async_factory(
     uint32_t fsdp_ring_index,
     const std::vector<ttnn::GlobalSemaphore>& fsdp_semaphore,
     ttnn::ccl::Topology fsdp_topology,
-    bool fuse_swiglu) {
+    bool fuse_swiglu,
+    uint32_t swiglu_pack = 0,
+    uint32_t gbs = 0,
+    uint32_t fwo = 0) {
     tt::tt_metal::Program program{};
 
     return {
@@ -1763,7 +1963,10 @@ all_gather_minimal_matmul_async_factory(
             fsdp_ring_index,
             fsdp_semaphore,
             fsdp_topology,
-            fuse_swiglu)};
+            fuse_swiglu,
+            swiglu_pack,
+            gbs,
+            fwo)};
 }
 
 ttnn::device_operation::CachedProgram<AllGatherMinimalMatmulAsyncProgramFactory::shared_variables_t>
@@ -1841,7 +2044,10 @@ AllGatherMinimalMatmulAsyncProgramFactory::create_at(
         fsdp_ring_index,
         attributes.fsdp_semaphore,
         attributes.fsdp_topology,
-        attributes.fuse_swiglu);
+        attributes.fuse_swiglu,
+        attributes.swiglu_pack,
+        attributes.gbs,
+        attributes.fwo);
 }
 
 }  // namespace ttnn::experimental::prim

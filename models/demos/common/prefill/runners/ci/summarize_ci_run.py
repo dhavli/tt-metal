@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import os
 import re
@@ -132,7 +133,7 @@ def _cell_metrics(kept, disp):
 def _publish(lines, name):
     title = f"disaggregated prefill perf -- {name or 'run'}"
     if name:
-        home = os.environ.get("TT_METAL_HOME")
+        home = _tt_public_getenv("TT_METAL_HOME")
         if home and home not in sys.path:
             sys.path.insert(0, home)
         try:

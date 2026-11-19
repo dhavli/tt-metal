@@ -651,7 +651,12 @@ void kernel_main() {
              * of the next output block.
              */
             defer_write = !((m_block_iter == M_blocks_per_core - 1) && (n_block_iter == (N_blocks_per_core - 1)));
+#ifndef AGMM_DEFER_INJECTORS
             defer_write = defer_write && !is_injector_core;
+#else
+            // cfx 0049 (upstream #59325 f4ff3359): injectors defer too: writing synchronously here would hold the next
+            // block's in0 / in1 injection (and every core down its forwarding chain) behind this block's last subblock.
+#endif
 
             if (!defer_write) {
                 if constexpr (is_output_writer) {

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import copy
 import os
 
@@ -196,7 +197,7 @@ class ResNet50TestInfra:
         # the device's flattened NHWC layout. Gated on the env so default runs stay zero-overhead.
         _golden_cap = {}
         _golden_handles = []
-        if os.environ.get("RESNET_PCC_LOG") == "1":
+        if _tt_public_getenv("RESNET_PCC_LOG") == "1":
 
             def _mk_golden_hook(name):
                 def _hook(_m, _inp, out):

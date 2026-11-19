@@ -12,6 +12,7 @@ Usage:
     # Multi-device (N300)
     MESH_DEVICE=N300 OPENVLA_WEIGHTS=~/openvla_weights/ pytest models/experimental/openvla/tests/ -v
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -26,7 +27,7 @@ def pytest_configure(config):
 @pytest.fixture(scope="session")
 def openvla_weights_path():
     """Get OpenVLA weights path from environment."""
-    path = os.environ.get("OPENVLA_WEIGHTS", os.path.expanduser("~/openvla_weights/"))
+    path = _tt_public_getenv("OPENVLA_WEIGHTS", os.path.expanduser("~/openvla_weights/"))
     if not os.path.exists(path):
         pytest.skip(f"OpenVLA weights not found at {path}. Set OPENVLA_WEIGHTS env var.")
     return path
@@ -35,7 +36,7 @@ def openvla_weights_path():
 @pytest.fixture(scope="session")
 def mesh_device_type():
     """Get mesh device type from environment."""
-    return os.environ.get("MESH_DEVICE", None)
+    return _tt_public_getenv("MESH_DEVICE", None)
 
 
 @pytest.fixture(scope="session")

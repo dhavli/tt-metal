@@ -12,6 +12,7 @@ Usage:
     pytest test_pcc_suffix_full.py -v -k "pretrained_weight_false"  # Only random weights (fast)
     python test_pcc_suffix_full.py  # Standalone
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import sys
 import os
@@ -29,7 +30,7 @@ from models.experimental.pi0.common.configs import SuffixConfig
 from models.experimental.pi0.common.weight_loader import PI0WeightLoader
 
 
-TT_METAL_HOME = os.environ.get("TT_METAL_HOME")
+TT_METAL_HOME = _tt_public_getenv("TT_METAL_HOME")
 if not TT_METAL_HOME:
     raise EnvironmentError("TT_METAL_HOME environment variable is not set")
 CHECKPOINT_PATH = os.path.join(TT_METAL_HOME, "models/experimental/pi0/weights/pi0_base")

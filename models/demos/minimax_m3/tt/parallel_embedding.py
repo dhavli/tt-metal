@@ -40,6 +40,7 @@ Weight caching mirrors every other M3 weight: a per-tensor tilized ``.tensorbin`
 1D and 2D layouts use distinct cache keys (``_1d`` / ``_2d`` — neither a prefix of the other) so a stale
 layout is never loaded as the other.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import Optional
@@ -67,7 +68,7 @@ DEFAULT_SHARD_VOCAB_ON_SP = True
 
 def embed_shard_2d() -> bool:
     """True -> 2D vocab+hidden sharding (default); False -> 1D hidden-only. See DEFAULT_SHARD_VOCAB_ON_SP."""
-    v = os.getenv("M3_EMBED_SHARD_VOCAB")
+    v = _tt_public_getenv("M3_EMBED_SHARD_VOCAB")
     if v is None:
         return DEFAULT_SHARD_VOCAB_ON_SP
     return v.strip().lower() in ("1", "true", "yes", "on")

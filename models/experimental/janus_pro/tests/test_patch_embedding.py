@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -26,7 +27,7 @@ from ttnn import ConcatMeshToTensor
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )

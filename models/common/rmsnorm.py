@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
+import os
+
 import ttnn
 from models.common.lightweightmodule import LightweightModule
 from models.common.utility_functions import copy_to_buffer
@@ -8,6 +11,7 @@ from models.tt_transformers.tt.common import Mode
 
 TILE = 32
 SHARD_HEIGHT = TILE  # Current ttnn.rms_norm implementation requires shard height to be a single tile
+_PREFILL_DNORM_FUSE = _tt_public_getenv("QWEN36_PREFILL_DNORM_FUSE", "0") == "1"
 
 
 class RMSNorm(LightweightModule):
@@ -172,6 +176,9 @@ class RMSNorm(LightweightModule):
         output_mem_config = norm_config.get("output_mem_config") if norm_config else None
         # Optional L1 placement for the distributed 3-op outputs (pre/gather/post); None -> DRAM default.
         distributed_out_mc = norm_config.get("distributed_output_mem_config") if norm_config else None
+        # cfx c118 QWEN36_PREFILL_NORM_DTYPE: dtype of the distributed post-all-gather output (None = the op's default,
+        # i.e. the input dtype, as before). Lets the prefill norms emit bf8 straight into a bf8-in0 AGMM.
+        distributed_out_dtype = norm_config.get("distributed_output_dtype") if norm_config else None
 
         # If input is sharded do sharded RMSNorm and optionally return sharded output
         program_config = sharded_program_config if in_sharded else None
@@ -191,6 +198,7 @@ class RMSNorm(LightweightModule):
                 weight=weight,
                 compute_kernel_config=self.compute_kernel_config_hifi2,
                 output_memory_config=distributed_out_mc,
+                output_dtype=distributed_out_dtype,
             )
         else:
             x = ttnn.rms_norm(
@@ -218,6 +226,43 @@ class RMSNorm(LightweightModule):
         memory_config=None,
         compute_kernel_config=None,
         output_memory_config=None,
+        output_dtype=None,
+    ):
+        if (
+            _PREFILL_DNORM_FUSE
+            and program_config is None
+            and memory_config is None
+            and compute_kernel_config is self.compute_kernel_config_hifi2
+        ):
+            # cfx QWEN36_PREFILL_DNORM_FUSE: pre/post as two generic_ops that read h once and keep it in L1 between
+            # them (qwen36/tt/dnorm_fuse.py); bitwise vs the ops below, self-tested at boot; untested shapes fall back.
+            from models.demos.blackhole.qwen36.tt import dnorm_fuse
+
+            od = output_dtype if output_dtype is not None else inp.dtype
+            if dnorm_fuse.usable(inp, od):
+                mc = output_memory_config if output_memory_config is not None else ttnn.DRAM_MEMORY_CONFIG
+                return dnorm_fuse.run(self, inp, epsilon, weight, mc, output_dtype)
+        return self._distributed_rmsnorm_image(
+            inp,
+            epsilon=epsilon,
+            weight=weight,
+            program_config=program_config,
+            memory_config=memory_config,
+            compute_kernel_config=compute_kernel_config,
+            output_memory_config=output_memory_config,
+            output_dtype=output_dtype,
+        )
+
+    def _distributed_rmsnorm_image(
+        self,
+        inp,
+        epsilon=None,
+        weight=None,
+        program_config=None,
+        memory_config=None,
+        compute_kernel_config=None,
+        output_memory_config=None,
+        output_dtype=None,
     ):
         assert program_config is None, "Distributed RMSNorm does not support sharded inputs"
         assert memory_config is None, "Distributed RMSNorm does not support sharded outputs"
@@ -252,6 +297,7 @@ class RMSNorm(LightweightModule):
             weight=weight,
             compute_kernel_config=compute_kernel_config,
             memory_config=mc,
+            **({"dtype": output_dtype} if output_dtype is not None else {}),
         )
         tt_stats.deallocate(True)
 

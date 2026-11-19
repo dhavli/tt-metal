@@ -4,6 +4,7 @@
 """Public prefill orchestration facade and transient cleanup."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import Any, Iterable, Sequence
@@ -192,7 +193,7 @@ class PrefillRuntime:
             # (batch-invariant kernel fix) has landed.
             disable_batched_prefill=(
                 self.config.disable_batched_prefill
-                or bool(os.environ.get("DISABLE_BATCHED_PREFILL"))
+                or bool(_tt_public_getenv("DISABLE_BATCHED_PREFILL"))
                 or (sampling_params is not None and not self.config.batched_prefill_batched_extract)
             ),
             max_prefill_batch_size=self.config.max_prefill_batch_size,

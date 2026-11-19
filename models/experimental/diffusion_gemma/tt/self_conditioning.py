@@ -21,6 +21,7 @@ sub-dict (short keys ``{pre_norm,gate_proj,up_proj,down_proj}.weight``).
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import NamedTuple
@@ -39,11 +40,11 @@ class ChunkedEmbeddingWeight(NamedTuple):
 
 
 def self_conditioning_embedding_prechunk_enabled() -> bool:
-    return os.getenv("DG_SELFCOND_PRECHUNK_EMBED", "1") != "0"
+    return _tt_public_getenv("DG_SELFCOND_PRECHUNK_EMBED", "1") != "0"
 
 
 def self_conditioning_logits_l1_mode() -> str:
-    mode = os.getenv("DG_SELFCOND_LOGITS_L1", "chain").lower()
+    mode = _tt_public_getenv("DG_SELFCOND_LOGITS_L1", "chain").lower()
     if mode not in {"off", "chain"}:
         raise ValueError("DG_SELFCOND_LOGITS_L1 must be one of: off, chain")
     return mode

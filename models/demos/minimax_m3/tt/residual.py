@@ -17,6 +17,7 @@ Two schemes, selected by ``M3_SHARDED_RESIDUAL`` (see README "Environment variab
 Every consumer (embedding, norms, attention's closing collective, both MLPs, the LM-head tail) reads
 these helpers so a run cannot end up half-sharded.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -35,7 +36,7 @@ _NORM_MODES = ("distributed", "gather_first")
 
 def use_sharded_residual() -> bool:
     """True -> ``emb/tp``-sharded residual stream; False -> full-emb replicated. See module docstring."""
-    v = os.environ.get("M3_SHARDED_RESIDUAL")
+    v = _tt_public_getenv("M3_SHARDED_RESIDUAL")
     if v is None:
         return DEFAULT_USE_SHARDED_RESIDUAL
     return v.strip().lower() in ("1", "true", "yes", "on")
@@ -44,7 +45,7 @@ def use_sharded_residual() -> bool:
 def norm_mode() -> str:
     """Either ``gather_first`` (default) or ``distributed`` — see DEFAULT_NORM_MODE. Only meaningful
     when the residual is sharded; the replicated scheme always norms full emb in one pass."""
-    v = (os.environ.get("M3_SHARDED_RESIDUAL_NORM") or DEFAULT_NORM_MODE).strip().lower()
+    v = (_tt_public_getenv("M3_SHARDED_RESIDUAL_NORM") or DEFAULT_NORM_MODE).strip().lower()
     if v not in _NORM_MODES:
         raise ValueError(f"M3_SHARDED_RESIDUAL_NORM={v!r} must be one of {_NORM_MODES}")
     return v

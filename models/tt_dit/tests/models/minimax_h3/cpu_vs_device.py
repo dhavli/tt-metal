@@ -28,6 +28,7 @@ Accuracy is scored against the CPU reference, i.e. an absolute number; the T-par
 sharded against unsharded, which is a looser bar. Unset levers keep the constructor default (accurate
 mode), so `=0` is not the same as omitting. Read each run's `levers:` line rather than the filename.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -44,36 +45,36 @@ SR = 32000
 HOP = 800
 NUM_LATENT_FRAMES = 207
 # Under `generated/` rather than any developer's filesystem, so this runs on CI and a fresh clone.
-OUT_DIR = os.environ.get("CVD_OUT_DIR") or os.path.join(
-    os.environ.get("TT_METAL_HOME", os.getcwd()), "generated", "minimax_h3_audio", "clips"
+OUT_DIR = _tt_public_getenv("CVD_OUT_DIR") or os.path.join(
+    _tt_public_getenv("TT_METAL_HOME", os.getcwd()), "generated", "minimax_h3_audio", "clips"
 )
 # `MINIMAX_H3_MODEL_PATH` matches the test suite; the older var is still accepted.
-WEIGHTS = os.environ.get("MINIMAX_H3_MODEL_PATH") or os.environ.get("MINIMAX_H3_DIFFUSERS_DIR", "")
+WEIGHTS = _tt_public_getenv("MINIMAX_H3_MODEL_PATH") or _tt_public_getenv("MINIMAX_H3_DIFFUSERS_DIR", "")
 if not WEIGHTS:
     raise SystemExit("set MINIMAX_H3_MODEL_PATH to a MiniMax-H3 diffusers snapshot")
 
 # T_FACTOR must equal the length of the axis it shards: on a 4x8 mesh only (4, axis 0) and
 # (8, axis 1) work, anything else dies in `_partition_t` on a non-tile-aligned slice.
-MESH = tuple(int(v) for v in os.environ.get("CVD_MESH", "1x1").split("x"))
-T_FACTOR = int(os.environ.get("CVD_T_FACTOR", "1"))
-MESH_AXIS = int(os.environ.get("CVD_MESH_AXIS", "1"))
-TRACED = os.environ.get("CVD_TRACED", "0") == "1"
+MESH = tuple(int(v) for v in _tt_public_getenv("CVD_MESH", "1x1").split("x"))
+T_FACTOR = int(_tt_public_getenv("CVD_T_FACTOR", "1"))
+MESH_AXIS = int(_tt_public_getenv("CVD_MESH_AXIS", "1"))
+TRACED = _tt_public_getenv("CVD_TRACED", "0") == "1"
 # Default 2 keeps existing invocations/numbers unchanged; CVD_BATCH=1 is the honest per-clip cost.
-BATCH = int(os.environ.get("CVD_BATCH", "2"))
+BATCH = int(_tt_public_getenv("CVD_BATCH", "2"))
 
 
 # The precision levers select a different operator set, not just a different speed. Quoting one
 # row's latency with another's PSNR is what produced the retired "281.6 ms at 49.45 dB" claim.
 # `None` means "leave the constructor default alone".
 def _flag(name):
-    raw = os.environ.get(name)
+    raw = _tt_public_getenv(name)
     return None if raw is None else raw not in ("0", "false", "False", "")
 
 
-SPLIT_MODE = os.environ.get("CVD_SPLIT_MODE")
+SPLIT_MODE = _tt_public_getenv("CVD_SPLIT_MODE")
 # conv3d's C_in_block cap. Moves accuracy on its own -- conv_pre's error falls as the block grows
 # (2.40e-03 at 32, 1.86e-03 at 128) -- but 256 buys 0.02 dB and 512 exceeds L1.
-MAX_C_IN_BLOCK = os.environ.get("CVD_MAX_C_IN_BLOCK")
+MAX_C_IN_BLOCK = _tt_public_getenv("CVD_MAX_C_IN_BLOCK")
 LEVERS = {
     k: v
     for k, v in (
@@ -261,7 +262,7 @@ def main():
         # So the baseline has to be *measured* on this branch -- run once without the CVD_* variables and
         # pass the mean back in via CVD_BASELINE_PSNR. Unset, this reports and asserts nothing on
         # accuracy, because a hard-coded bar from another configuration is worse than no bar.
-        baseline_env = os.environ.get("CVD_BASELINE_PSNR")
+        baseline_env = _tt_public_getenv("CVD_BASELINE_PSNR")
         if baseline_env:
             baseline = float(baseline_env)
             drop = baseline - mean_psnr

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Critical chunked-prefill, 256K RoPE, and reveal-mask golden gates."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from types import SimpleNamespace
@@ -31,7 +32,7 @@ HEAD_DIM = 32
 VOCAB = 256
 
 requires_device = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run chunked-prefill correctness on a Tenstorrent device",
 )
 

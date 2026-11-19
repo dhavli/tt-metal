@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import random
 from pathlib import Path
@@ -139,7 +140,7 @@ def _resolve_model_id(source: _RealGateSource) -> str:
     Checks the model's env var and its known local paths first; falls back to the HF repo ID so that
     ``load_hf_state_dict_filtered`` can resolve from the HF cache.
     """
-    env_path = os.getenv(source.env_var)
+    env_path = _tt_public_getenv(source.env_var)
     if env_path and (Path(env_path) / "model.safetensors.index.json").exists():
         return env_path
     for fallback in source.fallbacks:
@@ -178,7 +179,7 @@ def _try_load_real_gate_input(max_seq_len: int, dim: int) -> torch.Tensor | None
     override the trace directory. Returns ``None`` when the trace is unavailable
     so the caller can fall back to synthetic input.
     """
-    trace_dir_env = os.environ.get("DEEPSEEK_V3_GATE_INPUT_CACHE")
+    trace_dir_env = _tt_public_getenv("DEEPSEEK_V3_GATE_INPUT_CACHE")
     trace_dir = Path(trace_dir_env) if trace_dir_env else GOLDEN_LONGBOOK_TRACE
     return load_trace_gate_input(trace_dir, layer_idx=_MOE_LAYER_IDX, max_seq_len=max_seq_len, dim=dim)
 

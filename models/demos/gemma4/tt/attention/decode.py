@@ -6,6 +6,7 @@ Decode-mode attention forward pass for Gemma4.
 
 Uses HF-style ttnn.experimental.rotary_embedding (no transformation matrices).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -389,7 +390,7 @@ def _verify_head_splits(B, H_local, nkv_local, P, head_dim, grid=None):
     valid = [d for d in range(1, H_local + 1) if H_local % d == 0 and ((H_local // d) * P) % 32 == 0]
     if not valid:
         return 1
-    env = os.environ.get("GEMMA4_PV_SDPA_HEAD_SPLITS")
+    env = _tt_public_getenv("GEMMA4_PV_SDPA_HEAD_SPLITS")
     if env:
         want = max(1, min(int(env), H_local))
         return max(d for d in valid if d <= want)

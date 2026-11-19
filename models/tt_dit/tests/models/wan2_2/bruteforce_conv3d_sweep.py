@@ -18,6 +18,7 @@ Run via pytest:
     pytest models/tt_dit/tests/models/wan2_2/bruteforce_conv3d_sweep.py \
         -k "bh_2x4" -s --timeout=0   # all layers sequentially
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import csv
 import json
@@ -1087,7 +1088,7 @@ _SWEEP_PARAMS_ALL, _SWEEP_IDS_ALL = _sweep_params_from_blockings()
 
 def _env_opt(name, default):
     """Parse an int sweep-limit env var. 'none'/'off'/'' -> None; unset -> default."""
-    v = os.environ.get(name)
+    v = _tt_public_getenv(name)
     if v is None:
         return default
     v = v.strip().lower()
@@ -1238,7 +1239,7 @@ def test_collect_baseline(mesh_device, mesh_shape):
     )
     trace_iters = _env_opt("CONV3D_SWEEP_TRACE_ITERS", TRACE_ITERS)
 
-    out_path = pathlib.Path(os.environ.get("CONV3D_BASELINE_CSV", BASELINE_CSV))
+    out_path = pathlib.Path(_tt_public_getenv("CONV3D_BASELINE_CSV", BASELINE_CSV))
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     n = len(_BLOCKINGS)

@@ -10,6 +10,7 @@ Reference: LTX-2/packages/ltx-pipelines/ + Wan pipeline_wan.py
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import math
@@ -641,7 +642,7 @@ class LTXPipeline:
         ``LtxQuantProfile`` is baked into transformer construction (weights load direct-to-quant)."""
         self._quant_cache_tag = None
         self._quant_config = None
-        preset = os.environ.get("LTX_QUANT", LTX_QUANT_DEFAULT).strip()
+        preset = _tt_public_getenv("LTX_QUANT", LTX_QUANT_DEFAULT).strip()
         if not preset:
             return
         from ...models.transformers.ltx.quant_config import LtxQuantProfile
@@ -751,7 +752,7 @@ class LTXPipeline:
     def _device_embed_cache_path(self, prompts: list[str]) -> str:
         """Disk-cache path for on-device prompt embeddings. Separate namespace from the
         reference cache (different format) — lets a repeated prompt skip the encoder."""
-        cache_dir = os.environ.get("TT_DIT_CACHE_DIR") or os.path.expanduser("~/.cache/tt-dit")
+        cache_dir = _tt_public_getenv("TT_DIT_CACHE_DIR") or os.path.expanduser("~/.cache/tt-dit")
         embed_cache_dir = os.path.join(cache_dir, "ltx-embeddings")
         os.makedirs(embed_cache_dir, exist_ok=True)
         key = hashlib.md5(("device||" + "||".join(prompts)).encode()).hexdigest()
@@ -1312,7 +1313,7 @@ class LTXPipeline:
         """
         assert self.checkpoint_name is not None, "checkpoint_name must be set before decode_audio"
 
-        _dump = os.environ.get("LTX_DUMP_AUDIO_LATENT")
+        _dump = _tt_public_getenv("LTX_DUMP_AUDIO_LATENT")
         if _dump and float(audio_latent.abs().max()) > 0:  # skip the all-zero warmup latent
             torch.save(audio_latent.cpu(), _dump)
             logger.info(f"dumped audio latent {tuple(audio_latent.shape)} -> {_dump}")
@@ -1329,7 +1330,7 @@ class LTXPipeline:
         z = self.tt_mel_decoder.z_channels
         audio_spatial = audio_latent.reshape(1, audio_N, z, audio_latent.shape[2] // z).permute(0, 2, 1, 3).float()
 
-        _time_stages = os.environ.get("LTX_TIME_STAGES") in ("1", "true", "True")
+        _time_stages = _tt_public_getenv("LTX_TIME_STAGES") in ("1", "true", "True")
         # Watchdog wraps both branches so the stall heartbeat fires during mel-VAE/vocoder regardless of
         # the stage-timing toggle — LTX_TIME_STAGES=1 must not reintroduce the silent gap.
         with Watchdog("audio decode (mel-VAE + vocoder)"):

@@ -9,6 +9,7 @@ Tests decoder fused operation with full pipeline:
 - Qnope output: [64, 1, 512] after matmul3
 - Qrope output: [64, 1, 64] after RoPE
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -84,7 +85,7 @@ def _build_sram_hot_expert_kwargs(state_dict, submesh, layer_idx: int):
 
 def _optional_bspm_dir():
     """Return model-specific BSPM directory when BSPM_DIR/BSPM_RESULTS_DIR is configured."""
-    raw = os.getenv("BSPM_DIR") or os.getenv("BSPM_RESULTS_DIR")
+    raw = _tt_public_getenv("BSPM_DIR") or _tt_public_getenv("BSPM_RESULTS_DIR")
     if not raw or not raw.strip():
         return None
     return Path(raw.strip()) / "deepseek-r1-0528"
@@ -642,7 +643,7 @@ def test_decoder(
             "Real weights + {} rewrites gate bias to force TopK; PCC may be lower than unrigged",
             expert_upload_mode,
         )
-    if use_real_weights and not os.getenv("DEEPSEEK_V3_HF_MODEL"):
+    if use_real_weights and not _tt_public_getenv("DEEPSEEK_V3_HF_MODEL"):
         pytest.skip("DEEPSEEK_V3_HF_MODEL must be set to run real MTP layer tests")
 
     submesh = bh_2d_mesh_device.create_submesh(ttnn.MeshShape((mesh_rows, mesh_cols)))

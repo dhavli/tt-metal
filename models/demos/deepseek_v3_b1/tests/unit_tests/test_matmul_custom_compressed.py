@@ -7,6 +7,7 @@ Custom Matmul with Compressed Weights - Single Core
 Tiles are pre-sorted by format. The kernel reconfigures the unpacker
 only once per format group instead of per tile.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -551,7 +552,7 @@ def test_matmul_custom_compressed_bspm_projections(device, M, K, N, proj_idx):
     Requires BSPM_RESULTS_DIR.
     """
 
-    bspm_results_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_results_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_results_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_results_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"
@@ -570,7 +571,7 @@ def test_matmul_custom_compressed_bspm_mixed_budget(device):
     Requires BSPM_RESULTS_DIR.
     """
 
-    bspm_results_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_results_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_results_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_results_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"

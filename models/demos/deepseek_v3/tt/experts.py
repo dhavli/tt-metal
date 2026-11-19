@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -202,7 +203,7 @@ class Experts(AbstractModule):
             )
             prepared_w2 = get_dequantized_tensor(prepared_state_dict, prepared_w2_key, dtype=cls.WEIGHT_TORCH_DTYPE)
         else:
-            allow_repack = os.getenv("DEEPSEEK_V3_ALLOW_QUAD_RING_WEIGHT_REPACK", "0").lower() in {
+            allow_repack = _tt_public_getenv("DEEPSEEK_V3_ALLOW_QUAD_RING_WEIGHT_REPACK", "0").lower() in {
                 "1",
                 "true",
                 "yes",
@@ -387,7 +388,7 @@ class Experts(AbstractModule):
 
         _, _, num_tokens, hidden_size = x.shape
 
-        debug_experts = os.getenv("DEEPSEEK_V3_DEBUG_EXPERTS") == "1" and num_tokens > 8192
+        debug_experts = _tt_public_getenv("DEEPSEEK_V3_DEBUG_EXPERTS") == "1" and num_tokens > 8192
 
         def _log_expert_stats(name: str, tensor: ttnn.Tensor) -> None:
             if not debug_experts:

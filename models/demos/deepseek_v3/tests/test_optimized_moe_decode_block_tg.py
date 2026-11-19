@@ -8,6 +8,7 @@ MoE End-to-End Test Scaled down for Single Galaxy
 Run with:
 'MESH_DEVICE=TG8X4 USE_TORUS_MODE=1 pytest models/demos/deepseek_v3/tests/test_optimized_moe_decode_block_tg.py -v'
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import random
@@ -499,7 +500,7 @@ def verify_output(iteration, mesh_device, mesh_shape, tt_output_tensor, output_r
 
 @pytest.mark.requires_device(["TG8X4"])
 @pytest.mark.skipif(
-    (os.getenv("USE_TORUS_MODE", "0") == "0"),
+    (_tt_public_getenv("USE_TORUS_MODE", "0") == "0"),
     reason=f"Requires ring fabric",
 )
 @pytest.mark.parametrize(

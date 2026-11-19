@@ -1,9 +1,13 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "qkv_causal_conv1d_silu_device_operation.hpp"
 
 #include <array>
+#include <cstdlib>
+#include <string_view>
+#include <utility>
 
 #include <tt-metalium/constants.hpp>
 
@@ -122,6 +126,36 @@ QkvCausalConv1dSiluOperation::tensor_return_value_t QkvCausalConv1dSiluOperation
         create_device_tensor(specs[2], in.input.device())};
 }
 
+namespace {
+
+// QWEN36_GDN_CONV_KDA2 (cfx patches/tt-metal/0035), read on EVERY call (not once per process) so the model's warmup
+// self-test can run the stock and the read-once programs back to back in one process:
+//   unset / "" / "0"  stock programs (byte-identical to the unpatched op)
+//   "1"               read-once kernels, stock silu_tile
+//   "fast"            read-once kernels, silu_tile<false> (pairs with the c98 compute overlay on the stock path)
+// QWEN36_GDN_CONV_KDA2_MUSTFAIL=1 additionally stages every row one row late (wrong outputs on purpose).
+// Anything else is an error, so a typo cannot silently run the stock arm.
+std::pair<uint32_t, uint32_t> conv_kda2_mode() {
+    const char* raw = tt_stack_public::getenv("QWEN36_GDN_CONV_KDA2");
+    const std::string_view v = raw == nullptr ? std::string_view{} : std::string_view{raw};
+    uint32_t mode = 0;
+    if (v.empty() || v == "0") {
+        mode = 0;
+    } else if (v == "1") {
+        mode = 1;
+    } else if (v == "fast") {
+        mode = 2;
+    } else {
+        TT_THROW("QWEN36_GDN_CONV_KDA2 must be unset, 0, 1 or fast; got '{}'", v);
+    }
+    const char* mf_raw = tt_stack_public::getenv("QWEN36_GDN_CONV_KDA2_MUSTFAIL");
+    const std::string_view mf = mf_raw == nullptr ? std::string_view{} : std::string_view{mf_raw};
+    TT_FATAL(mf.empty() || mf == "0" || mf == "1", "QWEN36_GDN_CONV_KDA2_MUSTFAIL must be unset, 0 or 1; got '{}'", mf);
+    return {mode, (mode != 0 && mf == "1") ? 1u : 0u};
+}
+
+}  // namespace
+
 std::vector<Tensor> qkv_causal_conv1d_silu(
     const Tensor& input,
     const Tensor& history,
@@ -137,6 +171,7 @@ std::vector<Tensor> qkv_causal_conv1d_silu(
     const DeviceComputeKernelConfig& compute_kernel_config) {
     const auto& input_shape = input.logical_shape();
     TT_FATAL(input_shape.rank() == 3, "qkv_causal_conv1d_silu: input must be [1,T,Q+K+V]");
+    const auto [reads_once, reads_once_mustfail] = conv_kda2_mode();
     return ttnn::device_operation::launch<QkvCausalConv1dSiluOperation>(
         QkvCausalConv1dSiluParams{
             .sequence = static_cast<uint32_t>(input_shape[1]),
@@ -145,7 +180,9 @@ std::vector<Tensor> qkv_causal_conv1d_silu(
             .v_width = v_width,
             .channel_chunk_size = channel_chunk_size,
             .output_mem_config = output_mem_config,
-            .compute_kernel_config = compute_kernel_config},
+            .compute_kernel_config = compute_kernel_config,
+            .reads_once = reads_once,
+            .reads_once_mustfail = reads_once_mustfail},
         QkvCausalConv1dSiluInputs{
             .input = input, .history = history, .tap0 = tap0, .tap1 = tap1, .tap2 = tap2, .tap3 = tap3});
 }

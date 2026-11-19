@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Test DPL with TTNN backend."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -29,8 +30,8 @@ def test_dpl(device):
     model.eval()  # Disables dropout, batch norm updates
     torch.set_grad_enabled(False)  # Disables autograd overhead
     assert (
-        os.environ.get("TT_SYMBIOTE_RUN_MODE") == "DPL"
-    ), f"Expected TT_SYMBIOTE_RUN_MODE environment variable to be 'DPL', got {os.environ.get('TT_SYMBIOTE_RUN_MODE')}"
+        _tt_public_getenv("TT_SYMBIOTE_RUN_MODE") == "DPL"
+    ), f"Expected TT_SYMBIOTE_RUN_MODE environment variable to be 'DPL', got {_tt_public_getenv('TT_SYMBIOTE_RUN_MODE')}"
     inputs = TorchTTNNTensor(torch.tensor([1.0, 2.0, 3.0]))
     inputs.ttnn_tensor = ttnn.to_device(inputs.to_ttnn, device)
     outputs = model(inputs)

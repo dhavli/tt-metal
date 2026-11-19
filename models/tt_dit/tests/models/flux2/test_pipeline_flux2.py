@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -23,7 +24,7 @@ line_params_8k_flux2 = {**line_params_8k, "l1_small_size": 65536}
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), False)],
 )
 @pytest.mark.parametrize(
     "device_params",

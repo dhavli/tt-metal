@@ -16,6 +16,7 @@ Or directly:
 
     python_env/bin/python -m pytest models/common/tests/modules/attention/profiling/ -s
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -140,7 +141,7 @@ def _create_attention_model_for_benchmark(
     # so caching is safe — same model name always produces the same weights.
     wqkv_dtype = ttnn.bfloat8_b
     model_short = hf_model_name.replace("/", "--")
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", f"model_cache/attn1d_profiling/{model_short}"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", f"model_cache/attn1d_profiling/{model_short}"))
     lazy_wqkv = LazyWeight(
         source=wqkv_torch,
         dtype=wqkv_dtype,

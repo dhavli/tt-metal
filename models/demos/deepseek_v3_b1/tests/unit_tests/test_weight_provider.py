@@ -31,6 +31,7 @@ Environment variables
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -55,12 +56,12 @@ from models.demos.deepseek_v3_b1.weights.transforms.sram_experts import (
 
 MOE_LAYER_IDX = 3
 SRAM_HOT_EXPERTS_CEILING = 64
-CACHE_PERF_ROOT = Path(os.environ.get("CACHE_PERF_ROOT", str(Path.home() / ".cache" / "deepseek_v3_b1_cache_perf")))
+CACHE_PERF_ROOT = Path(_tt_public_getenv("CACHE_PERF_ROOT", str(Path.home() / ".cache" / "deepseek_v3_b1_cache_perf")))
 DEFAULT_BSPM_BUDGET = 3.5
 
 
 def _resolve_tensor_cache_root() -> Path:
-    env_root = os.environ.get("CACHE_WEIGHT_PROVIDER_MOE_ROOT", "").strip()
+    env_root = _tt_public_getenv("CACHE_WEIGHT_PROVIDER_MOE_ROOT", "").strip()
     root = Path(env_root).resolve() if env_root else CACHE_PERF_ROOT / "moe_layer_cache"
     root.mkdir(parents=True, exist_ok=True)
     return root
@@ -78,9 +79,9 @@ def _resolve_bspm_config() -> tuple[Path | None, float]:
     ``assignment_hash`` (256× more cache entries per layer) which matches the
     production demo's load behaviour.
     """
-    bspm_dir_env = os.environ.get("BSPM_DIR", "").strip()
+    bspm_dir_env = _tt_public_getenv("BSPM_DIR", "").strip()
     bspm_dir = Path(bspm_dir_env).resolve() if bspm_dir_env else None
-    bspm_budget_env = os.environ.get("BSPM_BUDGET", "").strip()
+    bspm_budget_env = _tt_public_getenv("BSPM_BUDGET", "").strip()
     bspm_budget = float(bspm_budget_env) if bspm_budget_env else DEFAULT_BSPM_BUDGET
     return bspm_dir, bspm_budget
 

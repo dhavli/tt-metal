@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import re
@@ -99,7 +100,7 @@ def _print_tensor_comparison(
     expected_label: str = "expected",
 ) -> None:
     """Print tensor comparison details for debugging. Enable with DEEPSEEK_V3_DEQUANT_PRINT_TENSORS=1."""
-    if os.getenv(PRINT_TENSORS_ENV_VAR) != "1":
+    if _tt_public_getenv(PRINT_TENSORS_ENV_VAR) != "1":
         return
 
     def _tensor_stats(t: torch.Tensor, label: str) -> str:
@@ -153,7 +154,7 @@ def _expected_dequantized_weight_keys(orig_weight_keys: set[str], deq_keys: set[
 
 
 def _resolve_quantized_model_path(model_path: Path) -> Path | None:
-    explicit_path = os.getenv(QUANTIZED_MODEL_PATH_ENV_VAR)
+    explicit_path = _tt_public_getenv(QUANTIZED_MODEL_PATH_ENV_VAR)
     if explicit_path:
         candidate = Path(explicit_path).resolve()
         return candidate if candidate.is_dir() else None
@@ -355,7 +356,7 @@ def test_saved_dequantized_reference_weights_match_old_pipeline(model_path, hf_c
 
 @pytest.mark.timeout(FULL_DEQUANT_COMPARE_TIMEOUT_SECONDS)
 def test_all_saved_dequantized_weights_match_old_pipeline(model_path, hf_config, state_dict):
-    if os.getenv(FULL_DEQUANT_COMPARE_ENV_VAR) != "1":
+    if _tt_public_getenv(FULL_DEQUANT_COMPARE_ENV_VAR) != "1":
         pytest.skip(f"Set {FULL_DEQUANT_COMPARE_ENV_VAR}=1 to run the full element-by-element checkpoint comparison.")
 
     quantized_model_path = _resolve_quantized_model_path(model_path)

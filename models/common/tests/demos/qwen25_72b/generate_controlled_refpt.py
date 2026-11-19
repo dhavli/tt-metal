@@ -19,6 +19,7 @@ the reference-sanity guide before pinning an accuracy threshold.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -92,7 +93,7 @@ def main() -> None:
     except (OSError, PermissionError) as e:
         if "Permission" not in str(e) and "permission" not in str(e):
             raise
-        fallback = os.environ.get("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
+        fallback = _tt_public_getenv("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
         Path(fallback).mkdir(parents=True, exist_ok=True)
         print(f"WARNING: default HF cache not writable; retrying tokenizer load with cache_dir={fallback}")
         tokenizer = AutoTokenizer.from_pretrained(

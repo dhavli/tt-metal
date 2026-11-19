@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import argparse
 import json
 import os
@@ -80,13 +81,13 @@ METADATA_SIZE_BYTES = 12
 
 def _load_env_config() -> None:
     global SP_AXIS, TP_AXIS, GLOBAL_MESH_SHAPE, CHUNK_SIZE, MAX_SEQ_LEN, NUM_LAYERS, ADAPTER
-    SP_AXIS = int(os.environ.get("PREFILL_SP", 8))
-    TP_AXIS = int(os.environ.get("PREFILL_TP", 4))
+    SP_AXIS = int(_tt_public_getenv("PREFILL_SP", 8))
+    TP_AXIS = int(_tt_public_getenv("PREFILL_TP", 4))
     GLOBAL_MESH_SHAPE = (SP_AXIS, TP_AXIS)
-    CHUNK_SIZE = int(os.environ.get("PREFILL_CHUNK_SIZE", 5 * 1024))
-    MAX_SEQ_LEN = int(os.environ.get("PREFILL_MAX_SEQ_LEN", CHUNK_SIZE * 11))
-    NUM_LAYERS = int(os.environ.get("PREFILL_NUM_LAYERS", 61))
-    ADAPTER = get_adapter(os.environ.get("PREFILL_MODEL", DEFAULT_MODEL))
+    CHUNK_SIZE = int(_tt_public_getenv("PREFILL_CHUNK_SIZE", 5 * 1024))
+    MAX_SEQ_LEN = int(_tt_public_getenv("PREFILL_MAX_SEQ_LEN", CHUNK_SIZE * 11))
+    NUM_LAYERS = int(_tt_public_getenv("PREFILL_NUM_LAYERS", 61))
+    ADAPTER = get_adapter(_tt_public_getenv("PREFILL_MODEL", DEFAULT_MODEL))
 
 
 _load_env_config()
@@ -114,7 +115,7 @@ _PER_HOST_FS_PREFIXES = ("/tmp", "/dev/shm", "/run", "/var/tmp")
 def _require_shared_table_path(world_size: int) -> None:
     if world_size <= 1:
         return
-    table_path = os.path.abspath(os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb"))
+    table_path = os.path.abspath(_tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb"))
     if any(table_path == p or table_path.startswith(p + "/") for p in _PER_HOST_FS_PREFIXES):
         logger.error(
             f"[producer] PREFILL_MIGRATION_TABLE_PATH={table_path!r} is on per-host storage; multi-rank "
@@ -125,7 +126,7 @@ def _require_shared_table_path(world_size: int) -> None:
 
 
 def _read_kv_chunk_table(timeout_s: int):
-    table_path = os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
+    table_path = _tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
     deadline = time.perf_counter() + timeout_s
     while not os.path.exists(table_path):
         if time.perf_counter() > deadline:
@@ -164,7 +165,7 @@ def _read_device_map(timeout_s: int) -> dict:
                 parsed[(int(mesh_id), int(chip_id))] = int(unique_id)
             return parsed
 
-    path = os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
+    path = _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
     stem, ext = os.path.splitext(path)
 
     def _matches():
@@ -193,7 +194,7 @@ def _read_device_map(timeout_s: int) -> dict:
 
 
 def _connect_layer_ack_channel(timeout_s: int):
-    service_id = os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")
+    service_id = _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")
     shm_name = f"/tt_prefill_layer_acks_{service_id}"
     try:
         channel = ttnn.InterProcessCounterChannel.connect(shm_name, connect_timeout_ms=timeout_s * 1000)
@@ -348,30 +349,30 @@ class ProducerConfig:
 
 def _config_from_env() -> ProducerConfig:
     max_chunks = MAX_SEQ_LEN // CHUNK_SIZE
-    chunk_bounds = [int(x) for x in os.environ.get("PREFILL_PRODUCER_CHUNKS", "11").split(",")]
+    chunk_bounds = [int(x) for x in _tt_public_getenv("PREFILL_PRODUCER_CHUNKS", "11").split(",")]
     chunks_max = min(chunk_bounds[-1], max_chunks)
     chunks_min = min(chunk_bounds[0], chunks_max)
-    gap_lo, gap_hi = (float(x) for x in os.environ.get("PREFILL_PRODUCER_GAP_MS", "200,2000").split(","))
+    gap_lo, gap_hi = (float(x) for x in _tt_public_getenv("PREFILL_PRODUCER_GAP_MS", "200,2000").split(","))
 
-    interleave = os.environ.get("PREFILL_PRODUCER_INTERLEAVE", "random")
+    interleave = _tt_public_getenv("PREFILL_PRODUCER_INTERLEAVE", "random")
     if interleave not in ("random", "round_robin"):
         raise ValueError(f"PREFILL_PRODUCER_INTERLEAVE must be 'random' or 'round_robin', got {interleave!r}")
 
     return ProducerConfig(
-        num_users=int(os.environ.get("PREFILL_NUM_USERS", "1")),
+        num_users=int(_tt_public_getenv("PREFILL_NUM_USERS", "1")),
         chunks_min=chunks_min,
         chunks_max=chunks_max,
-        max_requests=int(os.environ.get("PREFILL_PRODUCER_MAX_REQUESTS", "1")),
-        duration_s=float(os.environ.get("PREFILL_PRODUCER_DURATION_S", "inf")),
-        p_gap=float(os.environ.get("PREFILL_PRODUCER_P_GAP", "0.0")),
-        p_burst=float(os.environ.get("PREFILL_PRODUCER_P_BURST", "0.0")),
+        max_requests=int(_tt_public_getenv("PREFILL_PRODUCER_MAX_REQUESTS", "1")),
+        duration_s=float(_tt_public_getenv("PREFILL_PRODUCER_DURATION_S", "inf")),
+        p_gap=float(_tt_public_getenv("PREFILL_PRODUCER_P_GAP", "0.0")),
+        p_burst=float(_tt_public_getenv("PREFILL_PRODUCER_P_BURST", "0.0")),
         gap_ms=(gap_lo, gap_hi),
-        mid_chunk_end_prob=float(os.environ.get("PREFILL_PRODUCER_MID_END_PROB", "0.0")),
-        seed=int(os.environ.get("PREFILL_PRODUCER_SEED", "1234")),
-        verify=os.environ.get("PREFILL_PRODUCER_CHECK_PCC", "0") == "1",
-        pcc_threshold=float(os.environ.get("PREFILL_STANDALONE_CHUNKED_PCC", "0.93")),
+        mid_chunk_end_prob=float(_tt_public_getenv("PREFILL_PRODUCER_MID_END_PROB", "0.0")),
+        seed=int(_tt_public_getenv("PREFILL_PRODUCER_SEED", "1234")),
+        verify=_tt_public_getenv("PREFILL_PRODUCER_CHECK_PCC", "0") == "1",
+        pcc_threshold=float(_tt_public_getenv("PREFILL_STANDALONE_CHUNKED_PCC", "0.93")),
         interleave=interleave,
-        multi_turn_prob=float(os.environ.get("PREFILL_PRODUCER_MULTI_TURN_PROB", "0.0")),
+        multi_turn_prob=float(_tt_public_getenv("PREFILL_PRODUCER_MULTI_TURN_PROB", "0.0")),
     )
 
 
@@ -501,7 +502,7 @@ def run_schedule(cfg: ProducerConfig, *, push_fn, now_fn=time.perf_counter, slee
 
 
 def _read_slot_kv_and_check_pcc(table, device_map: dict, slot_id: int, real_len: int, trace_dir):
-    golden_cap = int(os.environ.get("PREFILL_PCC_GOLDEN_LEN", "0"))
+    golden_cap = int(_tt_public_getenv("PREFILL_PCC_GOLDEN_LEN", "0"))
     if golden_cap:
         real_len = min(real_len, golden_cap)
     if ADAPTER.name == "minimax_m3":
@@ -790,7 +791,7 @@ def _read_slot_kv_and_check_pcc_mla(table, device_map: dict, slot_id: int, real_
 def _write_pcc_verdict(
     rank: int, ok: bool, min_pcc: float, checked: int, threshold: float, per_cache: dict | None = None
 ) -> None:
-    summary_dir = os.environ.get("PREFILL_PCC_SUMMARY_DIR")
+    summary_dir = _tt_public_getenv("PREFILL_PCC_SUMMARY_DIR")
     if not summary_dir:
         return
     os.makedirs(summary_dir, exist_ok=True)
@@ -807,13 +808,13 @@ def _write_pcc_verdict(
 
 
 def _verify_resident_slots(kv_table, stats: RunStats, threshold: float, slot_traces: dict, rank: int = 0) -> bool:
-    device_map = _read_device_map(int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
+    device_map = _read_device_map(int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60")))
     if not device_map:
         logger.error("[producer] no device map available; skipping KV read/PCC.")
         _write_pcc_verdict(rank, ok=False, min_pcc=0.0, checked=0, threshold=threshold, per_cache={})
         return False
 
-    dflash_threshold = float(os.environ.get("PREFILL_DFLASH_PCC", "0.88"))
+    dflash_threshold = float(_tt_public_getenv("PREFILL_DFLASH_PCC", "0.88"))
     check_dflash = any(name.startswith("dflash_") for name in _config_names(kv_table))
     if check_dflash:
         from models.demos.deepseek_v3_d_p.tt.dflash_prefill.dflash_kv_validation import dflash_kv_table_pcc_check
@@ -899,8 +900,8 @@ def _load_token_pool(trace_dir, num_tokens: int) -> list:
 
 
 def _resolve_slot_prompts(cfg: ProducerConfig):
-    default = os.environ.get("PREFILL_TRACE_DIR", ADAPTER.prefill_trace_default)
-    spec = os.environ.get("PREFILL_PRODUCER_SLOT_TRACES", "").strip()
+    default = _tt_public_getenv("PREFILL_TRACE_DIR", ADAPTER.prefill_trace_default)
+    spec = _tt_public_getenv("PREFILL_PRODUCER_SLOT_TRACES", "").strip()
     if spec and cfg.multi_turn_prob > 0:
         raise ValueError(
             "PREFILL_PRODUCER_SLOT_TRACES is incompatible with multi-turn "
@@ -948,7 +949,7 @@ def _resolve_slot_prompts(cfg: ProducerConfig):
 
 
 def _mr_config():
-    if int(os.environ.get("OMPI_COMM_WORLD_SIZE", "1")) <= 1:
+    if int(_tt_public_getenv("OMPI_COMM_WORLD_SIZE", "1")) <= 1:
         return (0, 1)
     if not ttnn.distributed_context_is_initialized():
         ttnn.init_distributed_context()
@@ -979,7 +980,7 @@ def _run_validator(rank: int, world_size: int) -> None:
         logger.error("[producer] multi-rank requires PREFILL_PRODUCER_CHECK_PCC=1 (validators only verify).")
         sys.exit(1)
     _require_shared_table_path(world_size)
-    timeout_s = int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
+    timeout_s = int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
     logger.info(f"[producer] validator rank={rank}/{world_size}: read-back only (no H2D feed)")
 
     resident = _mr_bcast_resident(rank, {})
@@ -1020,7 +1021,7 @@ def main() -> None:
     parser.add_argument(
         "--manifest",
         "-m",
-        default=os.environ.get("PREFILL_PRODUCER_MANIFEST"),
+        default=_tt_public_getenv("PREFILL_PRODUCER_MANIFEST"),
         help="Path to the producer YAML manifest (applied at startup; exported env vars override it).",
     )
     args = parser.parse_args()
@@ -1039,8 +1040,8 @@ def main() -> None:
         logger.error("[producer] multi-rank requires PREFILL_PRODUCER_CHECK_PCC=1 (all ranks verify).")
         sys.exit(1)
     _require_shared_table_path(world_size)
-    service_id = os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")
-    timeout_s = int(os.environ.get("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
+    service_id = _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")
+    timeout_s = int(_tt_public_getenv("PREFILL_H2D_CONNECT_TIMEOUT", "60"))
     logger.info(
         f"[producer] service_id={service_id!r} users={cfg.num_users} chunks=[{cfg.chunks_min},{cfg.chunks_max}] "
         f"max_requests={cfg.max_requests} duration={cfg.duration_s}s p_gap={cfg.p_gap} p_burst={cfg.p_burst} "
@@ -1081,7 +1082,7 @@ def main() -> None:
         service.forward_to_tensor_bytes(chunk_bytes, metadata=_pack_metadata(slot_id, actual_start, actual_end))
         return (time.perf_counter() - push_start) * 1000.0
 
-    warmup_chunks = int(os.environ.get("PREFILL_PRODUCER_WARMUP_CHUNKS", "0"))
+    warmup_chunks = int(_tt_public_getenv("PREFILL_PRODUCER_WARMUP_CHUNKS", "0"))
     if warmup_chunks > 0:
         logger.info(f"[producer] warmup: {warmup_chunks} throwaway chunk(s) on slot 0 (not timed, not verified)")
         for cidx in range(warmup_chunks):
@@ -1125,7 +1126,7 @@ def main() -> None:
             logger.info(f"[producer] rank={r}: ok={v}")
         verify_ok = all(verdicts)
 
-    if os.environ.get("PREFILL_SEND_SHUTDOWN", "0") == "1":
+    if _tt_public_getenv("PREFILL_SEND_SHUTDOWN", "0") == "1":
         sentinel = struct.pack("<iii", -1, -1, -1)
         assert len(sentinel) == METADATA_SIZE_BYTES
         sentinel_payload = _chunk_to_host_array([1] * CHUNK_SIZE)

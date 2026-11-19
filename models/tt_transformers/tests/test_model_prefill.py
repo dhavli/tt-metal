@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2024 Tenstorrent USA, Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import bz2
 import os
 
@@ -23,7 +24,7 @@ from models.tt_transformers.tt.model_config import DecodersPrecision
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,
@@ -100,7 +101,7 @@ def test_model_inference(
         elif num_layers != 1 and seq_len != 4096:
             pytest.skip("CI only runs full model for 4k seq len to reduce CI pipeline load")
 
-        hf_model_env = os.getenv("HF_MODEL", "")
+        hf_model_env = _tt_public_getenv("HF_MODEL", "")
         if ("Llama" in hf_model_env) and ("Vision" in hf_model_env) and (num_layers is None):
             pytest.skip("Skipping Llama Vision full model test: no CrossAttention functionality in this test.")
 

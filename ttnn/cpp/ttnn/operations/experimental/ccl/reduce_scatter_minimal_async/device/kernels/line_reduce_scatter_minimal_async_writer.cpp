@@ -23,6 +23,35 @@
 #include <utility>
 #include "api/tensor/noc_traits.h"
 
+// QWEN36_PREFILL_RS_BANK (tt-stack bench/probes/rs_bank): BANK-CONTIGUOUS fabric packets in the line RS writer.
+//
+// The remote intermediate is DRAM-INTERLEAVED. The interleaved address generator (InterleavedAddrGen::get_noc_addr,
+// tt_metal/hw/inc/internal/dataflow/dataflow_api_addrgen.h:292-297 with get_bank_offset_index/get_bank_index at :18-41)
+// maps page id t to bank b = t mod NUM_DRAM_BANKS and to address
+//     bank_base_address + (t div NUM_DRAM_BANKS) * aligned_page_size + bank_to_dram_offset[b]
+// on core dram_bank_to_noc_xy[noc][b]. Inside one slice row the tile ids are consecutive, so the columns c, c+NB,
+// c+2NB, ... of a row segment sit in ONE bank at consecutive per-bank pages: one NoC write of k pages to the first
+// one's address carries all k of them (when aligned_page_size == page_size). The paired reader overlay
+// (line_reader.bank.cpp) fills the sender CB in that bank order, inside each sync group (the tiles between two
+// out_ready semaphore increments, cut at a channel end), so the set of tiles that has landed when the reducer's
+// semaphore wait returns is exactly the stock set: only the order inside a group changes.
+//
+// This writer recomputes every tile's destination with the SAME address generator the stock writer uses
+// (addrgen_detail::get_noc_address), and merges a tile into the previous chunk only when its NoC address is exactly
+// the previous chunk's end. A packet carries up to 4 such chunks (NOC_SCATTER_WRITE_MAX_CHUNKS; 1 chunk = a plain
+// unicast write) and at most (mux channel buffer - packet header) / page_size tiles: 8 bf8 tiles = 8704 B at the
+// served QWEN36_FABRIC_PAYLOAD=8704. So the bank mapping is never ASSUMED for correctness: a layout where the bank
+// order does not give contiguous pages only costs packets. Transport only: every tile lands at the same remote
+// address as before; the reduction is untouched (tier 1, bitwise).
+//
+// rs_bank_mustfail = true is the ttsim-only must-fail build: it merges every next tile into the chunk regardless of
+// its address, i.e. it assumes consecutive tiles in L1 are consecutive in DRAM (the free/u-ccl rs_uni error), which
+// corrupts the bank mapping; the self-test must REFUSE it. Served only by arms that mount BOTH overlay files; the
+// Python side (rs_bank.py) refuses a boot whose flag and mounted kernels disagree (marker + version on both files).
+#define QWEN36_PREFILL_RS_BANK_KERNEL 1
+#define QWEN36_PREFILL_RS_BANK_ORDER_VERSION 1
+constexpr bool rs_bank_mustfail = false;
+
 using address_t = uint32_t;
 using ttnn::ccl::Topology;
 using namespace tt::tt_fabric::linear::experimental;
@@ -69,6 +98,92 @@ constexpr ccl_routing_utils::line_unicast_route_info_t backward_unicast_route_in
 constexpr ccl_routing_utils::line_multicast_route_info_t backward_multicast_route_info =
     ccl_routing_utils::get_line_multicast_route_info_from_args<
         num_ct_args + 2 * ccl_routing_utils::num_line_unicast_args + ccl_routing_utils::num_line_multicast_args>();
+
+// The packet cap: one packet's payload must fit the worker's mux channel buffer slot after the packet header
+// (the same clamp as the shipped rs4 overlay, bench/probes/rs_pkt4/line_writer.pkt4.cpp).
+constexpr uint32_t rs_bank_cap_tiles =
+    (fabric_mux_channel_buffer_size_bytes > sizeof(PACKET_HEADER_TYPE) + page_size)
+        ? (uint32_t)((fabric_mux_channel_buffer_size_bytes - sizeof(PACKET_HEADER_TYPE)) / page_size)
+        : 1u;
+static_assert(rs_bank_cap_tiles >= 1, "rs_bank: a packet must carry at least one page");
+static_assert((uint64_t)rs_bank_cap_tiles * page_size <= 0xFFFFu, "rs_bank: chunk/payload sizes are uint16 fields");
+static_assert(tile_granularity >= 1 && tile_granularity <= 64, "rs_bank: per-round address array is on the stack");
+
+// ---- rs_bank::GroupIter: BYTE-IDENTICAL in line_reader.bank.cpp and line_writer.bank.cpp (the ttsim gate diffs it).
+namespace rs_bank {
+constexpr uint32_t NB = NUM_DRAM_BANKS;
+// Visits the n tiles of one sync group, which starts at column col0 of the slice row at row_off (a tile offset, a
+// multiple of the row stride) and runs on in row-major order, in BANK order: inside each row segment the columns
+// are taken class by class, class k = the columns at offsets k, k+NB, k+2NB, ... from the segment start (one DRAM
+// bank each, since the tile ids of a segment are consecutive), each class in ascending column order (= ascending
+// per-bank page). The class order is rotated by (row index + worker rotation) mod NB so that the 8 workers of a
+// direction do not all stream the same bank at the same time. tile() is relative to the slice's tile_id_start.
+struct GroupIter {
+    uint32_t row_off;  // tile offset of the current segment's row
+    uint32_t row_idx;  // slice row index of the current segment (rotation input)
+    uint32_t c0;       // first column of the current segment
+    uint32_t len;      // columns in the current segment
+    uint32_t rest;     // tiles of the group after the current segment
+    uint32_t rot;      // class rotation of the current segment
+    uint32_t q;        // class slot being visited (0..NB-1)
+    uint32_t c;        // current column offset inside the segment
+    uint32_t wrot;     // per-worker rotation
+    uint32_t stride;   // row stride in tiles (input_tensor_Wt)
+    uint32_t width;    // slice width in tiles (slice_Wt)
+
+    bool seek_class() {
+        for (; q < NB; ++q) {
+            uint32_t cls = q + rot;
+            if (cls >= NB) {
+                cls -= NB;
+            }
+            if (cls < len) {
+                c = cls;
+                return true;
+            }
+        }
+        return false;
+    }
+    void start_segment() {
+        rot = (row_idx + wrot) % NB;
+        q = 0;
+        seek_class();
+    }
+    void init(uint32_t row_off_, uint32_t row_idx_, uint32_t col0, uint32_t n, uint32_t wrot_, uint32_t stride_,
+              uint32_t width_) {
+        stride = stride_;
+        width = width_;
+        wrot = wrot_;
+        row_off = row_off_;
+        row_idx = row_idx_;
+        c0 = col0;
+        len = (width - col0 < n) ? (width - col0) : n;
+        rest = n - len;
+        start_segment();
+    }
+    uint32_t tile() const { return row_off + c0 + c; }
+    void advance() {
+        c += NB;
+        if (c < len) {
+            return;
+        }
+        ++q;
+        if (seek_class()) {
+            return;
+        }
+        if (rest == 0) {
+            return;  // group exhausted; the caller never reads past n tiles
+        }
+        row_off += stride;
+        row_idx++;
+        c0 = 0;
+        len = (rest < width) ? rest : width;
+        rest -= len;
+        start_segment();
+    }
+};
+}  // namespace rs_bank
+// ---- end rs_bank::GroupIter
 
 namespace detail {
 
@@ -277,6 +392,10 @@ void kernel_main() {
 
     const uint32_t intermediate_full_offset = is_forward ? 0 : input_num_pages;
 
+    // per-worker class rotation (rs_bank::GroupIter): the worker's ordinal in its direction, from its tile range
+    const uint32_t rs_bank_span = start_tiles_to_read - start_tiles_read;
+    const uint32_t rs_bank_wrot = (rs_bank_span > 0 ? start_tiles_read / rs_bank_span : 0) % rs_bank::NB;
+
     uint32_t chunk_count = 0;
     for (uint32_t b = 0; b < input_tensor_B; b++) {
         int slice_idx = is_forward ? ring_size - 1 : 0;
@@ -298,63 +417,100 @@ void kernel_main() {
                 ASSERT(false);
             }
             for (uint32_t c = 0; c < slice_C; ++c) {
+                // linear (stock-order) position of the next sync group's first tile
                 uint32_t intermediate_pages_read_in_row = start_pages_read_in_row;
                 uint32_t intermediate_row_offset = start_row_offset;
+                uint32_t intermediate_row_idx = start_row_offset / input_tensor_Wt;
 
                 uint32_t tiles_read = start_tiles_read;
                 uint32_t tiles_to_read = start_tiles_to_read;
+
+                rs_bank::GroupIter group;
+                uint32_t group_left = 0;
 
                 // Write to remote intermediate buffer
                 while (tiles_read < tiles_to_read) {
                     uint32_t tiles_remaining_to_read = tiles_to_read - tiles_read;
                     uint32_t num_pages_to_read = std::min(tiles_remaining_to_read, tile_granularity);
 
+                    if (group_left == 0) {
+                        // a sync group = the rounds up to the next out_ready increment, cut at the channel end
+                        const uint32_t rounds_to_sync = chunks_per_sync - (chunk_count % chunks_per_sync);
+                        const uint32_t n = std::min(rounds_to_sync * tile_granularity, tiles_remaining_to_read);
+                        group.init(
+                            intermediate_row_offset,
+                            intermediate_row_idx,
+                            intermediate_pages_read_in_row,
+                            n,
+                            rs_bank_wrot,
+                            input_tensor_Wt,
+                            slice_Wt);
+                        group_left = n;
+                        intermediate_pages_read_in_row += n;
+                        while (intermediate_pages_read_in_row >= slice_Wt) {
+                            intermediate_pages_read_in_row -= slice_Wt;
+                            intermediate_row_offset += input_tensor_Wt;
+                            intermediate_row_idx++;
+                        }
+                    }
+
+                    // destination of every tile of this round, in the CB (bank) order the reader filled it
+                    uint64_t dst[tile_granularity];
+                    for (uint32_t k = 0; k < num_pages_to_read; ++k) {
+                        dst[k] = tt::tt_fabric::linear::addrgen_detail::get_noc_address(
+                            intermediate_addrgen, intermediate_tile_id_start + group.tile(), 0);
+                        group.advance();
+                    }
+                    group_left -= num_pages_to_read;
+
                     cb_output.wait_front(tile_granularity);
                     size_t l1_read_addr = cb_output.get_read_ptr();
-                    for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
-                        uint32_t num_pages_to_write = std::min(contig_pages_advanced, num_pages_to_read - j);
-
-                        uint32_t first_intermediate_tile_id =
-                            intermediate_tile_id_start + intermediate_row_offset + intermediate_pages_read_in_row;
-                        auto noc_address0 = tt::tt_fabric::linear::addrgen_detail::get_noc_address(
-                            intermediate_addrgen, first_intermediate_tile_id, 0);
-
-                        intermediate_pages_read_in_row++;
-                        if (intermediate_pages_read_in_row == slice_Wt) {
-                            intermediate_row_offset += input_tensor_Wt;
-                            intermediate_pages_read_in_row -= slice_Wt;
+                    for (uint32_t j = 0; j < num_pages_to_read;) {
+                        // one packet: up to NOC_SCATTER_WRITE_MAX_CHUNKS address-contiguous chunks, <= cap tiles
+                        uint64_t chunk_addr[NOC_SCATTER_WRITE_MAX_CHUNKS];
+                        uint16_t chunk_bytes[NOC_SCATTER_WRITE_MAX_CHUNKS];
+                        uint32_t num_chunks = 0;
+                        uint32_t pkt_tiles = 0;
+                        while (j < num_pages_to_read && pkt_tiles < rs_bank_cap_tiles) {
+                            if (num_chunks > 0 &&
+                                (rs_bank_mustfail ||
+                                 dst[j] == chunk_addr[num_chunks - 1] + chunk_bytes[num_chunks - 1])) {
+                                chunk_bytes[num_chunks - 1] += page_size;
+                            } else {
+                                if (num_chunks == NOC_SCATTER_WRITE_MAX_CHUNKS) {
+                                    break;
+                                }
+                                chunk_addr[num_chunks] = dst[j];
+                                chunk_bytes[num_chunks] = page_size;
+                                num_chunks++;
+                            }
+                            pkt_tiles++;
+                            j++;
                         }
-
-                        if (num_pages_to_write == 1) {
-                            fabric_unicast_noc_unicast_write_with_state<UnicastWriteUpdateMask::DstAddr>(
+                        const uint16_t pkt_bytes = static_cast<uint16_t>(pkt_tiles * page_size);
+                        if (num_chunks == 1) {
+                            fabric_unicast_noc_unicast_write_with_state<
+                                UnicastWriteUpdateMask::DstAddr | UnicastWriteUpdateMask::PayloadSize>(
                                 mux_connection_handle,
                                 pkt_unicast_hdr,
                                 l1_read_addr,
-                                NocUnicastCommandHeader{noc_address0});
-                            l1_read_addr += page_size;
-                        } else if (num_pages_to_write == 2) {
-                            uint32_t second_intermediate_tile_id =
-                                intermediate_tile_id_start + intermediate_row_offset + intermediate_pages_read_in_row;
-
-                            intermediate_pages_read_in_row++;
-                            if (intermediate_pages_read_in_row == slice_Wt) {
-                                intermediate_row_offset += input_tensor_Wt;
-                                intermediate_pages_read_in_row -= slice_Wt;
-                            }
-
-                            auto noc_address1 = tt::tt_fabric::linear::addrgen_detail::get_noc_address(
-                                intermediate_addrgen, second_intermediate_tile_id, 0);
-                            fabric_unicast_noc_scatter_write_with_state<UnicastScatterWriteUpdateMask::DstAddrs>(
+                                NocUnicastCommandHeader{chunk_addr[0]},
+                                pkt_bytes);
+                        } else {
+                            fabric_unicast_noc_scatter_write_with_state<
+                                UnicastScatterWriteUpdateMask::DstAddrs | UnicastScatterWriteUpdateMask::ChunkSizes |
+                                UnicastScatterWriteUpdateMask::PayloadSize>(
                                 mux_connection_handle,
                                 pkt_scatter_hdr,
                                 l1_read_addr,
-                                NocUnicastScatterCommandHeader({noc_address0, noc_address1}));
-                            l1_read_addr += page_size * 2;
-                        } else {
-                            ASSERT(false);
+                                NocUnicastScatterCommandHeader(
+                                    chunk_addr, chunk_bytes, static_cast<uint8_t>(num_chunks)),
+                                pkt_bytes);
                         }
+                        // the header is rewritten for the next packet: its last send must have left L1
                         noc_obj.async_writes_flushed();
-                        tiles_read += num_pages_to_write;
+                        l1_read_addr += pkt_bytes;
+                        tiles_read += pkt_tiles;
                     }
                     cb_output.pop_front(tile_granularity);
 

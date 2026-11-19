@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import contextlib
 import json
 import importlib
@@ -18,10 +19,10 @@ import ttnn._ttnn
 Config = ttnn._ttnn.core.Config
 CONFIG = ttnn._ttnn.CONFIG
 CONFIG_PATH = None
-if "TTNN_CONFIG_PATH" in os.environ:
-    CONFIG_PATH = pathlib.Path(os.environ["TTNN_CONFIG_PATH"])
+if _tt_public_contains('TTNN_CONFIG_PATH'):
+    CONFIG_PATH = pathlib.Path(_tt_public_getitem('TTNN_CONFIG_PATH'))
 
-CONFIG_OVERRIDES = os.environ.get("TTNN_CONFIG_OVERRIDES", None)
+CONFIG_OVERRIDES = _tt_public_getenv("TTNN_CONFIG_OVERRIDES", None)
 
 
 def load_config_from_dictionary(config, from_file=False, source=None):
@@ -611,7 +612,14 @@ experimental.yuv_bt709_coefficients = yuv_bt709_coefficients
 
 Conv1dConfig = ttnn._ttnn.operations.conv.Conv2dConfig
 
-from ttnn.operations.transformer import SDPAProgramConfig, PagedCacheGeometryOverride, SparseKVFormat
+from ttnn.operations.transformer import (
+    SDPAProgramConfig,
+    PagedCacheGeometryOverride,
+    SparseKVFormat,
+    ChunkGdnMonoProgramConfig,
+    ChunkGdnPhasedProgramConfig,
+    ChunkGdnFusedProgramConfig,
+)
 
 transformer.SparseKVFormat = SparseKVFormat
 
@@ -651,7 +659,7 @@ def _is_editable():
     return "site-packages" not in str(path) and "dist-packages" not in str(path)
 
 
-if "TT_METAL_RUNTIME_ROOT" not in os.environ:
+if (not _tt_public_contains('TT_METAL_RUNTIME_ROOT')):
     this_dir = pathlib.Path(__file__).resolve().parent
 
     if _is_editable():

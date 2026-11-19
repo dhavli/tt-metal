@@ -33,6 +33,7 @@ Run
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -1145,10 +1146,10 @@ def test_bspm_vs_uniform_5layers_decode(
     logger.info(f"Baseline logits shape: {logits_uniform.shape}")
 
     # ── Run 2: BSPM pre-quantized ────────────────────────────────────────────
-    bspm_results_dir_env = os.environ.get("BSPM_RESULTS_DIR")
-    bspm_model_name = os.environ.get("BSPM_MODEL_NAME", "")
-    bspm_variant = os.environ.get("BSPM_VARIANT", "B")
-    bspm_budget = float(os.environ.get("BSPM_BUDGET", "3.5"))
+    bspm_results_dir_env = _tt_public_getenv("BSPM_RESULTS_DIR")
+    bspm_model_name = _tt_public_getenv("BSPM_MODEL_NAME", "")
+    bspm_variant = _tt_public_getenv("BSPM_VARIANT", "B")
+    bspm_budget = float(_tt_public_getenv("BSPM_BUDGET", "3.5"))
 
     if not bspm_results_dir_env or not bspm_model_name:
         pytest.skip(

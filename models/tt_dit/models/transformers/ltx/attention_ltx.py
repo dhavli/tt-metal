@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -26,7 +27,7 @@ from .quant_config import LtxQuantProfile
 # twice. The fused gather barely overlaps its matmul, so gathering once explicitly and running both
 # projections as plain matmuls on the gathered tensor is the same math for one gather less.
 # Set to 0 to restore the double gather for an A/B.
-LTX_DEDUP_GATE_GATHER = os.environ.get("LTX_DEDUP_GATE_GATHER", "1") in ("1", "true", "True")
+LTX_DEDUP_GATE_GATHER = _tt_public_getenv("LTX_DEDUP_GATE_GATHER", "1") in ("1", "true", "True")
 
 
 class LTXAttention(Module):

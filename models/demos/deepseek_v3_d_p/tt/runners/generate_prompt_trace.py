@@ -12,6 +12,7 @@ producer validate device KV against a reference generated for that exact prompt.
 MLA models only (DeepSeek / Kimi): the golden is the compressed KVPE
 ``[seq, KV_LORA_RANK + QK_ROPE_HEAD_DIM]`` per layer.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import json
@@ -41,7 +42,7 @@ def _resolve_model_path(variant) -> Path:
     the torch/HF reference forward and needs real weights — require safetensors here and point the
     user at PREFILL_HF_MODEL instead of failing deep in the weight load.
     """
-    env = os.environ.get("PREFILL_HF_MODEL")
+    env = _tt_public_getenv("PREFILL_HF_MODEL")
     model_path = env or variant.hf_model_default
     if model_path and Path(model_path).is_dir() and any(Path(model_path).glob("*.safetensors")):
         return Path(model_path)
@@ -161,11 +162,11 @@ def generate(model: str, prompt_text: str, isl: int, num_layers: int, out_dir: P
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--model", default=os.environ.get("PREFILL_MODEL", DEFAULT_MODEL))
+    p.add_argument("--model", default=_tt_public_getenv("PREFILL_MODEL", DEFAULT_MODEL))
     p.add_argument("--prompt", default=None, help="raw prompt text")
     p.add_argument("--prompt-file", default=None, help='JSON prompt file ([{"prompt": ...}] or {"prompts": [...]})')
-    p.add_argument("--isl", type=int, default=int(os.environ.get("PREFILL_MAX_SEQ_LEN", "1024")))
-    p.add_argument("--num-layers", type=int, default=int(os.environ.get("PREFILL_NUM_LAYERS", "2")))
+    p.add_argument("--isl", type=int, default=int(_tt_public_getenv("PREFILL_MAX_SEQ_LEN", "1024")))
+    p.add_argument("--num-layers", type=int, default=int(_tt_public_getenv("PREFILL_NUM_LAYERS", "2")))
     p.add_argument("--out", required=True, help="output trace dir")
     args = p.parse_args()
 

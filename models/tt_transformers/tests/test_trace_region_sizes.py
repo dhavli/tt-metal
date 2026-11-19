@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import re
 from pathlib import Path
@@ -190,7 +191,7 @@ def test_resolve_trace_region_size_from_hf_hub_cache_path(hub_path, sku, expecte
 
 def _gpt_oss_trace_model_key_from_env() -> str:
     """Mirrors models.demos.gpt_oss.tests.unit.test_sampling._gpt_oss_trace_model_key."""
-    hf = os.getenv("HF_MODEL", "").lower()
+    hf = _tt_public_getenv("HF_MODEL", "").lower()
     return "gpt-oss-120b" if "120b" in hf else "gpt-oss-20b"
 
 

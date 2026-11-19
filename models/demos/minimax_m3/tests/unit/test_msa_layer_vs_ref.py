@@ -14,6 +14,7 @@ current block (op does this; no sink block, per upstream) -> top-16 -> block-spa
 each compute their OWN block selection, so a wrong index branch (proj/norm/rope) -> different blocks ->
 PCC drops. Single card (TP=1); SP=8×TP=4 sharding of this same path is validated by test_msa_sp_vs_ref.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from types import SimpleNamespace
@@ -90,7 +91,7 @@ def test_msa_layer_vs_ref(mesh_device, device_params, seq_len, reset_seeds):
 
     from safetensors import safe_open
 
-    base = os.environ.get("M3_CKPT") or os.environ.get("HF_MODEL")
+    base = _tt_public_getenv("M3_CKPT") or _tt_public_getenv("HF_MODEL")
     if not base:
         pytest.skip("set HF_MODEL (or M3_CKPT) to a MiniMax-M3 checkpoint for the real-weights MSA test")
     wmap = _json.load(open(f"{base}/model.safetensors.index.json"))["weight_map"]

@@ -5,6 +5,7 @@
 Simple script to inspect the contents of the teacher forcing reference file.
 Run this to debug what tokens are stored in the reference file.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -19,7 +20,7 @@ try:
     from transformers import AutoTokenizer
 
     MODEL_PATH = Path(
-        os.getenv(
+        _tt_public_getenv(
             "DEEPSEEK_V3_HF_MODEL",
             "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked",
         )

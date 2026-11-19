@@ -4,6 +4,7 @@
 """Hugging Face provider boundary for Mistral-7B-Instruct-v0.3."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -144,7 +145,7 @@ def load_tokenizer(hf_model: str, hf_revision: str | None = DEFAULT_HF_REVISION)
     tokenizer = AutoTokenizer.from_pretrained(
         hf_model,
         revision=hf_revision,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     eos = getattr(tokenizer, "eos_token_id", None)
     tokenizer.stop_tokens = [] if eos is None else ([eos] if isinstance(eos, int) else list(eos))
@@ -159,8 +160,8 @@ def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: 
 def _cache_path(hf_model: str, mesh_device, cache_dir: Path | str | None) -> Path:
     if cache_dir is not None:
         path = Path(cache_dir)
-    elif os.getenv("TT_CACHE_PATH"):
-        path = Path(os.environ["TT_CACHE_PATH"])
+    elif _tt_public_getenv("TT_CACHE_PATH"):
+        path = Path(_tt_public_getitem('TT_CACHE_PATH'))
     else:
         topology = {1: "N150", 2: "N300", 8: "T3K"}.get(
             mesh_device.get_num_devices(), f"TP{mesh_device.get_num_devices()}"
@@ -255,7 +256,7 @@ def from_pretrained(
     hf_config = AutoConfig.from_pretrained(
         hf_model,
         revision=hf_revision,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     _validate_checkpoint_config(hf_config)
     num_devices = mesh_device.get_num_devices()
@@ -268,7 +269,7 @@ def from_pretrained(
         hf_model,
         revision=hf_revision,
         torch_dtype=torch.bfloat16,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     hf.eval()
     resolved_layers = hf_config.num_hidden_layers if n_layers is None else n_layers
@@ -335,8 +336,8 @@ def from_pretrained(
         max_seq_len=max_seq_len,
         trace_prefill_supported_seq_lens=_trace_seq_lens(num_devices, max_prefill_chunk_size, max_seq_len),
         max_prefill_batch_size=8 if num_devices == 1 else 32,
-        disable_batched_prefill=bool(os.getenv("DISABLE_BATCHED_PREFILL")),
-        batched_prefill_batched_extract=not bool(os.getenv("DISABLE_BATCHED_EXTRACT")),
+        disable_batched_prefill=bool(_tt_public_getenv("DISABLE_BATCHED_PREFILL")),
+        batched_prefill_batched_extract=not bool(_tt_public_getenv("DISABLE_BATCHED_EXTRACT")),
     )
     del hf
     return Mistral7BForCausalLM(

@@ -17,6 +17,7 @@ preprocessing cost). Two opt-out flags exist only for benchmarking/debug:
   QWEN_GDN_PHASED=0    fall back to the monolithic single-kernel fused op (no phase split).
   QWEN_GDN_FLAT_QKV=0  fall back to head-split q/k/v + host l2_norm (no flat token-major reads).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import json
@@ -39,7 +40,7 @@ from models.tt_transformers.tt.generator import Generator
 from models.tt_transformers.tt.model_config import determine_device_name
 
 _MESH_SHAPE = {"P150": (1, 1), "P150x4": (1, 4), "P150x8": (1, 8), "P300": (1, 2)}.get(
-    os.environ.get("MESH_DEVICE"), (1, 4)
+    _tt_public_getenv("MESH_DEVICE"), (1, 4)
 )
 _MULTI = _MESH_SHAPE != (1, 1)
 _TP_TRACE_REGION_SIZE = 1024 * 1024 * 1024
@@ -92,7 +93,7 @@ def _get_prompt(seqlen, tokenizer, max_prompt_len=None):
     """Load ~seqlen tokens (clipped, not padded). Tile-aligned; no pad tokens (last-token logits)."""
     cap = seqlen if max_prompt_len is None else min(seqlen, max_prompt_len)
     # QWEN35_REF_PROMPT=1: match the reference 27B 64k extractive task (pg84, default chat template, no thinking seed).
-    if os.environ.get("QWEN35_REF_PROMPT") and seqlen >= 4096:
+    if _tt_public_getenv("QWEN35_REF_PROMPT") and seqlen >= 4096:
         with open(f"{SHARED_PROMPTS_DIR}/input_data_long_64k.json") as f:
             rd = json.load(f)[0]
         context = _load_and_cache_context(rd["context"], rd.get("max_length"))
@@ -135,7 +136,7 @@ def _get_prompt(seqlen, tokenizer, max_prompt_len=None):
         instruction = entry["prompt"]
         prefix = "<|im_start|>user\n"
         # Seed <think> for reasoning; QWEN35_NO_THINK=1 disables it
-        if os.environ.get("QWEN35_NO_THINK"):
+        if _tt_public_getenv("QWEN35_NO_THINK"):
             # Empty thinking block (enable_thinking=False)
             suffix = (
                 f"\n\nBased on the above text: {instruction}<|im_end|>\n"
@@ -403,11 +404,11 @@ def _run_tp_generation(model, tokenizer, token_ids, max_generated_tokens, num_bl
     profiler.end("compile_prefill")
     logger.info(f"[TP] prefill chunk-trace captured in {time.time() - t_cap:.1f}s")
 
-    _temp = float(os.environ.get("QWEN35_TEMP", "0") or 0)
-    _rep_pen = float(os.environ.get("QWEN35_REP_PENALTY", "1.0") or 1.0)
-    _no_repeat = int(os.environ.get("QWEN35_NO_REPEAT_NGRAM", "0") or 0)
-    _top_k = int(os.environ.get("QWEN35_TOP_K", "0") or 0)
-    _top_p = float(os.environ.get("QWEN35_TOP_P", "1.0") or 1.0)
+    _temp = float(_tt_public_getenv("QWEN35_TEMP", "0") or 0)
+    _rep_pen = float(_tt_public_getenv("QWEN35_REP_PENALTY", "1.0") or 1.0)
+    _no_repeat = int(_tt_public_getenv("QWEN35_NO_REPEAT_NGRAM", "0") or 0)
+    _top_k = int(_tt_public_getenv("QWEN35_TOP_K", "0") or 0)
+    _top_p = float(_tt_public_getenv("QWEN35_TOP_P", "1.0") or 1.0)
     generated = []
 
     def _pick(vec):
@@ -453,7 +454,7 @@ def _run_tp_generation(model, tokenizer, token_ids, max_generated_tokens, num_bl
     from models.tt_transformers.tt.common import copy_host_to_device
 
     mesh = model.mesh_device
-    eager = os.environ.get("QWEN35_TP_DECODE_EAGER") == "1"
+    eager = _tt_public_getenv("QWEN35_TP_DECODE_EAGER") == "1"
 
     def _read(out):
         return _pick(model.process_output_decode(out, B=1, S=1).reshape(-1)[:vocab])
@@ -606,7 +607,7 @@ def _run_tp_generation(model, tokenizer, token_ids, max_generated_tokens, num_bl
     decode_times = []
     signpost("inference_decode")
     profiler.start("inference_decode")
-    _DEBUG_TIMING = os.environ.get("QWEN36_DEBUG_DECODE_TIMING") == "1"
+    _DEBUG_TIMING = _tt_public_getenv("QWEN36_DEBUG_DECODE_TIMING") == "1"
     _phase_times = {"update": [], "exec_sync": [], "readback": []}
     while len(generated) < max_generated_tokens:
         # Time the FULL decode step (input update + device decode + host readback + sampling),
@@ -696,8 +697,8 @@ def _run_tp_generation_batched(model, tokenizer, token_ids, max_generated_tokens
     # op's SCAN ceiling BH=B*Nv_tp<=cores, bucket-independent) so a B=8 request is one group for both
     # T<=128 and T<=256. prefill_paged_grouped auto-caps group size. T>256 stays per-user.
     bucket = 128
-    eager = os.environ.get("QWEN35_TP_PREFILL_EAGER") == "1"
-    grouped_short = os.environ.get("QWEN_BATCHED_GROUPED", "1") != "0" and T <= 256
+    eager = _tt_public_getenv("QWEN35_TP_PREFILL_EAGER") == "1"
+    grouped_short = _tt_public_getenv("QWEN_BATCHED_GROUPED", "1") != "0" and T <= 256
     use_traced_bucket = (T == bucket) and not eager and not grouped_short
     token_list = [token_ids[:, :T] for _ in range(B)]
     if use_traced_bucket:
@@ -729,7 +730,7 @@ def _run_tp_generation_batched(model, tokenizer, token_ids, max_generated_tokens
     generated = [[nxt[u]] for u in range(B)]
 
     # ---- traced batched decode (snapshot/restore GDN around the throwaway capture run) ----
-    eager = os.environ.get("QWEN35_TP_DECODE_EAGER") == "1"
+    eager = _tt_public_getenv("QWEN35_TP_DECODE_EAGER") == "1"
     _gdn = [layer.attention for layer in model.layers if not layer.is_full_attention]
 
     def _snapshot_gdn():
@@ -786,7 +787,7 @@ def _run_tp_generation_batched(model, tokenizer, token_ids, max_generated_tokens
     #            arg-maxing). Avoids the full logits HOST transfer but adds a real device-side
     #            all-gather; measured slower overall than "shard" — kept for comparison.
     #   "host"  - legacy: full [B,1,vocab] logits to host, then torch.argmax. Baseline.
-    _mode = os.environ.get("QWEN36_BATCHED_DECODE_MODE", "shard")
+    _mode = _tt_public_getenv("QWEN36_BATCHED_DECODE_MODE", "shard")
     if _mode == "sample" and model.sampling is None:
         _mode = "host"
     if _mode == "shard":
@@ -871,7 +872,7 @@ def _run_tp_generation_batched(model, tokenizer, token_ids, max_generated_tokens
     # Time the FULL decode step (input update + device decode + host logit read + token select)
     # so the reported tok/s is real end-to-end throughput, not just the device compute.
     decode_times = []
-    _DEBUG_TIMING = os.environ.get("QWEN36_DEBUG_DECODE_TIMING") == "1"
+    _DEBUG_TIMING = _tt_public_getenv("QWEN36_DEBUG_DECODE_TIMING") == "1"
     _phase_times = {"update": [], "exec_sync": [], "readback": [], "argmax": []}
     while len(generated[0]) < max_generated_tokens:
         t_step = time.time()

@@ -4,6 +4,7 @@
 
 
 ### SDPA comparison
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -32,13 +33,13 @@ from models.demos.multimodal.siglip.tt.attention import siglip_attention_ttnn
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
 @pytest.mark.parametrize("attention_func", [siglip_attention, siglip_attention_ttnn])
 def test_attention(mesh_device, attention_func):
-    config = AutoConfig.from_pretrained(os.getenv("HF_MODEL"))
+    config = AutoConfig.from_pretrained(_tt_public_getenv("HF_MODEL"))
 
     assert hasattr(
         config, "vision_config"

@@ -24,6 +24,7 @@ parsed from the resulting tracy_ops_data.csv.
 Or invoke pytest directly (no stats):
     pytest models/demos/deepseek_v3_d_p/tests/op_unit_tests/test_sub_device_load_clear_timing.py -k "no_sd"
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import pathlib
@@ -210,7 +211,7 @@ def test_sub_device_load_clear_tracy(
 # Script entrypoint: run tracy + pytest on this file, then parse CSV stats.
 # -------------------------------------------------------------------------
 
-TRACY_CSV = os.path.join(os.environ.get("TT_METAL_HOME", ""), "generated/profiler/.logs/tracy_ops_data.csv")
+TRACY_CSV = os.path.join(_tt_public_getenv("TT_METAL_HOME", ""), "generated/profiler/.logs/tracy_ops_data.csv")
 
 
 def _filter_outliers(values):

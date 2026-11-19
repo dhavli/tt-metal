@@ -7,6 +7,7 @@ LTX-2 one-stage pipeline tests:
 - Euler step scheduler primitive (no device needed)
 - End-to-end one-stage AV generation (LTXOneStagePipeline) on a multi-chip mesh
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import itertools
 import os
@@ -56,7 +57,7 @@ def test_euler_step():
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), True)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), True)],
 )
 @pytest.mark.parametrize(
     "mesh_device, sp_axis, tp_axis, num_links, device_params, topology, is_fsdp, dynamic_load",
@@ -94,12 +95,12 @@ def test_pipeline_one_stage(
     mesh_shape = tuple(parent_mesh.shape)
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    num_frames = int(os.environ.get("NUM_FRAMES", "145"))
-    num_inference_steps = int(os.environ.get("NUM_STEPS", "30"))
-    width = int(os.environ.get("WIDTH", width))
-    height = int(os.environ.get("HEIGHT", height))
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "145"))
+    num_inference_steps = int(_tt_public_getenv("NUM_STEPS", "30"))
+    width = int(_tt_public_getenv("WIDTH", width))
+    height = int(_tt_public_getenv("HEIGHT", height))
 
-    run_warmup = os.environ.get("RUN_WARMUP", "0") in ("1", "true", "True")
+    run_warmup = _tt_public_getenv("RUN_WARMUP", "0") in ("1", "true", "True")
 
     pipeline = LTXOneStagePipeline.create_pipeline(
         mesh_device=mesh_device,
@@ -117,13 +118,13 @@ def test_pipeline_one_stage(
         width=width,
     )
 
-    prompt = os.environ.get("PROMPT", DEFAULT_LTX_PROMPT)
+    prompt = _tt_public_getenv("PROMPT", DEFAULT_LTX_PROMPT)
 
     def run(*, prompt, number, seed):
         logger.info(f"Running inference with prompt: '{prompt}'")
         logger.info(f"Parameters: {height}x{width}, {num_frames} frames, {num_inference_steps} steps")
 
-        output_filename = os.environ.get("OUTPUT_PATH", f"ltx_av_pro_{width}x{height}_{number}.mp4")
+        output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_av_pro_{width}x{height}_{number}.mp4")
 
         pipeline.generate(
             prompt,

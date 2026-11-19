@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import copy
 import os
 import time
@@ -665,9 +666,9 @@ def test_vadv2(
         fut_mode=6,
     )
 
-    n_warm = int(os.environ.get("TT_VADV2_WARM_ITERS", "0"))
-    timing = os.environ.get("TT_VADV2_TIMING") == "1"
-    memory_report = os.environ.get("TT_VADV2_MEMORY_REPORT") == "1"
+    n_warm = int(_tt_public_getenv("TT_VADV2_WARM_ITERS", "0"))
+    timing = _tt_public_getenv("TT_VADV2_TIMING") == "1"
+    memory_report = _tt_public_getenv("TT_VADV2_MEMORY_REPORT") == "1"
 
     # forward_test mutates img_metas[*]["can_bus"] in place and updates
     # tt_model.prev_frame_info from the previous call. Snapshot both so each
@@ -711,7 +712,7 @@ def test_vadv2(
         logger.info(f"[VADv2 warm-wall anchor] call#{len(walls_ms)}={walls_ms[-1]:.1f} ms (cold={walls_ms[0]:.1f} ms)")
 
     if memory_report:
-        report_path = os.environ.get("TT_VADV2_MEMORY_REPORT_PATH", "vadv2_graph_report.json")
+        report_path = _tt_public_getenv("TT_VADV2_MEMORY_REPORT_PATH", "vadv2_graph_report.json")
         ttnn.graph.end_graph_capture_to_file(report_path)
         logger.info(f"[VADv2 memory report] written to {report_path}")
 

@@ -13,6 +13,7 @@
 #include "tt-metalium/buffer_types.hpp"
 #include "tt-metalium/hal.hpp"
 #include "tt-metalium/kernel_types.hpp"
+#include "tt-metalium/mesh_device.hpp"
 #include "tt-metalium/work_split.hpp"
 #include "ttnn/tensor/shape/shape.hpp"
 #include "ttnn/operations/eltwise/unary/common/unary_op_utils.hpp"
@@ -335,7 +336,6 @@ void validate_matmul_reuse_work_split(
 
 }  // namespace ttnn::operations::matmul::utilities
 
-
 namespace ttnn::prim::dram_sharded_helpers {
 
 void validate_num_workers_per_dram_bank(std::size_t workers_per_bank) {
@@ -424,6 +424,7 @@ std::vector<DramBankReaderAssignment> get_dram_bank_reader_assignments(
         "Multiple readers per DRAM bank currently require a NOC0 data-movement kernel");
 
     const auto worker_grid = device->compute_with_storage_grid_size();
+    auto* mesh_device = dynamic_cast<tt::tt_metal::distributed::MeshDevice*>(device);
     std::set<tt::tt_metal::CoreCoord> used(primary_workers.begin(), primary_workers.end());
 
     for (uint32_t bank = 0; bank < primary_workers.size(); ++bank) {
@@ -443,8 +444,18 @@ std::vector<DramBankReaderAssignment> get_dram_bank_reader_assignments(
                     // All readers use AllocatorBank on the same NOC and therefore target the same
                     // firmware-approved endpoint. Place additional readers near the bank's primary
                     // reader to minimize NOC hops without routing one NOC to multiple endpoints.
-                    const uint32_t cost = tt::tt_metal::experimental::Device::get_worker_noc_hop_distance(
-                        device, candidate, primary_workers[bank], noc);
+                    // This factory shares one logical reader placement across the mesh, as it
+                    // already does for primary readers. Use a representative chip for the hop
+                    // heuristic; bank addressing still uses each executing chip's allocator table.
+                    const uint32_t cost = mesh_device ? tt::tt_metal::experimental::Device::get_worker_noc_hop_distance(
+                                                            mesh_device,
+                                                            tt::tt_metal::distributed::MeshCoordinate::zero_coordinate(
+                                                                mesh_device->shape().dims()),
+                                                            candidate,
+                                                            primary_workers[bank],
+                                                            noc)
+                                                      : tt::tt_metal::experimental::Device::get_worker_noc_hop_distance(
+                                                            device, candidate, primary_workers[bank], noc);
                     // Equal-cost candidates use the same endpoint and hop count. Keep the first candidate in ascending
                     // x/y scan order so that the assignment is deterministic without adding a second routing objective.
                     if (cost < best_cost) {
@@ -460,5 +471,47 @@ std::vector<DramBankReaderAssignment> get_dram_bank_reader_assignments(
         }
     }
     return assignments;
+}
+
+std::vector<std::vector<tt::tt_metal::CoreCoord>> get_dram_bank_adjacent_workers(
+    tt::tt_metal::IDevice* device, tt::tt_metal::NOC noc, uint32_t cores_per_bank, uint32_t num_banks) {
+    const auto anchors = device->get_optimal_dram_bank_to_logical_worker_assignment(noc);
+    TT_FATAL(num_banks <= anchors.size(), "{} banks requested, the device has {}", num_banks, anchors.size());
+    const auto grid = device->compute_with_storage_grid_size();
+    TT_FATAL(
+        static_cast<std::size_t>(cores_per_bank) * num_banks <= grid.x * grid.y,
+        "{} cores per bank over {} banks do not fit the {}x{} worker grid",
+        cores_per_bank,
+        num_banks,
+        grid.x,
+        grid.y);
+    std::vector<std::vector<tt::tt_metal::CoreCoord>> cores(num_banks);
+    std::set<tt::tt_metal::CoreCoord> taken;
+    auto dist = [](uint32_t a, uint32_t b) { return a > b ? a - b : b - a; };
+    for (uint32_t c = 0; c < cores_per_bank; ++c) {
+        for (uint32_t bank = 0; bank < num_banks; ++bank) {
+            const auto& anchor = anchors[bank];
+            std::pair<uint32_t, uint32_t> best_key{std::numeric_limits<uint32_t>::max(), 0};
+            tt::tt_metal::CoreCoord best{};
+            // Row-major scan: among equal keys the first core in (y, x) order wins.
+            for (uint32_t y = 0; y < grid.y; ++y) {
+                for (uint32_t x = 0; x < grid.x; ++x) {
+                    const tt::tt_metal::CoreCoord candidate{x, y};
+                    if (taken.contains(candidate)) {
+                        continue;
+                    }
+                    const std::pair<uint32_t, uint32_t> key{
+                        dist(x, anchor.x) + dist(y, anchor.y), dist(y, anchor.y)};
+                    if (key < best_key) {
+                        best_key = key;
+                        best = candidate;
+                    }
+                }
+            }
+            taken.insert(best);
+            cores[bank].push_back(best);
+        }
+    }
+    return cores;
 }
 }  // namespace ttnn::prim::dram_sharded_helpers

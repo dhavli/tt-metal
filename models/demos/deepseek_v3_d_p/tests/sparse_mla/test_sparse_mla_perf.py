@@ -115,6 +115,7 @@ caches. The indexer rope
 scales from the HF config (mla.py), so `config.max_seq_len = total` is enough for a 50k+ (and 0.5M)
 context (no manual rope bump).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import copy
 import csv
@@ -143,23 +144,23 @@ from models.demos.deepseek_v3_d_p.utils.kv_cache_utils import MlaKvCacheFormat, 
 from models.demos.deepseek_v3_d_p.utils.test_utils import WH_WORKER_L1_SIZE
 from tests.ttnn.profiling.realtime_profiler_utils import profile_realtime_program
 
-CACHE_TOKENS = int(os.environ.get("DS_PERF_CACHE", 51200))  # 50 * 1024 already cached
-CHUNK_TOKENS = int(os.environ.get("DS_PERF_CHUNK", 5120))  # 5 * 1024 processed this step
+CACHE_TOKENS = int(_tt_public_getenv("DS_PERF_CACHE", 51200))  # 50 * 1024 already cached
+CHUNK_TOKENS = int(_tt_public_getenv("DS_PERF_CHUNK", 5120))  # 5 * 1024 processed this step
 # Long-sequence cache (Galaxy target). 512000 = 100 * 5120 == "0.5M" — a whole multiple of the 5k
 # chunk (the rope table requires total = cache + chunk to be a multiple of chunk). Override with
 # DS_PERF_LONG_CACHE (must stay a chunk multiple), e.g. 522240 (=102 chunks ≈ 512*1024).
-LONG_CACHE_TOKENS = int(os.environ.get("DS_PERF_LONG_CACHE", 512000))
+LONG_CACHE_TOKENS = int(_tt_public_getenv("DS_PERF_LONG_CACHE", 512000))
 # attn_mode axis: sparse (DSA indexer + sparse_sdpa) vs dense (full-prefix ring MLA — no
 # indexer, no top-k), a baseline to compare the sparse impl against. Each mode writes its own profiler
 # subdir + per-scenario CSVs so the two runs never clobber and stay directly comparable.
-ATTN_MODE = os.environ.get("DS_PERF_ATTN_MODE", "sparse")  # module-level default (mesh-shape detection)
+ATTN_MODE = _tt_public_getenv("DS_PERF_ATTN_MODE", "sparse")  # module-level default (mesh-shape detection)
 # Model-variant axis: glm_5_1 / glm_5_2 (64 q-heads / 32 index heads). ALL
 # run the SAME TP=4 meshes — GLM's thin per-chip head shard (64/4=16 < 32) is handled by the
 # head→sequence reshard in ttMLA._sparse_mla (#48727) plus the head-replicated seq-sharded indexer, so
 # no TP cap applies. Every model dimension comes from the single-source reference config, never hardcoded
 # here. GLM-5.2 additionally exercises a nonzero slot of its compact full-indexer cache below.
 VARIANTS = ("glm_5_1", "glm_5_2")
-VARIANT = os.environ.get("DS_PERF_VARIANT", "glm_5_2")
+VARIANT = _tt_public_getenv("DS_PERF_VARIANT", "glm_5_2")
 _CONFIG_BUILDERS = {
     "glm_5_1": glm_hf_config,
     "glm_5_2": glm_5_2_hf_config,
@@ -169,12 +170,12 @@ _CONFIG_BUILDERS = {
 # wrapper stops once no new record has landed for its settle window, bounded by this ceiling. A generous
 # default covers a many-program replay across up to 32 chips; each replay is profiled as its own
 # (volume-bounded) region so this is a safety ceiling, not the expected wait.
-RT_RECORD_TIMEOUT_S = float(os.environ.get("DS_PERF_RT_TIMEOUT", 30.0))
+RT_RECORD_TIMEOUT_S = float(_tt_public_getenv("DS_PERF_RT_TIMEOUT", 30.0))
 
 # When set, also write an execution-ordered per-call CSV (the RT analog of tracy's ops_perf_results):
 # one device-collapsed row per program per forward, ordered by start tick — the input a per-call graph
 # attribution (parse_percall) needs. Off by default (the summary CSVs are the normal output).
-RT_OPS_DUMP = os.environ.get("DS_PERF_RT_OPS_DUMP", "") not in ("", "0", "false")
+RT_OPS_DUMP = _tt_public_getenv("DS_PERF_RT_OPS_DUMP", "") not in ("", "0", "false")
 
 
 def _cache_format_id(cache_format: MlaKvCacheFormat) -> str:
@@ -195,7 +196,7 @@ def _subdir(variant: str, mode: str, cache_format: MlaKvCacheFormat) -> str:
 
 
 def _csv_name(variant: str, mode: str, cache_format: MlaKvCacheFormat) -> str:
-    return os.environ.get(
+    return _tt_public_getenv(
         "DS_PERF_CSV" if mode == "sparse" else "DS_DENSE_PERF_CSV",
         f"{_subdir(variant, mode, cache_format)}.csv",
     )
@@ -213,7 +214,7 @@ SCENARIOS = {
     "cold": {"cache": CACHE_TOKENS, "loop": True},
     "long": {"cache": LONG_CACHE_TOKENS, "loop": False},
 }
-SCENARIO = os.environ.get("DS_PERF_SCENARIO", "warm")
+SCENARIO = _tt_public_getenv("DS_PERF_SCENARIO", "warm")
 
 
 _REPO_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -430,8 +431,8 @@ def _detect_perf_workload(variant_name: str) -> tuple[PerfWorkload, str | None]:
 
 
 PERF_WORKLOAD, PERF_SKIP_REASON = _detect_perf_workload(VARIANT)
-_TORUS_XY_CERTIFIED = os.environ.get("PREFILL_TORUS_XY_CERTIFIED") == "1" and bool(
-    os.environ.get("TT_MESH_GRAPH_DESC_PATH")
+_TORUS_XY_CERTIFIED = _tt_public_getenv("PREFILL_TORUS_XY_CERTIFIED") == "1" and bool(
+    _tt_public_getenv("TT_MESH_GRAPH_DESC_PATH")
 )
 if PERF_WORKLOAD.system_name == "Galaxy" and not _TORUS_XY_CERTIFIED:
     PERF_SKIP_REASON = "Galaxy sparse MLA perf requires a certified TorusXY graph descriptor"
@@ -702,7 +703,7 @@ PERF_CASES = [
 @pytest.mark.parametrize("attn_mode,kv_cache_format", PERF_CASES)
 @pytest.mark.parametrize("scenario", list(SCENARIOS), ids=list(SCENARIOS))
 @pytest.mark.parametrize("variant", list(VARIANTS), indirect=True, ids=list(VARIANTS))
-@pytest.mark.skipif(os.environ.get("CI") == "true", reason="Performance test — skip on CI")
+@pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Performance test — skip on CI")
 @pytest.mark.timeout(0)
 def test_mla_chunked_perf(mesh_device, variant, scenario, attn_mode, kv_cache_format, config_only):
     if PERF_SKIP_REASON:

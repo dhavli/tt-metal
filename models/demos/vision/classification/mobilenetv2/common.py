@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -11,7 +12,7 @@ MOBILENETV2_BATCH_SIZE = 10
 
 
 def load_torch_model(torch_model, model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         weights_path = "models/demos/vision/classification/mobilenetv2/mobilenet_v2-b0353104.pth"
         if not os.path.exists(weights_path):
             os.system("bash models/demos/vision/classification/mobilenetv2/weights_download.sh")

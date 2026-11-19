@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 from collections import defaultdict
@@ -44,10 +45,10 @@ def _vllm_force_full_isl_single_chunk() -> bool:
     If unset, ``GEMMA4_DEMO_SINGLE_CHUNK=1`` still forces single-chunk for
     demo/server parity experiments.
     """
-    vllm_sc = os.environ.get("GEMMA4_VLLM_SINGLE_CHUNK")
+    vllm_sc = _tt_public_getenv("GEMMA4_VLLM_SINGLE_CHUNK")
     if vllm_sc is not None:
         return vllm_sc.lower() in ("1", "true", "yes")
-    return os.environ.get("GEMMA4_DEMO_SINGLE_CHUNK", "0") != "0"
+    return _tt_public_getenv("GEMMA4_DEMO_SINGLE_CHUNK", "0") != "0"
 
 
 def _full_isl_prefill_chunk_size(max_seq_len: int) -> int:
@@ -131,12 +132,12 @@ def _resolve_vllm_bounded_sliding(max_seq_len, mesh_device, model_path, *, hybri
     """Mirror demo: auto policy + ``GEMMA4_BOUNDED_SLIDING_KV_CACHE`` / legacy env."""
     # Hybrid-groups mode historically defaulted bounded ON; keep that unless env overrides.
     _bounded_default = "1" if hybrid_groups_enabled else None
-    _bs_env = os.environ.get("GEMMA4_BOUNDED_SLIDING_KV_CACHE")
+    _bs_env = _tt_public_getenv("GEMMA4_BOUNDED_SLIDING_KV_CACHE")
     if _bs_env is None and _bounded_default is not None:
         _bs_env = _bounded_default
     if _bs_env is None:
         # Also accept GEMMA4_BOUNDED_SLIDING (demo alias) when unset.
-        _bs_env = os.environ.get("GEMMA4_BOUNDED_SLIDING")
+        _bs_env = _tt_public_getenv("GEMMA4_BOUNDED_SLIDING")
     if _bs_env is None:
         return should_auto_enable_bounded_sliding(max_seq_len, mesh_device, model_path)
     return _bs_env.lower() in ("1", "true", "yes")
@@ -164,7 +165,7 @@ def _patch_model_args(
     # Keep llm.yaml scheduler tokens aligned with the resolved metal chunk for
     # the configured max_context. Override with GEMMA4_GEN_PREFILL_CHUNK, or
     # force full-ISL single-chunk via GEMMA4_VLLM_SINGLE_CHUNK=1.
-    chunk_override = int(os.environ.get("GEMMA4_GEN_PREFILL_CHUNK", "0"))
+    chunk_override = int(_tt_public_getenv("GEMMA4_GEN_PREFILL_CHUNK", "0"))
     if chunk_override > 0:
         model_args.max_prefill_chunk_size = chunk_override
         logger.info(
@@ -230,7 +231,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
     # ``GEMMA4_SUPPORTS_ASYNC_DECODE=0``. PLI models force False in ``__init__``.
     model_capabilities = {
         "supports_prefix_caching": False,
-        "supports_async_decode": os.environ.get("GEMMA4_SUPPORTS_ASYNC_DECODE", "1").lower() in ("1", "true", "yes"),
+        "supports_async_decode": _tt_public_getenv("GEMMA4_SUPPORTS_ASYNC_DECODE", "1").lower() in ("1", "true", "yes"),
         # Gemma4ModelArgs exposes no get_attn_sdpa_program_config, so Generator
         # cannot derive the resume offset alignment and must be told it. Same pin
         # align_num_cached_tokens_to_sdpa applies locally.
@@ -286,7 +287,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
     # (see attention/operations.py), but the chunked SDPA op takes no such block/
     # head_dim knob — fixing it (an op/kernel change, or allocating full-attn its
     # own head_dim buffer) is the remaining work to make ON viable end-to-end.
-    _HYBRID_KV_CACHE_GROUPS_ENABLED = os.environ.get("GEMMA4_HYBRID_KV_CACHE_GROUPS", "0") != "0"
+    _HYBRID_KV_CACHE_GROUPS_ENABLED = _tt_public_getenv("GEMMA4_HYBRID_KV_CACHE_GROUPS", "0") != "0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -297,7 +298,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
             self._bounded_sliding_kv_cache = bool(model0.bounded_sliding_kv_cache)
         else:
             _bounded_default = "1" if self._HYBRID_KV_CACHE_GROUPS_ENABLED else "0"
-            self._bounded_sliding_kv_cache = os.environ.get("GEMMA4_BOUNDED_SLIDING_KV_CACHE", _bounded_default) != "0"
+            self._bounded_sliding_kv_cache = _tt_public_getenv("GEMMA4_BOUNDED_SLIDING_KV_CACHE", _bounded_default) != "0"
         # PLI models must restage decode inputs from host every step; async lag
         # would restage a stale token. Force capability off even if env default
         # is on (platform then disables async_scheduling).
@@ -333,13 +334,13 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
         # Compare these to demo ``inference_prefill`` / decode tok/s/user logs.
         self._perf_decode_tokens = 0
         self._perf_decode_s = 0.0
-        self._perf_log_every = max(1, int(os.environ.get("GEMMA4_VLLM_PERF_LOG_EVERY", "32")))
+        self._perf_log_every = max(1, int(_tt_public_getenv("GEMMA4_VLLM_PERF_LOG_EVERY", "32")))
         # Batch-keyed decode traces (mixin); must exist before first sample.
         self._prev_decode_batch = None
         # Extra synchronize_device stalls async overlap (#51186). Default off;
         # set GEMMA4_VLLM_DECODE_SYNC_EVERY=log/1 for sync wall-clock parity.
         _sync_default = "0" if self.model_capabilities.get("supports_async_decode") else "log"
-        self._perf_decode_sync_every = os.environ.get("GEMMA4_VLLM_DECODE_SYNC_EVERY", _sync_default)
+        self._perf_decode_sync_every = _tt_public_getenv("GEMMA4_VLLM_DECODE_SYNC_EVERY", _sync_default)
 
     def warmup_model_decode(self, kv_cache, enable_trace, max_batch_size, num_blocks, can_sample_on_device, **kwargs):
         """Warm decode traces at B=1 and B=max (trace-region friendly).
@@ -350,7 +351,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
         Override with ``GEMMA4_DECODE_WARMUP_BATCHES=1,8,32``.
         """
         max_b = int(max_batch_size)
-        override = os.environ.get("GEMMA4_DECODE_WARMUP_BATCHES")
+        override = _tt_public_getenv("GEMMA4_DECODE_WARMUP_BATCHES")
         if override:
             sizes = sorted({int(x) for x in override.split(",") if x.strip() and int(x) <= max_b})
         else:
@@ -396,7 +397,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
         # from the tt-inference-server model spec's per-device ``env_vars`` block
         # (gated there by device + model). This generic, value-free hook just
         # honors that override and otherwise defers to the default.
-        override = os.environ.get("GEMMA4_MAX_TOKENS_ALL_USERS")
+        override = _tt_public_getenv("GEMMA4_MAX_TOKENS_ALL_USERS")
         if override:
             return int(override)
         return super().get_max_tokens_all_users(model_name=model_name, **kwargs)
@@ -870,7 +871,7 @@ class Gemma4ForCausalLM(ChunkedPrefillPageTableGuardMixin, HybridAttentionForCau
             # (before any traced decode) is what makes it safe — a lazy
             # first-runtime capture still hits the wedge.
             # GEMMA4_DISABLE_PREFILL_TRACE=1 restores the fully-eager prefill.
-            prefill_trace_enabled = os.environ.get("GEMMA4_DISABLE_PREFILL_TRACE", "0") != "1"
+            prefill_trace_enabled = _tt_public_getenv("GEMMA4_DISABLE_PREFILL_TRACE", "0") != "1"
             if prefill_trace_unsafe:
                 logger.info(
                     "Gemma4 vLLM: prefill device trace for {} runs hybrid per-layer "

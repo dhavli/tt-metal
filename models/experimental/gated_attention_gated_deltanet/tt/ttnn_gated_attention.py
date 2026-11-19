@@ -5,6 +5,7 @@
 """
 TTNN implementation of Gated Attention.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os as _os
 
@@ -129,7 +130,7 @@ def _get_flexible_sdpa_program_config(device):
     (only tiling granularity changes). Opt back to 64 with QWEN9B_SDPA_QK64=1 if 128 ever clashes
     with L1 in the paged chunked-SDPA path on a given prompt length.
     """
-    qk = 64 if _os.environ.get("QWEN9B_SDPA_QK64") == "1" else 128
+    qk = 64 if _tt_public_getenv("QWEN9B_SDPA_QK64") == "1" else 128
     return ttnn.SDPAProgramConfig(
         compute_with_storage_grid_size=device.compute_with_storage_grid_size(),
         q_chunk_size=qk,

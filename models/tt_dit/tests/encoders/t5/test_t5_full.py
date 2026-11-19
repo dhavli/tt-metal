@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import sys
 import time
@@ -24,7 +25,7 @@ from models.tt_dit.utils.check import assert_quality
 
 @pytest.mark.parametrize(
     "dit_unit_test",
-    [{"1": True, "0": False}.get(os.environ.get("DIT_UNIT_TEST"), False)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("DIT_UNIT_TEST"), False)],
 )
 @pytest.mark.parametrize(
     "model_name",

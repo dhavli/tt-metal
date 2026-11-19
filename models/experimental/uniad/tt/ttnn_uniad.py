@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import copy
 import os
 import time
@@ -14,7 +15,7 @@ import ttnn
 # wall-clock breakdown of the forward call. Skips the first call (cold,
 # includes JIT compile). Useful for localizing where forward time goes
 # without running a full Tracy profile.
-_TIMING_ENABLED = os.environ.get("TT_UNIAD_TIMING") == "1"
+_TIMING_ENABLED = _tt_public_getenv("TT_UNIAD_TIMING") == "1"
 _timing_call_idx = [0]
 # Per-call captured phase timings. Keyed by call_idx (1, 2, 3, …), each
 # value is a dict {phase_name: ms}. Populated whenever the timing harness

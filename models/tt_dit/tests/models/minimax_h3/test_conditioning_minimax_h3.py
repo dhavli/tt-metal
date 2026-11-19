@@ -5,6 +5,7 @@
 """Host-only gate for MiniMax-H3 FL2VA keyframe conditioning. Four silent contracts: ImageNet
 pixel statistics (not [-1, 1]), a sampled posterior under a request-independent seed, an fp16
 round trip on the sampled latent, and conditioning noise as the request generator's first draw."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from types import SimpleNamespace
@@ -253,7 +254,7 @@ PROMPT = (
 
 
 def _weights_dir() -> str:
-    base = os.environ.get("MINIMAX_H3_MODEL_PATH")
+    base = _tt_public_getenv("MINIMAX_H3_MODEL_PATH")
     if not base:
         pytest.skip("set MINIMAX_H3_MODEL_PATH to a MiniMax-H3 diffusers snapshot")
     return os.path.join(base, "text_encoder")

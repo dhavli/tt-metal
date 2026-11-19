@@ -7,6 +7,7 @@ Tests for ExpertKernel (unified SRAM, DRAM, and hybrid):
   DRAM (single-device): B WIDTH_SHARDED in DRAM, streamed subblock by subblock.
   DRAM (multi-device): each device gets its own N-slice of B in DRAM.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import pytest
 import torch
@@ -2784,7 +2785,7 @@ def test_matmul_expert_bspm_single_device(device):
     import os
     from pathlib import Path
 
-    bspm_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"
@@ -2819,7 +2820,7 @@ def test_matmul_expert_bspm_multi_device(bh_2d_mesh_device):
     if bh_2d_mesh_device.shape[0] * bh_2d_mesh_device.shape[1] < 8:
         pytest.skip("Test requires at least 8 devices (4x2 mesh)")
 
-    bspm_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"
@@ -2856,7 +2857,7 @@ def test_matmul_expert_bspm_sparse_activation(bh_2d_mesh_device):
     if bh_2d_mesh_device.shape[0] * bh_2d_mesh_device.shape[1] < 8:
         pytest.skip("Test requires at least 8 devices (4x2 mesh)")
 
-    bspm_dir = os.environ.get("BSPM_RESULTS_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_RESULTS_DIR")
     if not bspm_dir:
         pytest.skip("BSPM_RESULTS_DIR not set")
     bspm_path = Path(bspm_dir) / "deepseek-r1-0528" / "layer_4" / "precision_eval" / "precision_map_B_3.5.bspm"

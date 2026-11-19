@@ -15,6 +15,7 @@ Test coverage notes:
 - Chunked prefill: Tested via paged-chunked variant. Requires paged=True and mode="prefill".
 - Variants: non-paged, paged, paged-chunked (3 combinations per test case).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import inspect
 import os
@@ -1349,7 +1350,7 @@ def test_attention_1d_vs_reference(
     # Create LazyWeights with caching enabled
     # Cache keys include model name + seed to avoid mismatched cached weights across runs
     ttnn.SetDefaultDevice(ttnn_mesh_device)
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/attention_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/attention_1d"))
     model_seed = stable_model_seed(hf_model_name)
     model_cache_prefix = f"{hf_model_name.replace('/', '_').replace('-', '_')}_seed{model_seed:08x}"
 
@@ -2114,7 +2115,7 @@ def test_attention_1d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDe
     # Use HF_MODEL env var if set, otherwise use appropriate default based on device count
     # Multi-device requires larger models (dim >= 4096) for proper sharding
     num_devices = ttnn_mesh_device.get_num_devices()
-    env_model = os.environ.get("HF_MODEL")
+    env_model = _tt_public_getenv("HF_MODEL")
 
     if not env_model:
         # Set default model based on device configuration

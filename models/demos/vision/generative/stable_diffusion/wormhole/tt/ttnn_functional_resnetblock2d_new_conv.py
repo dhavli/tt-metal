@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from typing import Optional
 
@@ -49,7 +50,7 @@ class resnetBlock2D:
         # TODO: instead of hardcoding grid size in many components, configure it in a single place
         self.grid_size = (8, 8)
 
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = _tt_public_getenv("FALLBACK_ON_GROUPNORM", "0") == "1"
         parameters.conv1.weight, parameters.conv1.bias = permute_conv_parameters(
             parameters.conv1.weight, parameters.conv1.bias
         )

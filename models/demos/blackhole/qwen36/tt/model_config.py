@@ -7,7 +7,9 @@ hub ids are snapshot_download'd first (AutoConfig on bare hub id is unreliable h
 Qwen3.5-specific params (GDN, partial RoPE, layer types) come from HF text config.
 load_state_dict/weight_cache_path override the base meta-key (wq/wk/wv) scheme.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
+import re
 from pathlib import Path
 
 from models.tt_transformers.tt.model_config import ModelArgs
@@ -35,7 +37,7 @@ class Qwen36ModelArgs(ModelArgs):
         if not os.path.isfile(os.path.join(hf_model, "config.json")):
             from huggingface_hub import snapshot_download
 
-            offline = os.getenv("HF_HUB_OFFLINE") == "1" or os.getenv("CI") == "true"
+            offline = _tt_public_getenv("HF_HUB_OFFLINE") == "1" or _tt_public_getenv("CI") == "true"
             os.environ["HF_MODEL"] = snapshot_download(hf_model, local_files_only=offline)
         super().__init__(mesh_device, max_batch_size=max_batch_size, max_seq_len=max_seq_len, **kwargs)
         if mesh_device is not None:
@@ -134,7 +136,9 @@ class Qwen36ModelArgs(ModelArgs):
         # Per-device width of the [qkv|z|a|b] fused in-projection: folding the tiny a/b (decay/beta)
         # projection into qkvz removes a whole decode matmul while keeping the (good) K=dim. Default
         # (was QWEN36_GDN_FUSE_AB); gdn/tp.py fuses whenever the qkvz weight is DRAM-sharded.
-        self.gdn_qkvzab_dim_tp = self.gdn_qkvz_dim_tp + 2 * self.gdn_nv_tp
+        # QWEN36_GDN_AB_PAD: zero columns between a and b so b's slice starts tile-aligned (0 when the flag is off).
+        self.gdn_ab_gap = tpc.gdn_ab_gap(self.gdn_nv_tp)
+        self.gdn_qkvzab_dim_tp = self.gdn_qkvz_dim_tp + 2 * self.gdn_nv_tp + self.gdn_ab_gap
         self.gdn_value_dim_tp = self.gdn_value_dim // tp
         self.gdn_key_dim_tp = self.gdn_key_dim // tp
         self.attn_out_dim_tp = (self.n_heads * self.head_dim) // tp
@@ -228,6 +232,14 @@ class Qwen36ModelArgs(ModelArgs):
             M, self.gdn_value_dim_tp, self.dim, num_cores=33, grid_w=self.decode_grid_w
         )
 
+        # QWEN36_1D_GRID_<NAME>=CxR (e.g. 11x4) re-shapes ONE decode matmul's 1D mcast_in0 grid for an
+        # A/B, and QWEN36_1D_GRID_LM_HEAD=CxR gives the LM head an explicit 1D grid instead of ttnn-auto.
+        # Defaults are exactly the shipped configs above; every resolved decode grid is logged once so
+        # the grid actually consumed by decode is evidence in the container log, not an inference.
+        self.lm_head_decode_1d_progcfg = None
+        self.lm_head_decode_compute_cfg = None
+        self._apply_decode_grid_overrides(M, tp, mesh_device)
+
         # Prefill matmul factory (M = seq_len)
         self._prefill_grid = tpc.prefill_grid_default()
         self.prefill_tuning = tpc.prefill_tuning(tp)
@@ -251,6 +263,91 @@ class Qwen36ModelArgs(ModelArgs):
             orientation=ttnn.ShardOrientation.ROW_MAJOR,
             use_height_and_width_as_shard_shape=True,
         )
+
+    # Decode 1D grids that QWEN36_1D_GRID_<NAME> may override: name -> (attr, K, N, fused_activation).
+    def _decode_grid_table(self, tp):
+        import ttnn
+
+        return {
+            "MLP_GATE": ("mlp_w1_decode_1d_progcfg", self.dim, self.hidden_dim // tp, ttnn.UnaryOpType.SILU),
+            "MLP_UP": ("mlp_w3_decode_1d_progcfg", self.dim, self.hidden_dim // tp, None),
+            "MLP_DOWN": ("mlp_w2_decode_1d_progcfg", self.hidden_dim // tp, self.dim, None),
+            "ATTN_QKV": ("attn_qkv_decode_1d_progcfg", self.dim, self.attn_qkv_fused_dim_tp, None),
+            "ATTN_WO": ("attn_wo_decode_1d_progcfg", self.attn_out_dim_tp, self.dim, None),
+            "GDN_QKVZ": ("gdn_qkvz_decode_1d_progcfg", self.dim, self.gdn_qkvzab_dim_tp, None),
+            "GDN_OUT": ("gdn_out_decode_1d_progcfg", self.gdn_value_dim_tp, self.dim, None),
+        }
+
+    @staticmethod
+    def _parse_grid(name, val, grid):
+        m = re.fullmatch(r"\s*(\d+)\s*[xX]\s*(\d+)\s*", val or "")
+        if not m:
+            raise ValueError(f"{name}={val!r}: expected COLSxROWS, e.g. 11x4")
+        cols, rows = int(m.group(1)), int(m.group(2))
+        if not (1 <= cols <= grid.x and 1 <= rows <= grid.y):
+            raise ValueError(f"{name}={val!r}: grid exceeds the device worker grid {grid.x}x{grid.y}")
+        return cols, rows
+
+    def _apply_decode_grid_overrides(self, M, tp, mesh_device):
+        """Env-flag re-shaping of the decode 1D matmul grids (A/B instrument; default = shipped)."""
+        import ttnn
+        from loguru import logger
+        from models.demos.blackhole.qwen36.tt import tp_common as tpc
+
+        grid = mesh_device.compute_with_storage_grid_size()
+        table = self._decode_grid_table(tp)
+        # MLP_GATE_UP is shorthand for both halves of the SwiGLU in-projection.
+        requested = {}
+        for name in list(table) + ["MLP_GATE_UP"]:
+            val = _tt_public_getenv(f"QWEN36_1D_GRID_{name}")
+            if val:
+                targets = ["MLP_GATE", "MLP_UP"] if name == "MLP_GATE_UP" else [name]
+                cols, rows = self._parse_grid(f"QWEN36_1D_GRID_{name}", val, grid)
+                for t in targets:
+                    requested[t] = (cols, rows)
+        for name, (cols, rows) in requested.items():
+            attr, k, n, act = table[name]
+            setattr(
+                self,
+                attr,
+                tpc.create_matmul_1d_decode_progcfg(
+                    M, k, n, num_cores=cols * rows, fused_activation=act, grid_w=cols
+                ),
+            )
+            logger.info(f"QWEN36_1D_GRID_{name} engaged: {cols}x{rows} = {cols * rows} cores")
+
+        lm = _tt_public_getenv("QWEN36_1D_GRID_LM_HEAD")
+        if lm:
+            cols, rows = self._parse_grid("QWEN36_1D_GRID_LM_HEAD", lm, grid)
+            # in0_block_w must stay small here: per_core_N is ~3880/cores tiles and the in1 CB is
+            # in0_block_w x per_core_N tiles double-buffered. 2 matches what ttnn-auto derives.
+            blk = int(_tt_public_getenv("QWEN36_LM_HEAD_IN0_BLOCK_W", "2"))
+            self.lm_head_decode_1d_progcfg = tpc.create_matmul_1d_decode_progcfg(
+                M, self.dim, self.vocab_size // tp, num_cores=cols * rows, fp32_acc=False, grid_w=cols,
+                max_in0_block_w=blk,
+            )
+            # ttnn-auto picks HiFi2 / no fp32 acc / l1 acc for a bf16 x bf8 linear with no program
+            # config; passing a program config would silently drop that to LoFi, so pin it explicitly.
+            self.lm_head_decode_compute_cfg = ttnn.WormholeComputeKernelConfig(
+                math_fidelity=ttnn.MathFidelity.HiFi2,
+                math_approx_mode=False,
+                fp32_dest_acc_en=False,
+                packer_l1_acc=True,
+            )
+            logger.info(f"QWEN36_1D_GRID_LM_HEAD engaged: {cols}x{rows} = {cols * rows} cores, in0_block_w<={blk}")
+
+        # One-shot record of what decode will actually run on (the base ModelArgs' "Attention grid /
+        # MLP grid / LM head grid" log lines describe its own configs, which this TP path never uses).
+        for name, (attr, k, n, _) in table.items():
+            pc = getattr(self, attr)
+            g = pc.compute_with_storage_grid_size  # CoreCoord, not a tuple: unpacking it raises TypeError
+            gx, gy = g.x, g.y
+            logger.info(
+                f"decode 1D grid {name}: {gx}x{gy}={gx * gy} cores K={k} N={n} "
+                f"in0_block_w={pc.in0_block_w} per_core_N={pc.per_core_N}"
+            )
+        if self.lm_head_decode_1d_progcfg is None:
+            logger.info(f"decode 1D grid LM_HEAD: ttnn-auto (device grid {grid.x}x{grid.y}, 1D mcast_in0)")
 
     def _set_hf_params(self, checkpoint_dir):
         # trust_remote_code before base AutoConfig load.
@@ -287,13 +384,27 @@ class Qwen36ModelArgs(ModelArgs):
         Overrides base meta-key loader."""
         from models.demos.blackhole.qwen36.tt.weight_mapping import (
             is_fp8_checkpoint,
+            is_nvfp4_checkpoint,
             load_qwen36_state_dict_fp8,
+            load_qwen36_state_dict_nvfp4,
             remap_qwen36_state_dict,
         )
 
         # Block FP8 checkpoints: dequant + remap for TP loaders (skip the HF model).
+        # Both lazy loaders keep GDN linear_attn.* raw for the TP loaders. On a
+        # single device the model tree takes the non-TP modules instead, which
+        # want the remap_qwen36_state_dict layout; as_single_device() supplies
+        # it without giving up laziness.
+        single = self.num_devices == 1
+
         if is_fp8_checkpoint(self.CKPT_DIR):
-            return load_qwen36_state_dict_fp8(self.CKPT_DIR)
+            return load_qwen36_state_dict_fp8(self.CKPT_DIR, single_device=single)
+
+        # compressed-tensors NVFP4 (the QUASAR QAT build): unpack 4-bit E2M1 +
+        # per-group fp8 scales. Same internal key scheme as the FP8 path, so
+        # the loaders below are unchanged.
+        if is_nvfp4_checkpoint(self.CKPT_DIR):
+            return load_qwen36_state_dict_nvfp4(self.CKPT_DIR, single_device=single)
 
         # Import the HF classes directly rather than going through AutoModelForCausalLM.
         # Serving out-of-tree, vllm.transformers_utils.config registers vLLM's OWN

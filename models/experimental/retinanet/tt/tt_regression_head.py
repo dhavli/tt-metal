@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import ttnn
 from typing import List, Optional
 from dataclasses import dataclass
@@ -161,7 +162,7 @@ class Conv2dNormActivation:
         self.norm_weight = parameters["norm_weight"]
         self.norm_bias = parameters["norm_bias"]
         # GroupNorm fallback flag
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "1") == "1"
+        self.fallback_on_groupnorm = _tt_public_getenv("FALLBACK_ON_GROUPNORM", "1") == "1"
         self.grid_size = grid_size if grid_size is not None else ttnn.CoreGrid(y=8, x=8)
 
         self.input_mask = input_mask

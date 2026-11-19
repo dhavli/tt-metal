@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import time
 
@@ -31,7 +32,7 @@ def umt5_device_config(func):
     """Decorator to apply standard UMT5 device/mesh parametrization to tests."""
     func = pytest.mark.parametrize(
         "dit_unit_test",
-        [{"1": True, "0": False}.get(os.environ.get("DIT_UNIT_TEST"), False)],
+        [{"1": True, "0": False}.get(_tt_public_getenv("DIT_UNIT_TEST"), False)],
     )(func)
     func = pytest.mark.parametrize(
         "mesh_device, num_links, max_execution_time",

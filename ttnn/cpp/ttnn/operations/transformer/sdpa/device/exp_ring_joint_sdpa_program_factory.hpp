@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -33,7 +34,7 @@ namespace ttnn::prim {
 // per process. Shared by the factory build, the cache-hit patch, and validation so all three
 // derive the same grid.
 inline bool exp_sdpa_mux_on_bottom_row() {
-    static const bool enabled = std::getenv("TT_EXP_SDPA_MUX_BOTTOM_ROW") != nullptr;
+    static const bool enabled = tt_stack_public::getenv("TT_EXP_SDPA_MUX_BOTTOM_ROW") != nullptr;
     return enabled;
 }
 
@@ -43,7 +44,7 @@ inline bool exp_sdpa_mux_on_bottom_row() {
 // instead of the spread rows 0 / mid-1 / mid / last, whose farthest core is ~10 hops away.
 // Isolates the MUX->eth distance effect at a fixed schedule.
 inline bool exp_sdpa_mux_top_cluster() {
-    static const bool enabled = std::getenv("TT_EXP_SDPA_MUX_TOP_CLUSTER") != nullptr;
+    static const bool enabled = tt_stack_public::getenv("TT_EXP_SDPA_MUX_TOP_CLUSTER") != nullptr;
     return enabled;
 }
 

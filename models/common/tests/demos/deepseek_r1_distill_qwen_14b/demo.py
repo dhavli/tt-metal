@@ -41,6 +41,7 @@ LazyWeight tensor cache: ``TT_CACHE_PATH/<device_name>`` when ``TT_CACHE_PATH`` 
 Reference artifact (``.refpt``): generate with ``generate_book_refpt.py`` before running token-accuracy
 tests. The file lives at ``models/tt_transformers/tests/reference_outputs/DeepSeek-R1-Distill-Qwen-14B.refpt``.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -237,7 +238,7 @@ def _sampling_bucket() -> str:
     """Map SAMPLING_MODE to a perf-gate bucket. Defaults to ``on_device_topk`` (the perf-case default,
     the TTTv1-comparable path), so the bucket always agrees with the runner. Non-topk on-device modes
     (e.g. force-argmax) also fall into ``on_device_topk`` so they stay gated, never silently un-gated."""
-    return "host" if os.environ.get("SAMPLING_MODE", "on_device_topk").lower() == "host" else "on_device_topk"
+    return "host" if _tt_public_getenv("SAMPLING_MODE", "on_device_topk").lower() == "host" else "on_device_topk"
 
 
 # DeepSeek-R1-Distill-Qwen-14B needs at least this many devices of tensor parallelism: the 14B weights +
@@ -287,7 +288,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 
 def _ttnn_mesh_device_param_from_env() -> dict:
-    env = os.environ.get("MESH_DEVICE", "").strip()
+    env = _tt_public_getenv("MESH_DEVICE", "").strip()
     if not env:
         pytest.skip(
             "MESH_DEVICE must be set (e.g. N300 or T3K). See module docstring.",
@@ -316,7 +317,7 @@ pytestmark = [
         "ttnn_mesh_device",
         [_ttnn_mesh_device_param_from_env()],
         indirect=True,
-        ids=[os.environ.get("MESH_DEVICE", "mesh").strip() or "mesh"],
+        ids=[_tt_public_getenv("MESH_DEVICE", "mesh").strip() or "mesh"],
     ),
 ]
 
@@ -358,7 +359,7 @@ def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: st
     """Disk root for LazyWeight caches. Follows the same convention as other TTTv2 demos."""
     device_name = get_device_name(mesh_device)
     hf = hf_model_id.strip("/")
-    tt_cache = os.getenv("TT_CACHE_PATH")
+    tt_cache = _tt_public_getenv("TT_CACHE_PATH")
     if tt_cache:
         root = Path(tt_cache) / device_name
     else:
@@ -380,7 +381,7 @@ def _load_tokenizer(hf_model_id: str):
         msg = str(e)
         if "Permission" not in msg and "permission" not in msg:
             raise
-        fallback = os.environ.get("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
+        fallback = _tt_public_getenv("TT_TOKENIZER_FALLBACK_CACHE", str(Path.home() / ".cache" / "huggingface"))
         logger.warning(f"Default HF cache not writable ({e!s:.120}); retrying with cache_dir={fallback}")
         Path(fallback).mkdir(parents=True, exist_ok=True)
         return AutoTokenizer.from_pretrained(hf_model_id, cache_dir=fallback, trust_remote_code=True)
@@ -537,7 +538,7 @@ def create_model(
     recipe (BFP4 FF, ~6.85 GB/dev) fits seq 2048; batch-1 uses seq 4096. eval-32 / batch-32-ci pass
     explicit values.
     """
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     _skip_below_min_tp_devices(mesh_device.get_num_devices())
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
 
@@ -764,10 +765,10 @@ def _run_dp_smoke(
     mesh_device.quiesce_devices()
     submeshes = _create_dp_submeshes(mesh_device, data_parallel, tensor_parallel)
     lane_cache_dir = _dp_lane_cache_dir(cache_dir, tensor_parallel)
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     precision = DEEPSEEK_R1_14B_PERFORMANCE if optimizations == "performance" else DEEPSEEK_R1_14B_ACCURACY
     prompts = load_input_prompts(data_parallel)
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -860,7 +861,7 @@ def test_deepseek_r1_qwen_14b(test_config, mesh_device, optimizations):
     device_name = get_device_name(mesh_device)
     expected = EXPECTED_METRICS.get(optimizations, {}).get(device_name, {})
     model = None
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     cache_dir = lazy_weight_cache_dir_for_demo(mesh_device, hf_model)
 
     try:
@@ -951,7 +952,7 @@ def test_deepseek_r1_qwen_14b(test_config, mesh_device, optimizations):
 
 def _run_token_accuracy(model: DeepSeekR1Qwen14B, mesh_device, expected):
     """Teacher-forcing token accuracy vs ``.refpt`` (CPU-generated)."""
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     reference_tokens, top5_tokens, prompt_len, metadata = load_reference_data(hf_model)
     tokenizer = model.demo_tokenizer
 
@@ -988,7 +989,7 @@ def _run_token_accuracy(model: DeepSeekR1Qwen14B, mesh_device, expected):
         prompt_len,
         metadata_aligned=has_prompt_len_metadata,
     )
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     profiler = BenchmarkProfiler()
     try:
         profiler.start("run")
@@ -1098,7 +1099,7 @@ def _run_perf_benchmark(
     ``effective = min(requested, max_seq_len - prompt_bucket - margin)`` so the high-water decode position
     never overruns the page table (the ``batch-32-ci`` leg requests 1024).
     """
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     tokenizer = model.demo_tokenizer
 
     # On-device sampling toggle (SAMPLING_MODE env):
@@ -1108,7 +1109,7 @@ def _run_perf_benchmark(
     #                      tuples; PERF.md-parity recipe). DEFAULT: this is the TTTv1-comparable path
     #                      (TTTv1 auto-uses on-device sampling on multi-device meshes), so the gate
     #                      measures apples-to-apples.
-    sampling_mode = os.environ.get("SAMPLING_MODE", "on_device_topk").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "on_device_topk").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -1118,7 +1119,7 @@ def _run_perf_benchmark(
         if sampling_mode in _on_device_params and getattr(model, "supports_on_device_sampling", False)
         else None
     )
-    pipeline_readback = os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
+    pipeline_readback = _tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
     logger.info(f"[{case_name}] SAMPLING_MODE={sampling_mode} -> sampling_params={sampling_params}")
     logger.info(f"[{case_name}] PIPELINE_READBACK={pipeline_readback}")
 
@@ -1156,7 +1157,7 @@ def _run_perf_benchmark(
 
         # BenchmarkProfiler brackets the timed prefill/decode regions inside run_perf_benchmark
         # (default-None ⇒ byte-inert for every other caller) so we can emit CI perf telemetry.
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_perf_benchmark(
@@ -1247,7 +1248,7 @@ def _run_eval_repeat_batch32(model: DeepSeekR1Qwen14B, mesh_device):
     sampling on tie-heavy degenerate output, NOT a determinism regression: host argmax passes with batched
     prefill ON and OFF, and any on-device flip is identical ON vs OFF (prefill-independent).
     """
-    hf_model = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
+    hf_model = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B")
     tokenizer = model.demo_tokenizer
 
     # DeepSeek uses <｜User｜> as a new-turn boundary. It is not a global generation
@@ -1289,7 +1290,7 @@ def _run_eval_repeat_batch32(model: DeepSeekR1Qwen14B, mesh_device):
     def tokenize_fn(ps):
         return tokenize_prompts(ps, tokenizer)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),

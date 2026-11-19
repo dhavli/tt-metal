@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 from typing import NamedTuple
@@ -1076,7 +1077,7 @@ def get_fabric_agmm_config(M, K, N, chunks, device_core_grid) -> FabricAGMMConfi
     model back onto the old ``all_gather_minimal_matmul_async`` op. Used to get an apples-to-apples
     old-agmm-vs-strided-sagmm baseline under the same trace/fabric config.
     """
-    if os.environ.get("DISABLE_FABRIC_AGMM") in ("1", "true", "True"):
+    if _tt_public_getenv("DISABLE_FABRIC_AGMM") in ("1", "true", "True"):
         return None
     table = fabric_agmm_configs.get(device_core_grid, {})
     cfg = table.get((M, K, N, chunks))

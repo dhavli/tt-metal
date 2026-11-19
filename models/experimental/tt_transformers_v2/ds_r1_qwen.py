@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Pure TTNN implementation of Qwen model (DeepSeek-R1-Distill-Qwen-1.5B)"""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -732,24 +733,24 @@ def generate(model: QwenModel, tokenizer, prompt: str, max_new_tokens: int = 50,
 
 def test_ds_r1_qwen(is_ci_v2_env, model_location_generator):
     if is_ci_v2_env:
-        hf_model = os.getenv("HF_MODEL", "")
+        hf_model = _tt_public_getenv("HF_MODEL", "")
         model_location = model_location_generator(hf_model, download_if_ci_v2=True, ci_v2_timeout_in_s=900)
         # update env var HF_MODEL to the model location
         os.environ["HF_MODEL"] = str(model_location)
 
-    model_name = os.environ.get("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+    model_name = _tt_public_getenv("HF_MODEL", "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
 
     print(f"Pure TTNN implementation of {model_name}")
     print("=" * 80)
 
     # Setup device
-    if os.environ.get("MESH_DEVICE") == "N150":
+    if _tt_public_getenv("MESH_DEVICE") == "N150":
         mesh_device = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape([1, 1]))
-    elif os.environ.get("MESH_DEVICE") == "N300":
+    elif _tt_public_getenv("MESH_DEVICE") == "N300":
         mesh_device = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape([1, 2]))
-    elif os.environ.get("MESH_DEVICE") == "T3K":
+    elif _tt_public_getenv("MESH_DEVICE") == "T3K":
         mesh_device = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape([1, 8]))
-    elif os.environ.get("MESH_DEVICE") == "T3K2x4":
+    elif _tt_public_getenv("MESH_DEVICE") == "T3K2x4":
         mesh_device = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape([2, 4]))
     else:
         device_ids = ttnn.get_device_ids()

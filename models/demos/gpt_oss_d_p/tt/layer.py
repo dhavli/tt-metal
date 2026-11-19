@@ -9,6 +9,7 @@ Unlike M3 there is NO dense-layer branch and NO shared expert: EVERY layer is a 
 (router + expert-parallel routed experts). Sliding-window vs full-causal attention is selected per
 layer from ``hf_config.layer_types[layer_idx]`` (see attention/__init__.py:Attention).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -16,7 +17,7 @@ import ttnn
 from models.demos.gpt_oss_d_p.utils.general_utils import get_cache_file_name
 from models.demos.gpt_oss_d_p.utils.substate import substate
 
-_DELTA_PROBE = os.environ.get("GPT_OSS_DELTA_PROBE", "") != ""
+_DELTA_PROBE = _tt_public_getenv("GPT_OSS_DELTA_PROBE", "") != ""
 
 
 def _delta_stats(tag, layer_idx, t):

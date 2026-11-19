@@ -4,6 +4,7 @@
 """Tests for the CompressedTensor class."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import numpy as np
 import torch
@@ -582,7 +583,7 @@ def test_from_bspm_tile_counts(device):
     import os
     from pathlib import Path
 
-    bspm_dir = os.environ.get("BSPM_DIR")
+    bspm_dir = _tt_public_getenv("BSPM_DIR")
     if not bspm_dir:
         import pytest
 

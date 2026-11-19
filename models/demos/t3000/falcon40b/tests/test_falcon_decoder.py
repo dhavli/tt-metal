@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -355,7 +356,7 @@ def run_test_FalconDecoder_inference(
     [
         {
             "T3K": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), (1, 8))
+        }.get(_tt_public_getenv("MESH_DEVICE"), (1, 8))
     ],
     indirect=True,
 )

@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import signal
@@ -29,7 +30,7 @@ from models.demos.common.prefill.runners.runner_utils import (
 
 
 def _apply_manifest_env():
-    manifest_path = os.environ.get("PREFILL_MANIFEST")
+    manifest_path = _tt_public_getenv("PREFILL_MANIFEST")
     if not manifest_path:
         return
 
@@ -50,15 +51,15 @@ SYNC_WORKER_CORES = ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(0, 0))
 METADATA_SIZE_BYTES = 12
 
 
-LAYER_ACK_FIFO_SIZE_BYTES = int(os.environ.get("PREFILL_LAYER_ACK_FIFO_BYTES", 4 * 1024))
+LAYER_ACK_FIFO_SIZE_BYTES = int(_tt_public_getenv("PREFILL_LAYER_ACK_FIFO_BYTES", 4 * 1024))
 
 SHUTDOWN_METADATA_WORD = -1
 
 H2D_MAPPER_CONFIG = ttnn.MeshMapperConfig(placements=[ttnn.PlacementShard(0), ttnn.PlacementReplicate()])
 
-D2D_FIFO_SIZE_BYTES = int(os.environ.get("PREFILL_PP_D2D_FIFO_BYTES", 256))
+D2D_FIFO_SIZE_BYTES = int(_tt_public_getenv("PREFILL_PP_D2D_FIFO_BYTES", 256))
 
-ADAPTER = get_adapter(os.environ.get("PREFILL_MODEL", DEFAULT_MODEL))
+ADAPTER = get_adapter(_tt_public_getenv("PREFILL_MODEL", DEFAULT_MODEL))
 MODEL_CFG = ADAPTER.model_config
 
 D2D_MAPPER_CONFIG = ttnn.MeshMapperConfig(
@@ -68,24 +69,24 @@ D2D_MAPPER_CONFIG = ttnn.MeshMapperConfig(
     ]
 )
 
-_sp = int(os.environ.get("PREFILL_SP", 8))
-_tp = int(os.environ.get("PREFILL_TP", 4))
+_sp = int(_tt_public_getenv("PREFILL_SP", 8))
+_tp = int(_tt_public_getenv("PREFILL_TP", 4))
 GLOBAL_MESH_SHAPE = (_sp, _tp)
-NUM_LAYERS = int(os.environ.get("PREFILL_NUM_LAYERS", 61))
-CHUNK_SIZE = int(os.environ.get("PREFILL_CHUNK_SIZE", 5 * 1024))
-MAX_SEQ_LEN = int(os.environ.get("PREFILL_MAX_SEQ_LEN", CHUNK_SIZE * 11))
-NUM_USERS = int(os.environ.get("PREFILL_NUM_USERS", 2))
-CAPACITY_FACTOR = int(os.environ.get("PREFILL_CAPACITY_FACTOR", 8))
-_gate_mode_name = os.environ.get("PREFILL_GATE_FALLBACK_MODE", ADAPTER.default_gate_mode)
-KV_ONLY_LAST_LAYER = os.environ.get("PREFILL_KV_ONLY_LAST_LAYER", "1") == "1"
+NUM_LAYERS = int(_tt_public_getenv("PREFILL_NUM_LAYERS", 61))
+CHUNK_SIZE = int(_tt_public_getenv("PREFILL_CHUNK_SIZE", 5 * 1024))
+MAX_SEQ_LEN = int(_tt_public_getenv("PREFILL_MAX_SEQ_LEN", CHUNK_SIZE * 11))
+NUM_USERS = int(_tt_public_getenv("PREFILL_NUM_USERS", 2))
+CAPACITY_FACTOR = int(_tt_public_getenv("PREFILL_CAPACITY_FACTOR", 8))
+_gate_mode_name = _tt_public_getenv("PREFILL_GATE_FALLBACK_MODE", ADAPTER.default_gate_mode)
+KV_ONLY_LAST_LAYER = _tt_public_getenv("PREFILL_KV_ONLY_LAST_LAYER", "1") == "1"
 DFLASH_ENABLED = (
-    ADAPTER.supports_dflash and os.environ.get("PREFILL_DFLASH", "0") == "1" and bool(os.environ.get("DFLASH_HF_MODEL"))
+    ADAPTER.supports_dflash and _tt_public_getenv("PREFILL_DFLASH", "0") == "1" and bool(_tt_public_getenv("DFLASH_HF_MODEL"))
 )
-SYNC_PER_CHUNK = os.environ.get("PREFILL_SYNC_PER_CHUNK", "0") == "1"
-TIMING_DIR = os.environ.get("PREFILL_TIMING_DIR", "")
+SYNC_PER_CHUNK = _tt_public_getenv("PREFILL_SYNC_PER_CHUNK", "0") == "1"
+TIMING_DIR = _tt_public_getenv("PREFILL_TIMING_DIR", "")
 _L1_SMALL_SIZE = ADAPTER.l1_small_size
-USE_TRACE = os.environ.get("PREFILL_USE_TRACE", "0") == "1"
-_TRACE_REGION_SIZE = int(os.environ.get("PREFILL_TRACE_REGION_SIZE", 256 * 1024 * 1024)) if USE_TRACE else 0
+USE_TRACE = _tt_public_getenv("PREFILL_USE_TRACE", "0") == "1"
+_TRACE_REGION_SIZE = int(_tt_public_getenv("PREFILL_TRACE_REGION_SIZE", 256 * 1024 * 1024)) if USE_TRACE else 0
 assert not (DFLASH_ENABLED and USE_TRACE), (
     "PREFILL_DFLASH=1 is incompatible with PREFILL_USE_TRACE=1: the DFlash drafter path is not "
     "trace-captured. Run DFlash with PREFILL_USE_TRACE=0."
@@ -101,7 +102,7 @@ def _handle_sigterm(signum, frame):
     _shutdown = True
 
 
-LAYER_COMPLETION_PUSH_SPIN_TIMEOUT_S = float(os.environ.get("PREFILL_LAYER_COMPLETION_PUSH_TIMEOUT_S", 30.0))
+LAYER_COMPLETION_PUSH_SPIN_TIMEOUT_S = float(_tt_public_getenv("PREFILL_LAYER_COMPLETION_PUSH_TIMEOUT_S", 30.0))
 LAYER_COMPLETION_PUSH_SPIN_LOG_EVERY_S = 10.0
 LAYER_COMPLETION_PUSH_SPIN_SLEEP_S = 0.001
 
@@ -372,18 +373,18 @@ def run_request_loop(
 def _print_config() -> None:
     rows = [
         ("PREFILL_MODEL", ADAPTER.name),
-        ("PREFILL_HF_MODEL", os.environ.get("PREFILL_HF_MODEL", ADAPTER.hf_model_default)),
-        ("PREFILL_TTNN_CACHE", os.environ.get("PREFILL_TTNN_CACHE", ADAPTER.ttnn_cache_default)),
+        ("PREFILL_HF_MODEL", _tt_public_getenv("PREFILL_HF_MODEL", ADAPTER.hf_model_default)),
+        ("PREFILL_TTNN_CACHE", _tt_public_getenv("PREFILL_TTNN_CACHE", ADAPTER.ttnn_cache_default)),
         ("resolved weight_cache_path", str(ADAPTER.weight_cache_path(GLOBAL_MESH_SHAPE))),
         ("PREFILL_SP", str(_sp)),
         ("PREFILL_TP", str(_tp)),
         ("PREFILL_NUM_LAYERS", str(NUM_LAYERS)),
-        ("PREFILL_PP_LAYER_COUNTS", os.environ.get("PREFILL_PP_LAYER_COUNTS", "<even split>")),
+        ("PREFILL_PP_LAYER_COUNTS", _tt_public_getenv("PREFILL_PP_LAYER_COUNTS", "<even split>")),
         ("PREFILL_KV_ONLY_LAST_LAYER", str(KV_ONLY_LAST_LAYER)),
         (
             "DFLASH_ENABLED",
             f"{DFLASH_ENABLED} (adapter.supports_dflash={ADAPTER.supports_dflash}, "
-            f"DFLASH_HF_MODEL={os.environ.get('DFLASH_HF_MODEL') or '<unset>'})",
+            f"DFLASH_HF_MODEL={_tt_public_getenv('DFLASH_HF_MODEL') or '<unset>'})",
         ),
         ("PREFILL_USE_TRACE", f"{USE_TRACE} (trace_region={_TRACE_REGION_SIZE >> 20} MB)"),
         ("PREFILL_CHUNK_SIZE", str(CHUNK_SIZE)),
@@ -391,21 +392,21 @@ def _print_config() -> None:
         ("PREFILL_NUM_USERS", str(NUM_USERS)),
         ("PREFILL_CAPACITY_FACTOR", str(CAPACITY_FACTOR)),
         ("PREFILL_GATE_FALLBACK_MODE", _gate_mode_name),
-        ("PREFILL_FABRIC_MODE", os.environ.get("PREFILL_FABRIC_MODE", "<auto: 1d if sp<=8 else 2d>")),
+        ("PREFILL_FABRIC_MODE", _tt_public_getenv("PREFILL_FABRIC_MODE", "<auto: 1d if sp<=8 else 2d>")),
         ("PREFILL_PP_D2D_FIFO_BYTES", str(D2D_FIFO_SIZE_BYTES)),
-        ("PREFILL_H2D_SERVICE_ID", os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")),
-        ("PREFILL_TRACE_DIR", os.environ.get("PREFILL_TRACE_DIR", ADAPTER.prefill_trace_default)),
-        ("PREFILL_ENABLE_MIGRATION", os.environ.get("PREFILL_ENABLE_MIGRATION", "0")),
-        ("PREFILL_MOCK_MIGRATION", os.environ.get("PREFILL_MOCK_MIGRATION", "0")),
+        ("PREFILL_H2D_SERVICE_ID", _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")),
+        ("PREFILL_TRACE_DIR", _tt_public_getenv("PREFILL_TRACE_DIR", ADAPTER.prefill_trace_default)),
+        ("PREFILL_ENABLE_MIGRATION", _tt_public_getenv("PREFILL_ENABLE_MIGRATION", "0")),
+        ("PREFILL_MOCK_MIGRATION", _tt_public_getenv("PREFILL_MOCK_MIGRATION", "0")),
         (
             "PREFILL_MIGRATION_TABLE_PATH",
-            os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb"),
+            _tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb"),
         ),
-        ("PREFILL_MIGRATION_WAIT_READY_MS", os.environ.get("PREFILL_MIGRATION_WAIT_READY_MS", "120000")),
-        ("PREFILL_MIGRATION_EXPORT_TO_FILE", os.environ.get("PREFILL_MIGRATION_EXPORT_TO_FILE", "0")),
+        ("PREFILL_MIGRATION_WAIT_READY_MS", _tt_public_getenv("PREFILL_MIGRATION_WAIT_READY_MS", "120000")),
+        ("PREFILL_MIGRATION_EXPORT_TO_FILE", _tt_public_getenv("PREFILL_MIGRATION_EXPORT_TO_FILE", "0")),
         (
             "PREFILL_MIGRATION_DEVICE_MAP_PATH",
-            os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "<transport-dependent default>"),
+            _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "<transport-dependent default>"),
         ),
     ]
     sep = "=" * 70
@@ -421,7 +422,7 @@ def _assert_ranks_agree_on_config(rank: int, num_ranks: int) -> None:
     import zlib
 
     fields = {
-        "PREFILL_MODEL": os.environ.get("PREFILL_MODEL") or f"<unset -> default:{DEFAULT_MODEL}>",
+        "PREFILL_MODEL": _tt_public_getenv("PREFILL_MODEL") or f"<unset -> default:{DEFAULT_MODEL}>",
         "adapter": ADAPTER.name,
         "num_layers": NUM_LAYERS,
         "chunk_size": CHUNK_SIZE,
@@ -493,7 +494,7 @@ def main() -> None:
         weight_cache_path=ADAPTER.weight_cache_path(GLOBAL_MESH_SHAPE),
         sparse_kv_cache_format=ADAPTER.default_sparse_kv_cache_format,
         use_trace=USE_TRACE,
-        overlap_shared_expert_with_dispatch=os.environ.get("PREFILL_OVERLAP_SHARED_EXPERT", "1") == "1",
+        overlap_shared_expert_with_dispatch=_tt_public_getenv("PREFILL_OVERLAP_SHARED_EXPERT", "1") == "1",
     )
 
     runtime = ADAPTER.build_runtime(mesh_device=mesh_device, hf_config=hf_config, params=params)
@@ -528,7 +529,7 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
             worker_cores=SYNC_WORKER_CORES,
             metadata_size_bytes=METADATA_SIZE_BYTES,
         )
-        service_id = os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")
+        service_id = _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")
         descriptor_path = h2d_service.export_descriptor(service_id)
         logger.info(
             f"[pp rank {rank}] [h2d] descriptor service_id={service_id!r} -> {descriptor_path}; "
@@ -541,16 +542,16 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
         d2d_in, d2d_out = build_d2d_pipeline_endpoints(mesh_device, rank, num_ranks, CHUNK_SIZE, d2d_activation_width)
         ttnn.distributed_context_barrier()
 
-    service_id = os.environ.get("PREFILL_H2D_SERVICE_ID", "ds_prefill")
+    service_id = _tt_public_getenv("PREFILL_H2D_SERVICE_ID", "ds_prefill")
     ack_shm_name = f"/tt_prefill_layer_acks_{service_id}"
-    master_rank = int(os.environ.get("PREFILL_MASTER_RANK", "0"))
+    master_rank = int(_tt_public_getenv("PREFILL_MASTER_RANK", "0"))
     ack_channel = None
     router = None
     d2h_service = None
     layer_ack_service = None
     producer = None
     enable_layer_ack = (
-        os.environ.get("PREFILL_ENABLE_LAYER_ACK", os.environ.get("PREFILL_ENABLE_MIGRATION", "0")) == "1"
+        _tt_public_getenv("PREFILL_ENABLE_LAYER_ACK", _tt_public_getenv("PREFILL_ENABLE_MIGRATION", "0")) == "1"
     )
 
     def _unlink_stale_shm(name: str) -> None:
@@ -560,13 +561,13 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
             os.remove(path)
 
     migration_endpoint = None
-    _mock_migration = os.environ.get("PREFILL_MOCK_MIGRATION", "0") == "1"
-    _migration_enabled = os.environ.get("PREFILL_ENABLE_MIGRATION", "0") == "1"
+    _mock_migration = _tt_public_getenv("PREFILL_MOCK_MIGRATION", "0") == "1"
+    _migration_enabled = _tt_public_getenv("PREFILL_ENABLE_MIGRATION", "0") == "1"
     _file_export = migration_file_export_enabled()
 
     if _mock_migration and not _migration_enabled:
-        _mock_table_path = os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
-        _mock_map_path = os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
+        _mock_table_path = _tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
+        _mock_map_path = _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
         runtime.build_kv_chunk_table(kv_caches, path=_mock_table_path)
         remove_stale_device_map_sidecars(_mock_map_path)
         serialize_device_map(mesh_device, _mock_map_path)
@@ -589,8 +590,8 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
         first_layer_idx, num_my_layers = compute_layer_split(
             NUM_LAYERS, num_ranks, ADAPTER.layer_split_boundaries(NUM_LAYERS)
         )[rank]
-        table_path = os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
-        wait_ready_ms = int(os.environ.get("PREFILL_MIGRATION_WAIT_READY_MS", "120000"))
+        table_path = _tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
+        wait_ready_ms = int(_tt_public_getenv("PREFILL_MIGRATION_WAIT_READY_MS", "120000"))
 
         if num_ranks > 1:
             _abs_table = os.path.abspath(table_path)
@@ -607,7 +608,7 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
 
         if not _file_export:
             remove_stale_device_map_sidecars(
-                os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
+                _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
             )
 
         _multi_cache_runtime = hasattr(runtime, "kv_migration_stages")
@@ -621,7 +622,7 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
                 "kv_migration_stages nor kv_migration_base_address "
                 "(see docs/ADDING_A_PREFILL_MODEL.md §2)."
             )
-        _mock_migration = os.environ.get("PREFILL_MOCK_MIGRATION", "0") == "1"
+        _mock_migration = _tt_public_getenv("PREFILL_MOCK_MIGRATION", "0") == "1"
         if _mock_migration:
             stage_layouts = allgather_kv_stage_layouts(mesh_device, kv_stages, GLOBAL_MESH_SHAPE)
         elif _file_export:
@@ -635,7 +636,7 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
 
         if _mock_migration:
             device_map_path = rank_scoped_device_map_path(
-                os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json"),
+                _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json"),
                 rank,
                 num_ranks,
             )
@@ -663,7 +664,7 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
             logger.info(f"[migration] rank {rank}: exported local device map -> {migration_device_map_file_path()}")
         else:
             device_map_path = rank_scoped_device_map_path(
-                os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json"),
+                _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json"),
                 rank,
                 num_ranks,
             )
@@ -688,29 +689,29 @@ def _serve_request(runtime, kv_caches, mesh_device, hf_config, rank: int, num_ra
                     f"(first_layer={first_layer_idx}, count={num_my_layers}); rank 0 sends the merged table."
                 )
 
-    elif os.environ.get("PREFILL_MOCK_MIGRATION", "0") == "1":
+    elif _tt_public_getenv("PREFILL_MOCK_MIGRATION", "0") == "1":
         if not single_rank:
             raise ValueError(
                 f"PREFILL_MOCK_MIGRATION=1 is unsupported for num_ranks={num_ranks} (each rank would "
                 "publish a table covering only its own layer slice; a merged mock table is not "
                 "implemented); run single-rank or unset PREFILL_MOCK_MIGRATION."
             )
-        table_path = os.environ.get("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
+        table_path = _tt_public_getenv("PREFILL_MIGRATION_TABLE_PATH", "/tmp/prefill_kv_chunk_table.pb")
         runtime.build_kv_chunk_table(kv_caches, path=table_path)
-        device_map_path = os.environ.get("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
+        device_map_path = _tt_public_getenv("PREFILL_MIGRATION_DEVICE_MAP_PATH", "/tmp/prefill_kv_device_map.json")
         serialize_device_map(mesh_device, device_map_path)
         logger.info(
             f"[mock-migration] KV chunk table -> {table_path}, device map -> {device_map_path} "
             f"(no migration worker); prefill_producer can import them"
         )
 
-    use_d2h = os.environ.get("PREFILL_LAYER_ACK_D2H", "0") == "1"
+    use_d2h = _tt_public_getenv("PREFILL_LAYER_ACK_D2H", "0") == "1"
     use_router = (not single_rank) or (use_d2h and enable_layer_ack)
 
     if use_router:
         from ttnn._experimental.layer_completion import LayerCompletionQueue, LayerCompletionRouter
 
-        ring_base = os.environ.get("PREFILL_LAYER_COMPLETION_RING", "/tt_prefill_layer_completion_ring")
+        ring_base = _tt_public_getenv("PREFILL_LAYER_COMPLETION_RING", "/tt_prefill_layer_completion_ring")
         ring_shm_name = f"{ring_base}_{rank}"
         _unlink_stale_shm(ring_shm_name)
         if rank == master_rank:

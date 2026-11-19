@@ -70,6 +70,7 @@ Add --collect-noc-traces to the tracy invocation for measured DRAM BW UTIL (%) /
 Smoke test without a device (chunk math + token tiling only, no model build):
   PROFILE_DRY_RUN=1 PREFILL_TRACE_DIR=<golden> python3 .../profile_prefill.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -115,7 +116,7 @@ def load_tokens(n: int):
     with it the dispatch / experts_mm / combine cost) is only realistic with real text. Tiling matches
     scripts/run_prefill_perf.sh's make_trace, so a profile is comparable to the perf sweep's numbers.
     """
-    trace_dir = os.environ.get("PREFILL_TRACE_DIR")
+    trace_dir = _tt_public_getenv("PREFILL_TRACE_DIR")
     if not trace_dir:
         raise SystemExit(
             "ERROR: set PREFILL_TRACE_DIR to a golden trace dir (a metadata.json with token_ids).\n"
@@ -176,14 +177,14 @@ def build_runtime(mesh, chunk, total, num_layers_override, layer_ids=None):
                 flush=True,
             )
 
-    expert_dtype = ttnn.bfloat8_b if os.getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
+    expert_dtype = ttnn.bfloat8_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
     cache_path = model_args.weight_cache_path(ttnn.bfloat8_b)
     # Real bf16 source is ~869GB; every weight module loads its tilized tensor from the per-tensor cache
     # via ttnn.as_tensor(cache_file_name=), so on a complete cache we pass an EMPTY state_dict and never
     # read the source. Same trick as galaxy_prefill_kv_pcc.py / DeepSeek.
-    force_load = os.getenv("M3_FORCE_LOAD_WEIGHTS") == "1"
+    force_load = _tt_public_getenv("M3_FORCE_LOAD_WEIGHTS") == "1"
     cache_only = not force_load and (
-        os.getenv("M3_WEIGHTS_FROM_CACHE") == "1"
+        _tt_public_getenv("M3_WEIGHTS_FROM_CACHE") == "1"
         or weight_cache_is_complete(cache_path, hf_config, num_layers, expert_dtype)
     )
     if cache_only:
@@ -222,7 +223,7 @@ def cache_traffic_note(hf_config, num_layers, total, sp=8):
     seq_local = total // sp
     elems = num_layers * seq_local * hf_config.head_dim  # per chip, per cache tensor
     kv_bytes = elems * 1.0625  # bf8_b: 1 byte + 1/16 block scale
-    ik_bytes = elems * (2.0 if os.getenv("M3_INDEX_CACHE_BF16") == "1" else 1.0625)
+    ik_bytes = elems * (2.0 if _tt_public_getenv("M3_INDEX_CACHE_BF16") == "1" else 1.0625)
     per_layer = 2 * (2 * kv_bytes + ik_bytes)  # read + write, K + V + index_k
     logger.info(
         f"[zone-prof] whole-cache de-shard traffic (the cache_read/deshard hypothesis):\n"
@@ -238,11 +239,11 @@ def cache_traffic_note(hf_config, num_layers, total, sp=8):
 def main():
     _raise_nproc_limit()
 
-    chunk = int(os.getenv("PROFILE_CHUNK", "5120"))
-    cache_req = int(os.getenv("PROFILE_CACHE", "25600"))
-    read_every = int(os.getenv("PROFILE_READ_EVERY", "1"))
-    num_layers_override = os.getenv("PROFILE_NUM_LAYERS")
-    layer_ids = [int(x) for x in os.getenv("PROFILE_LAYER_IDS", "").split(",") if x.strip()] or None
+    chunk = int(_tt_public_getenv("PROFILE_CHUNK", "5120"))
+    cache_req = int(_tt_public_getenv("PROFILE_CACHE", "25600"))
+    read_every = int(_tt_public_getenv("PROFILE_READ_EVERY", "1"))
+    num_layers_override = _tt_public_getenv("PROFILE_NUM_LAYERS")
+    layer_ids = [int(x) for x in _tt_public_getenv("PROFILE_LAYER_IDS", "").split(",") if x.strip()] or None
 
     n_chunks, cache, total = plan(chunk, cache_req)
     print(
@@ -251,7 +252,7 @@ def main():
         + (f"  [requested cache {cache_req} -> aligned down to {cache}]" if cache != cache_req else ""),
         flush=True,
     )
-    if os.getenv("PROFILE_DRY_RUN") == "1":
+    if _tt_public_getenv("PROFILE_DRY_RUN") == "1":
         load_tokens(total)
         print("[zone-prof] PROFILE_DRY_RUN=1 -> chunk math + tokens only, exiting before device open", flush=True)
         return 0
@@ -275,7 +276,7 @@ def main():
         # That means the profiled chunk's ops must all fit in the buffer at once
         # (num_layers x ~72 ops). Size it with TT_METAL_PROFILER_PROGRAM_SUPPORT_COUNT — the default is
         # only 1000 (tt_metal/impl/profiler/profiler_state_manager.cpp).
-        read_in_chunk = os.getenv("PROFILE_READ_IN_CHUNK", "0") == "1"
+        read_in_chunk = _tt_public_getenv("PROFILE_READ_IN_CHUNK", "0") == "1"
         state = {"reads": 0, "in_chunk": False}
 
         def on_layer_complete(layer_idx):
@@ -303,7 +304,7 @@ def main():
 
         # --- 2. fill the cache to `cache` tokens. Not inside the `profiled_chunk` zone, so these ops are
         # excluded from the report; synced before the profiled chunk so it pays for no leftover barrier.
-        skip_prefix = os.getenv("PROFILE_SKIP_PREFIX") == "1"
+        skip_prefix = _tt_public_getenv("PROFILE_SKIP_PREFIX") == "1"
         if skip_prefix:
             # FAST/APPROXIMATE: run the profiled chunk at actual_start=`cache` against a still-ZEROED
             # cache. Shapes (and therefore every op's cost) are identical, but the attention outputs are

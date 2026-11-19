@@ -9,6 +9,7 @@ runs the producer against it, then tears it down. That fully isolates scenarios 
 config, no cross-contamination, a crash in one doesn't block the others) at the cost of paying the
 runner startup (full model load + kernel JIT) once PER scenario.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import contextlib
 import glob
@@ -24,7 +25,7 @@ import pytest
 from models.common.utility_functions import is_blackhole, skip_for_slow_dispatch
 
 CHUNK_SIZE = 5120
-NUM_LAYERS = int(os.environ.get("PREFILL_NUM_LAYERS", "2"))
+NUM_LAYERS = int(_tt_public_getenv("PREFILL_NUM_LAYERS", "2"))
 # GLM-5.2 golden trace carrying BOTH the 78 kv_cache layers and the 21 dsa/indexer_k_layer_* dirs, at
 # 56320 rows (= 11 x CHUNK_SIZE). The adapter's own prefill_trace_default omits dsa/, which would leave
 # the merged table's index config with no golden to PCC against.
@@ -35,16 +36,16 @@ DEVMAP_PATH = "/tmp/ci_prefill_kv_devmap.json"
 # Full logs are kept under generated/test_reports/ on the pod. NOTE: no workflow step uploads that
 # directory today (blaze-models-prefill-tests-impl.yaml only uploads PREFILL_SUMMARIES/**/*.md), so
 # in CI these files die with the pod -- what survives is the live stream (see _ChildStream below).
-_REPORT_DIR = os.path.join(os.environ.get("TT_METAL_HOME", os.getcwd()), "generated", "test_reports")
+_REPORT_DIR = os.path.join(_tt_public_getenv("TT_METAL_HOME", os.getcwd()), "generated", "test_reports")
 
 _RUNNER_MODULE = "models.demos.common.prefill.runners.prefill_runner"
 _PRODUCER_MODULE = "models.demos.common.prefill.runners.prefill_producer"
 
-_READY_TIMEOUT_S = int(os.environ.get("PREFILL_CI_RUNNER_READY_TIMEOUT_S", "1200"))  # 20 min for load + JIT
-_PRODUCER_TIMEOUT_S = int(os.environ.get("PREFILL_CI_PRODUCER_TIMEOUT_S", "900"))
-_LOG_TAIL_LINES = int(os.environ.get("PREFILL_CI_LOG_TAIL_LINES", "200"))
-_STREAM_LOGS = os.environ.get("PREFILL_CI_STREAM_LOGS", "1") == "1"  # live child output; see _ChildStream
-_HEARTBEAT_S = float(os.environ.get("PREFILL_CI_HEARTBEAT_S", "30"))
+_READY_TIMEOUT_S = int(_tt_public_getenv("PREFILL_CI_RUNNER_READY_TIMEOUT_S", "1200"))  # 20 min for load + JIT
+_PRODUCER_TIMEOUT_S = int(_tt_public_getenv("PREFILL_CI_PRODUCER_TIMEOUT_S", "900"))
+_LOG_TAIL_LINES = int(_tt_public_getenv("PREFILL_CI_LOG_TAIL_LINES", "200"))
+_STREAM_LOGS = _tt_public_getenv("PREFILL_CI_STREAM_LOGS", "1") == "1"  # live child output; see _ChildStream
+_HEARTBEAT_S = float(_tt_public_getenv("PREFILL_CI_HEARTBEAT_S", "30"))
 _DESCRIPTOR = f"/dev/shm/tt_h2d_stream_service_{SERVICE_ID}.bin"
 _T0 = time.monotonic()
 
@@ -80,7 +81,7 @@ def _mpi_launcher_keys(env) -> list:
 def _launch_mode() -> str:
     """Return "ci" when launched under an MPI launcher (mpirun/prterun), else "standard".
     PREFILL_RUNNER_LAUNCH=ci|standard overrides the auto-detection."""
-    forced = os.environ.get("PREFILL_RUNNER_LAUNCH", "").strip().lower()
+    forced = _tt_public_getenv("PREFILL_RUNNER_LAUNCH", "").strip().lower()
     if forced in ("ci", "mpi", "mpirun"):
         return "ci"
     if forced in ("standard", "standalone", "local", "bare", "pytest"):
@@ -169,9 +170,9 @@ SCENARIOS = {
 # PREFILL_PROMPT_FILE at a prompt JSON. The host reference forward uses chunked-SDPA MLA, so its memory
 # stays bounded and PREFILL_PROMPT_CHUNKS chunks (default 1) can be validated — the correctness gate for
 # arbitrary prompts. Runtime is still O(seq^2) in the sequence length, so deeper runs take longer.
-_PROMPT_FILE = os.environ.get("PREFILL_PROMPT_FILE")
+_PROMPT_FILE = _tt_public_getenv("PREFILL_PROMPT_FILE")
 if _PROMPT_FILE:
-    _PROMPT_CHUNKS = int(os.environ.get("PREFILL_PROMPT_CHUNKS", "1"))
+    _PROMPT_CHUNKS = int(_tt_public_getenv("PREFILL_PROMPT_CHUNKS", "1"))
     SCENARIOS["prompt_single_user"] = {
         "users": 1,
         # Cache width must exceed the deepest single push (Q.seq == CHUNK_SIZE): the chunked-attention
@@ -246,7 +247,7 @@ def _emit_log_group(title: str, path: str, n: int = _LOG_TAIL_LINES) -> None:
     with streaming on (the default) the whole log is already in the step log, so this is skipped."""
     if not os.path.exists(path):
         return
-    in_gha = os.environ.get("GITHUB_ACTIONS") == "true"
+    in_gha = _tt_public_getenv("GITHUB_ACTIONS") == "true"
     print(f"::group::{title} (tail {n} lines)" if in_gha else f"\n===== {title} (tail {n} lines) =====", flush=True)
     print(_tail(path, n), flush=True)
     if in_gha:
@@ -481,9 +482,9 @@ def test_producer_runner_pcc(scenario, tmp_path):
     prod_log = os.path.join(_REPORT_DIR, f"ci_producer_{scenario}.log")
     trace_env = {}
     if "prompt_file" in sc:
-        model = os.environ.get("PREFILL_MODEL", "kimi_k2_7")
+        model = _tt_public_getenv("PREFILL_MODEL", "kimi_k2_7")
         trace_env["PREFILL_MODEL"] = model
-        reuse_dir = os.environ.get("PREFILL_REUSE_TRACE_DIR")
+        reuse_dir = _tt_public_getenv("PREFILL_REUSE_TRACE_DIR")
         if reuse_dir and os.path.exists(os.path.join(reuse_dir, "metadata.json")):
             trace_dir = reuse_dir
         else:

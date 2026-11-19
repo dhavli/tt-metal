@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 """Test module for end-to-end Qwen2.5-VL model inference with optional TT vision model."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -23,7 +24,7 @@ from models.demos.qwen3_vl.tt.model_config import VisionModelArgs
 @torch.no_grad()
 @pytest.mark.parametrize(
     "mesh_device",
-    [{"N150": (1, 1), "N300": (1, 2)}.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))],
+    [{"N150": (1, 1), "N300": (1, 2)}.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))],
     indirect=True,
 )
 @pytest.mark.parametrize(
@@ -86,7 +87,7 @@ def test_qwen_vl_end_to_end(
     max_new_tokens = 200
 
     # Load model and processor
-    model_name = os.environ.get("HF_MODEL", "Qwen/Qwen3-VL-32B-Instruct")
+    model_name = _tt_public_getenv("HF_MODEL", "Qwen/Qwen3-VL-32B-Instruct")
     assert "Qwen3-VL-32B".lower() in model_name.lower(), "This test uses only Qwen3-VL-32B for fast accuracy checking"
     model = Qwen3VLForConditionalGeneration.from_pretrained(model_name, torch_dtype="auto", device_map="auto")
     processor = AutoProcessor.from_pretrained(model_name)

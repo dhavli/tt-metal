@@ -26,6 +26,7 @@ Run (validate trace, fast random):
 Run (real headline):
   REAL=1 PERF_SEQ=2048 TRACE_REGION=1000000000 HF_MODEL=/mnt/models/MiniMaxAI/MiniMax-M3-ref pytest ...::test_model_fwd -s
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -124,10 +125,10 @@ def test_model_fwd():
 
     fabric_payload_size = 6144  # M3 hidden_size (max fabric packet payload)
 
-    seq = int(os.getenv("PERF_SEQ", "512"))
-    layers = int(os.getenv("PERF_LAYERS", "4"))
-    experts = int(os.getenv("PERF_EXPERTS", "64"))
-    real = os.getenv("REAL", "0") == "1"
+    seq = int(_tt_public_getenv("PERF_SEQ", "512"))
+    layers = int(_tt_public_getenv("PERF_LAYERS", "4"))
+    experts = int(_tt_public_getenv("PERF_EXPERTS", "64"))
+    real = _tt_public_getenv("REAL", "0") == "1"
     torch.manual_seed(0)
 
     ttnn.set_fabric_config(
@@ -139,7 +140,7 @@ def test_model_fwd():
         ttnn.FabricManagerMode.DEFAULT,
         create_fabric_router_config(max_payload_size=fabric_payload_size),
     )
-    trace_region = int(os.getenv("TRACE_REGION", "300000000"))  # bump for 62-layer real run
+    trace_region = int(_tt_public_getenv("TRACE_REGION", "300000000"))  # bump for 62-layer real run
     mesh = ttnn.open_mesh_device(mesh_shape=ttnn.MeshShape(4, 8), trace_region_size=trace_region)
     try:
         model, cfg = _build_real_model(mesh, seq) if real else _build_random_model(mesh, layers, experts, seq)
@@ -177,7 +178,7 @@ def test_model_fwd():
         # exactly the end-to-end prefill latency we care about. Signposts kept for optional Tracy.
         import time
 
-        K = int(os.getenv("PERF_REPS", "10"))
+        K = int(_tt_public_getenv("PERF_REPS", "10"))
         signpost(header="start")
         t0 = time.perf_counter()
         for _ in range(K):
@@ -204,9 +205,9 @@ def test_model_fwd():
 def test_model_device_perf():
     from models.perf.device_perf_utils import run_device_perf
 
-    seq = int(os.getenv("PERF_SEQ", "512"))
-    layers = int(os.getenv("PERF_LAYERS", "4"))
-    real = os.getenv("REAL", "0") == "1"
+    seq = int(_tt_public_getenv("PERF_SEQ", "512"))
+    layers = int(_tt_public_getenv("PERF_LAYERS", "4"))
+    real = _tt_public_getenv("REAL", "0") == "1"
     eff_layers = 62 if real else layers
     total_tokens = 4 * seq  # 4 prompts/rows
     res = run_device_perf(

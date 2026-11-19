@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 from io import BytesIO
 from pathlib import Path
 from typing import Literal, Optional
@@ -199,7 +200,7 @@ def _gemma3_vision_demo_device_params():
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -296,7 +297,7 @@ def test_multimodal_demo_text(
     from transformers import AutoProcessor
 
     processor = AutoProcessor.from_pretrained(
-        model_args[0].CKPT_DIR, local_files_only=os.getenv("CI") == "true", use_fast=True, do_convert_rgb=True
+        model_args[0].CKPT_DIR, local_files_only=_tt_public_getenv("CI") == "true", use_fast=True, do_convert_rgb=True
     )
 
     generator = GemmaMultimodalGenerator(model, model_args, mesh_device)

@@ -207,7 +207,8 @@ std::vector<Tensor> chunk_gdn_scan(
     uint32_t chunk_size,
     bool output_final_state,
     const tt::tt_metal::MemoryConfig& output_mem_config,
-    const DeviceComputeKernelConfig& compute_kernel_config) {
+    const DeviceComputeKernelConfig& compute_kernel_config,
+    bool use_mcast) {
     const auto& vb_shape = v_beta.logical_shape();  // [BH, NC, C, V]
     const auto& kd_shape = kd.logical_shape();      // [BH, NC, C, K]
     auto attrs = ChunkGdnScanOperation::operation_attributes_t{
@@ -220,6 +221,7 @@ std::vector<Tensor> chunk_gdn_scan(
         .output_final_state = output_final_state,
         .output_mem_config = output_mem_config,
         .compute_kernel_config = compute_kernel_config,
+        .use_mcast = use_mcast,
     };
     auto tensor_args = ChunkGdnScanOperation::tensor_args_t{
         .v_beta = v_beta,

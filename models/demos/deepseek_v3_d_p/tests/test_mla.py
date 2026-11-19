@@ -5,6 +5,7 @@
 Test for instantiating both reference CPU and TT device MLA modules with the same weights.
 This test verifies that both modules can be created and weights are loaded correctly.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -280,7 +281,7 @@ def run_model(
     if skip_host_comparison == False:
         # Check for cached reference results to avoid expensive host attention computation
         env = variant.mla_ref_cache_env or "DEEPSEEK_V3_MLA_REF_CACHE"
-        cache_dir = Path(os.environ.get(env, f"/tmp/{variant.name}_mla_ref_cache"))
+        cache_dir = Path(_tt_public_getenv(env, f"/tmp/{variant.name}_mla_ref_cache"))
         cache_path = cache_dir / f"{weight_type.lower()}_seq{seq_len}.pt"
 
         if cache_path.exists():
@@ -473,7 +474,7 @@ def test_ds_mla(
 # reference='trace' takes its trace dirs from variant.mla_trace_defaults. MLA_CHUNKED_TRACE_PATH
 # overrides that with ONE specific trace dir (the leaf holding mla_io/ + kv_cache/), shared across all
 # users -- for a trace that is not the variant's registered one.
-MLA_CHUNKED_TRACE_PATH = os.environ.get("MLA_CHUNKED_TRACE_PATH")
+MLA_CHUNKED_TRACE_PATH = _tt_public_getenv("MLA_CHUNKED_TRACE_PATH")
 
 # Per-iteration VALID token counts for the rotation/padding edge cases, tuned for the TARGET 8x4 mesh
 # (sp=8, chunk_local=640, chunk=5120). Each cumulative kv_actual lands on a distinct rotation edge:
@@ -1006,7 +1007,7 @@ def test_mla_chunked_prefill(
     # Opt into real weights on the cpu path when the variant's checkpoint env var is set. The "trace"
     # path already forces pretrained; "func" is ref-less so weights don't matter. The pretrained
     # fixture skips the test if the env var is set but the checkpoint is incomplete.
-    if reference == "cpu" and os.environ.get(variant.env_var) and not kwargs.get("use_pretrained"):
+    if reference == "cpu" and _tt_public_getenv(variant.env_var) and not kwargs.get("use_pretrained"):
         kwargs = {**kwargs, "use_pretrained": True}
     topology = per_axis_topology(device_params["fabric_config"])
     _run_chunked_prefill(

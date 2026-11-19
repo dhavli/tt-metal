@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import hashlib
 import inspect
 import itertools
@@ -535,7 +536,7 @@ def load_reference_io_tensors_for_module(
 
 def load_reference_io(mode: Literal["prefill", "decode"], module_range: str):
     path = (
-        Path(os.getenv("DEEPSEEK_V3_CACHE", "/proj_sw/user_dev/deepseek-v3-cache"))
+        Path(_tt_public_getenv("DEEPSEEK_V3_CACHE", "/proj_sw/user_dev/deepseek-v3-cache"))
         / f"test_io_cache/{mode}.{module_range}.pt"
     )
     if not path.is_file():
@@ -741,7 +742,7 @@ def get_test_weight_config(
             parts.append(f"{normalized_cache_identity}__{cache_identity_digest}")
         weight_config_id = "/".join(parts)
     else:
-        weight_config_id = os.environ.get("PYTEST_CURRENT_TEST", "unknown_test")
+        weight_config_id = _tt_public_getenv("PYTEST_CURRENT_TEST", "unknown_test")
     per_test_weight_cache_path = cache_path / "tests_cache" / weight_config_id
 
     if not prefer_legacy_weight_cache:

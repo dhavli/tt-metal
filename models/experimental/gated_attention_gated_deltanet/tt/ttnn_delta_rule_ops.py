@@ -6,8 +6,11 @@
 
 FLA layout: q,k [B,T,H,K]; v [B,T,H,V]; beta,g [B,T,H]; state [B,H,K,V].
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
+import os
+import warnings
 
 import torch
 import ttnn
@@ -380,6 +383,85 @@ def recurrent_delta_rule_step_ttnn(
     return o_t, h
 
 
+_FUSED_DECODE_OP_MISSING = object()  # resolved-and-absent sentinel
+_fused_decode_op_cache = None  # None = unresolved; MISSING = absent (warn once)
+_fused_decode_engaged_logged = False  # one-shot engagement marker (log-evidence)
+
+
+def _fused_decode_enabled():
+    """QWEN_GDN_FUSED_DECODE routes the T=1 decode to the fused C++ op. Default OFF:
+    unset/false/0 (case-insensitive) run the stock graph, byte-identical."""
+    return _tt_public_getenv("QWEN_GDN_FUSED_DECODE", "").strip().lower() not in ("", "0", "false")
+
+
+def _fused_decode_op():
+    """Resolve ttnn.transformer.decode_gated_delta_rule once (cached).
+
+    Returns the op, or None after a one-time warning when this ttnn build lacks
+    the binding — callers then fall back to the stock decode graph."""
+    global _fused_decode_op_cache
+    if _fused_decode_op_cache is None:
+        _fused_decode_op_cache = getattr(getattr(ttnn, "transformer", None), "decode_gated_delta_rule", None)
+        if _fused_decode_op_cache is None:
+            _fused_decode_op_cache = _FUSED_DECODE_OP_MISSING
+            warnings.warn(
+                "QWEN_GDN_FUSED_DECODE is set but ttnn.transformer.decode_gated_delta_rule is"
+                " not available in this ttnn build; falling back to the stock decode graph.",
+                stacklevel=2,
+            )
+    return None if _fused_decode_op_cache is _FUSED_DECODE_OP_MISSING else _fused_decode_op_cache
+
+
+def _decode_gated_delta_rule_fused(
+    op, q, k, v, beta, g, scale, initial_state, device, high_precision, inplace_state=False
+):
+    """Drive the fused C++ op (ttnn.transformer.decode_gated_delta_rule) for T=1.
+
+    Implements the same graph as recurrent_gated_delta_rule_decode_ttnn in one
+    device program: L2-norm q/k, q*scale, h*=exp(g), v_read=k@h, delta=v-v_read,
+    rank-1 beta*(k outer delta) write, o=q@h. inplace_state writes new_state
+    into the caller's state buffer (the fused _inplace variant).
+    """
+    K = q.shape[3]
+    global _fused_decode_engaged_logged
+    if not _fused_decode_engaged_logged:
+        _fused_decode_engaged_logged = True
+        # One-shot engagement evidence: proves the env opt-in resolved the
+        # binding AND this call site routed through it (grep in demo logs).
+        print(
+            "QWEN_GDN_FUSED_DECODE engaged: ttnn.transformer.decode_gated_delta_rule"
+            f" T=1 fused path (B={q.shape[0]} H={q.shape[2]} K={q.shape[3]} V={v.shape[3]}"
+            f" inplace_state={inplace_state})",
+            flush=True,
+        )
+    if high_precision:
+        q = ttnn.typecast(q, ttnn.float32)
+        k = ttnn.typecast(k, ttnn.float32)
+        v = ttnn.typecast(v, ttnn.float32)
+        beta = ttnn.typecast(beta, ttnn.float32)
+        g = ttnn.typecast(g, ttnn.float32)
+        if initial_state is not None and initial_state.dtype != ttnn.float32:
+            initial_state = ttnn.typecast(initial_state, ttnn.float32)
+    o, h = op(
+        q=q,
+        k=k,
+        v=v,
+        beta=beta,
+        g=g,
+        scale=scale if scale is not None else K**-0.5,
+        initial_state=initial_state,
+        inplace_state=inplace_state,
+        # Both outputs share one memory config and the new state is [B,H,K,V]
+        # fp32 (192 MiB per die at decode B=128) — L1 is impossible; DRAM is
+        # the proven standalone configuration.
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
+    # The op returns o ROW_MAJOR (its exclusive-page write shape); the decode
+    # graph feeds o straight into rms_norm, which requires TILE.
+    o = ttnn.to_layout(o, ttnn.TILE_LAYOUT)
+    return o, h
+
+
 def recurrent_gated_delta_rule_decode_ttnn(
     q,
     k,
@@ -390,12 +472,22 @@ def recurrent_gated_delta_rule_decode_ttnn(
     initial_state=None,
     device=None,
     high_precision=False,
+    inplace_state=False,
 ):
     """T=1 decode path: no loop/slice overhead. Returns o [B,1,H,V], state [B,H,K,V]."""
     B = q.shape[0]
     H = q.shape[2]
     K = q.shape[3]
     V = v.shape[3]
+
+    # QWEN_GDN_FUSED_DECODE: single-kernel C++ path when the binding exists; an absent
+    # binding warns once (inside _fused_decode_op) and falls through to the stock graph.
+    if _fused_decode_enabled():
+        op = _fused_decode_op()
+        if op is not None:
+            return _decode_gated_delta_rule_fused(
+                op, q, k, v, beta, g, scale, initial_state, device, high_precision, inplace_state=inplace_state
+            )
 
     # high_precision: fp32 step avoids bf16 decay quantization error over long decode.
     if high_precision:
@@ -493,6 +585,12 @@ def recurrent_gated_delta_rule_decode_inplace_ttnn(
     high_precision=False,
 ):
     """Decode with in-place state copy to pre-allocated buffer (trace-safe addresses)."""
+    op = _fused_decode_op() if _fused_decode_enabled() else None
+    if op is not None:
+        # Fused path: the kernel writes new_state straight into state_buffer.
+        return _decode_gated_delta_rule_fused(
+            op, q, k, v, beta, g, scale, state_buffer, device, high_precision, inplace_state=True
+        )
     o, new_h = recurrent_gated_delta_rule_decode_ttnn(
         q=q,
         k=k,
@@ -575,4 +673,110 @@ def recurrent_gated_delta_rule_ttnn(
     o = ttnn.transpose(o, 1, 2, memory_config=None)
     o = ttnn.typecast(o, ttnn.bfloat16, memory_config=None)
 
+    return o, h
+
+
+_packed_decode_op_cache = None
+_PACKED_DECODE_OP_MISSING = object()
+_packed_decode_engaged_logged = False
+
+
+def _packed_decode_op():
+    """Resolve ttnn.transformer.decode_gated_delta_rule_packed once (cached).
+
+    Same contract as _fused_decode_op: returns None after a one-time warning when
+    the binding is absent, so the caller falls back rather than raising. tp.py's
+    gate also checks hasattr, so a missing binding fails CLOSED -- which is why
+    the A/B asserts on the engagement line rather than on the flag being set."""
+    global _packed_decode_op_cache
+    if _packed_decode_op_cache is None:
+        _packed_decode_op_cache = getattr(
+            getattr(ttnn, "transformer", None), "decode_gated_delta_rule_packed", None
+        )
+        if _packed_decode_op_cache is None:
+            _packed_decode_op_cache = _PACKED_DECODE_OP_MISSING
+            warnings.warn(
+                "QWEN_GDN_PACKED_QKV is set but ttnn.transformer.decode_gated_delta_rule_packed"
+                " is not available in this ttnn build; falling back to the sliced path.",
+                stacklevel=2,
+            )
+    return None if _packed_decode_op_cache is _PACKED_DECODE_OP_MISSING else _packed_decode_op_cache
+
+
+def recurrent_gated_delta_rule_decode_packed_ttnn(
+    qkv,
+    beta,
+    g,
+    Nk,
+    Nv,
+    Dk,
+    Dv,
+    scale=None,
+    initial_state=None,
+    device=None,
+    high_precision=False,
+    inplace_state=False,
+    return_row_major=False,
+):
+    """T=1 decode from a PACKED [1, B, C] q|k|v tile tensor (K milestone 2).
+
+    The conv+gates kernel already produces q, k and v contiguous in one tensor,
+    channels head-major. The packed op's reader gathers head (b, h)'s rows
+    straight out of that layout and takes q/k from GQA source head h // rf, so
+    the model's three slices, three reshapes and two repeat_interleaves all
+    disappear -- 13 ops per GDN layer, on 48 layers.
+
+    Returns (o, state), matching the unpacked entry.
+
+    return_row_major skips the TILE relayout on o. The op writes o ROW_MAJOR
+    (its exclusive-page write shape) and the stock decode graph feeds o into
+    rms_norm, which needs TILE -- so the relayout is on by default. Milestone 3
+    turns it off, because the norm+gate kernel consumes ROW_MAJOR directly and
+    the relayout would be work done only to be undone.
+    """
+    op = _packed_decode_op()
+    if op is None:
+        return None
+
+    global _packed_decode_engaged_logged
+    if not _packed_decode_engaged_logged:
+        _packed_decode_engaged_logged = True
+        # One-shot engagement evidence, same discipline as lever A: proves the
+        # env opt-in resolved the binding AND that this call site routed through
+        # it. A control arm must never print this.
+        print(
+            "QWEN_GDN_PACKED_QKV engaged: ttnn.transformer.decode_gated_delta_rule_packed"
+            f" (B={qkv.shape[1]} Nk={Nk} Nv={Nv} Dk={Dk} Dv={Dv}"
+            f" inplace_state={inplace_state} row_major_out={return_row_major})",
+            flush=True,
+        )
+
+    # high_precision mirrors the unpacked path: fp32 through the step avoids
+    # bf16 decay quantisation error accumulating over a long decode. qkv is one
+    # tensor here rather than three, so it is one cast rather than three.
+    if high_precision:
+        qkv = ttnn.typecast(qkv, ttnn.float32)
+        beta = ttnn.typecast(beta, ttnn.float32)
+        g = ttnn.typecast(g, ttnn.float32)
+        if initial_state is not None and initial_state.dtype != ttnn.float32:
+            initial_state = ttnn.typecast(initial_state, ttnn.float32)
+
+    o, h = op(
+        qkv=qkv,
+        beta=beta,
+        g=g,
+        num_k_heads=Nk,
+        num_v_heads=Nv,
+        head_k=Dk,
+        head_v=Dv,
+        scale=scale if scale is not None else Dk**-0.5,
+        initial_state=initial_state,
+        inplace_state=inplace_state,
+        # DRAM for the same reason the unpacked path uses it: the new state is
+        # [B,H,K,V] and does not fit L1 at batch. See SATURATION-AND-SRAM.md --
+        # partial L1 residency is a separate, later lever.
+        memory_config=ttnn.DRAM_MEMORY_CONFIG,
+    )
+    if not return_row_major:
+        o = ttnn.to_layout(o, ttnn.TILE_LAYOUT)
     return o, h

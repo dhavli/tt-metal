@@ -27,6 +27,7 @@ Run (single Blackhole galaxy, after weights + golden are staged):
   PREFILL_TRACE_DIR=/path/to/golden/longbook_8192 \\
     python3 models/demos/gpt_oss_d_p/tests/galaxy_prefill_kv_pcc.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -78,7 +79,7 @@ def plan(n_tokens, chunk_size, chunked, sp):
 def main():
     _raise_nproc_limit()
 
-    golden_dir = os.environ.get("PREFILL_TRACE_DIR")
+    golden_dir = _tt_public_getenv("PREFILL_TRACE_DIR")
     if not golden_dir:
         print("[prefill-pcc] SKIP: set PREFILL_TRACE_DIR to a golden trace dir", flush=True)
         return 0
@@ -92,9 +93,9 @@ def main():
 
     token_ids = list(json.load(open(Path(golden_dir) / "metadata.json"))["token_ids"])
     n_tokens = len(token_ids)
-    chunked = os.getenv("PREFILL_CHUNKED", "0") == "1"
-    chunk_size = int(os.getenv("PREFILL_CHUNK_SIZE", "8192"))
-    tps_iters = int(os.getenv("PREFILL_TPS_ITERS", "1"))
+    chunked = _tt_public_getenv("PREFILL_CHUNKED", "0") == "1"
+    chunk_size = int(_tt_public_getenv("PREFILL_CHUNK_SIZE", "8192"))
+    tps_iters = int(_tt_public_getenv("PREFILL_TPS_ITERS", "1"))
 
     n_chunks, chunk, total = plan(n_tokens, chunk_size, chunked, ROWS)
     print(
@@ -118,7 +119,7 @@ def main():
     # all-gather fallback. Both use ring collectives and therefore need the cyclic torus route
     # -> FABRIC_1D_RING + the torus mesh descriptor
     # (TT_MESH_GRAPH_DESC_PATH=.../single_bh_galaxy_torus_xy_graph_descriptor.textproto).
-    _linear = os.getenv("PREFILL_TOPOLOGY", "ring") == "linear"
+    _linear = _tt_public_getenv("PREFILL_TOPOLOGY", "ring") == "linear"
     ttnn.set_fabric_config(ttnn.FabricConfig.FABRIC_1D if _linear else ttnn.FabricConfig.FABRIC_1D_RING)
     mesh = ttnn.open_mesh_device(ttnn.MeshShape(ROWS, COLS))
     print(f"[prefill-pcc] mesh opened {tuple(mesh.shape)} ndev={mesh.get_num_devices()}", flush=True)
@@ -126,22 +127,22 @@ def main():
         model_args = ModelArgs(mesh_device=mesh)  # HF_MODEL
         hf_config = model_args.hf_config
         num_layers = hf_config.num_hidden_layers
-        nl_override = os.getenv("PREFILL_NUM_LAYERS")
+        nl_override = _tt_public_getenv("PREFILL_NUM_LAYERS")
         if nl_override:
             num_layers = int(nl_override)
             hf_config.num_hidden_layers = num_layers
             print(f"[prefill-pcc] PREFILL_NUM_LAYERS={num_layers}: first {num_layers} layers only", flush=True)
 
-        expert_dtype = ttnn.bfloat8_b if os.getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
+        expert_dtype = ttnn.bfloat8_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
         # KV-cache storage dtype (default bf8). KV_CACHE_DTYPE=bf16 -> bump the cache to bf16 to test
         # whether bf8 block-float storage (shared-exponent tiles, hurt by the growing MoE outliers) is
         # what drives the V-at-depth PCC decline. ~2x KV DRAM. Write-only in one-shot (SDPA uses live
         # bf16), so this changes only the STORED K/V precision, not the compute.
-        kv_cache_dtype = ttnn.bfloat16 if os.getenv("KV_CACHE_DTYPE", "bf8") == "bf16" else ttnn.bfloat8_b
+        kv_cache_dtype = ttnn.bfloat16 if _tt_public_getenv("KV_CACHE_DTYPE", "bf8") == "bf16" else ttnn.bfloat8_b
         print(f"[prefill-pcc] expert_dtype={expert_dtype} kv_cache_dtype={kv_cache_dtype}", flush=True)
         cache_path = model_args.weight_cache_path(ttnn.bfloat8_b)
 
-        if os.getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
+        if _tt_public_getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
             print("[prefill-pcc] GPT_OSS_WEIGHTS_FROM_CACHE=1 -> empty state_dict (load tilized cache)", flush=True)
             state_dict = {}
         else:
@@ -198,7 +199,7 @@ def main():
         print(f"[prefill-pcc] min KV PCC across {num_layers} layers = {min_pcc:.5f}", flush=True)
         # Gate on a PCC floor when GPT_OSS_KV_PCC_MIN is set (CI / regression); unset during bring-up
         # so the harness just reports the number. A failing gate exits non-zero.
-        _pcc_min = os.environ.get("GPT_OSS_KV_PCC_MIN")
+        _pcc_min = _tt_public_getenv("GPT_OSS_KV_PCC_MIN")
         if _pcc_min is not None and min_pcc < float(_pcc_min):
             print(f"[prefill-pcc] FAIL: min KV PCC {min_pcc:.5f} < GPT_OSS_KV_PCC_MIN={_pcc_min}", flush=True)
             return 1

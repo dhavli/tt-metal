@@ -37,6 +37,7 @@ overrides the galaxy fabric link count (default 4).
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os as _os
 import time
@@ -67,7 +68,7 @@ FLUX = "flux"
 NORM_EPS = 1e-6
 # Fabric links used by the op (= forwarder cores on the AG path). Wormhole galaxy = 4;
 # Blackhole galaxy = 2 (torus, 2 links) — set WAN_GALAXY_LINKS=2 when running on BH.
-GALAXY_LINKS = int(_os.getenv("WAN_GALAXY_LINKS", "4"))
+GALAXY_LINKS = int(_tt_public_getenv("WAN_GALAXY_LINKS", "4"))
 _PINGPONG = 2  # (pob, AG-sem) sets alternated across traced fused iters (skew absorber)
 
 # Wan2.2 14B: full feature dim 5120, 40 heads, head_dim 128, broadcast RoPE.
@@ -193,7 +194,7 @@ def _make_cfgs(model: str, tp: int) -> list[Cfg]:
 
 
 def _select(cfgs: list[Cfg], env: str) -> list[Cfg]:
-    only = _os.getenv(env, "")
+    only = _tt_public_getenv(env, "")
     if not only:
         return cfgs
     wanted = {s.strip() for s in only.split(",") if s.strip()}
@@ -562,7 +563,7 @@ def test_corr_det(mesh_device, model, tp, topology, op_override, tp_axis, full_m
     CORR_FRESH_POB=1 allocates a fresh stats buffer per run (surfaces uninitialized-DRAM
     reads); CORR_LOCALIZE=1 prints divergent tokens."""
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
-    fresh_pob = _os.getenv("CORR_FRESH_POB") == "1"
+    fresh_pob = _tt_public_getenv("CORR_FRESH_POB") == "1"
     links = _fused_links(op_override)
     flagged = []
 
@@ -601,7 +602,7 @@ def test_corr_det(mesh_device, model, tp, topology, op_override, tp_axis, full_m
             out0 = _fused(0)
 
             ndiff, maxdelta, worst_oi = 0, 0.0, None
-            _det_reps = int(_os.getenv("CORR_DET_REPEATS", "9"))  # extra fused runs after out0
+            _det_reps = int(_tt_public_getenv("CORR_DET_REPEATS", "9"))  # extra fused runs after out0
             for _j in range(_det_reps):  # same input -> must be bit-exact
                 oi = _fused(_j + 1)
                 d = (oi - out0).abs().max().item()
@@ -612,7 +613,7 @@ def test_corr_det(mesh_device, model, tp, topology, op_override, tp_axis, full_m
                 del oi
             det = ndiff == 0
 
-            if ndiff and _os.getenv("CORR_LOCALIZE") == "1":
+            if ndiff and _tt_public_getenv("CORR_LOCALIZE") == "1":
                 rd = (worst_oi - out0).abs().amax(dim=-1)  # [N] per-token max-abs-diff
                 bad = (rd > 1e-3).nonzero().flatten().tolist()
                 span = f"[{min(bad)},{max(bad)}]" if bad else "[]"
@@ -770,9 +771,9 @@ def test_layernorm_module_corr(mesh_device, model, tp, topology, tp_axis, full_m
     # LNMOD_ROWS lets us probe multi-AG-round behavior (block uses N~24800 -> ~775
     # tile-rows -> many rounds; N=256 is a single round). LNMOD_MEAN0=1 uses a mean-0
     # input (real block activations) instead of the mean-4 default.
-    rows = int(_os.getenv("LNMOD_ROWS", "256"))
+    rows = int(_tt_public_getenv("LNMOD_ROWS", "256"))
     torch.manual_seed(0)
-    if _os.getenv("LNMOD_MEAN0") == "1":
+    if _tt_public_getenv("LNMOD_MEAN0") == "1":
         x_t = torch.randn(1, 1, rows, dim, dtype=torch.bfloat16).float()
     else:
         x_t = (torch.randn(1, 1, rows, dim, dtype=torch.bfloat16) * 2 + 4).float()
@@ -808,7 +809,7 @@ def test_layernorm_module_corr(mesh_device, model, tp, topology, tp_axis, full_m
     # LNMOD_LAUNCHES: # of forward calls (default 3 for the determinism check).
     # Set to 1 to isolate single-launch CORRECTNESS at large N from the multi-launch
     # warm-AG hang (the block calls each norm once; the 3-launch path can deadlock).
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
 
     def _run():
         # n_launch forwards -> verify determinism across launches; return launch-0 output.
@@ -869,7 +870,7 @@ def test_layernorm_noaffine_wide_tp1_corr(mesh_device, tp, topology, tp_axis, fu
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -892,7 +893,7 @@ def test_layernorm_nondiv_corr(mesh_device, tp, topology, tp_axis, full_mesh):
     LNBATCH_B>1 exercises the (WIP) dim-1 batch path."""
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
     dim = 1920  # 1920/4 = 480 -> 15 tile-cols (15 % 4 != 0), and 1920 % (32*4) == 0 (tile-aligned)
-    batch = int(_os.getenv("LNBATCH_B", "1"))
+    batch = int(_tt_public_getenv("LNBATCH_B", "1"))
     rows = 256
     torch.manual_seed(0)
     x_t = (torch.randn(1, batch, rows, dim, dtype=torch.bfloat16) * 2 + 4).float()
@@ -918,7 +919,7 @@ def test_layernorm_nondiv_corr(mesh_device, tp, topology, tp_axis, full_mesh):
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x, dynamic_weight=dyn_w, dynamic_bias=dyn_b) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis, batched=(batch > 1)) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -942,7 +943,7 @@ def test_layernorm_batch_fold_corr(mesh_device, tp, topology, tp_axis, full_mesh
     the per-batch affine path (tasks: per-row / per-batch weight)."""
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
     dim = 1024  # 1024/4 = 256 -> 8 tile-cols (8 % 4 == 0): divisible, resident POST. Pure fold test.
-    batch = int(_os.getenv("LNFOLD_B", "2"))
+    batch = int(_tt_public_getenv("LNFOLD_B", "2"))
     rows = 128
     torch.manual_seed(0)
     x_t = (torch.randn(1, batch, rows, dim, dtype=torch.bfloat16) * 2 + 4).float()
@@ -963,7 +964,7 @@ def test_layernorm_batch_fold_corr(mesh_device, tp, topology, tp_axis, full_mesh
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis, batched=True) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -986,7 +987,7 @@ def test_layernorm_adaln_batch_corr(mesh_device, tp, topology, tp_axis, full_mes
     divisible width so this isolates the per-batch path from the Issue-1 non-div tail handling."""
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
     dim = 1024  # 1024/4 = 256 -> 8 tile-cols (divisible): resident POST. Isolates per-batch indexing.
-    batch = int(_os.getenv("LNADALN_B", "2"))
+    batch = int(_tt_public_getenv("LNADALN_B", "2"))
     rows = 128
     torch.manual_seed(0)
     x_t = (torch.randn(1, batch, rows, dim, dtype=torch.bfloat16) * 2 + 4).float()
@@ -1014,7 +1015,7 @@ def test_layernorm_adaln_batch_corr(mesh_device, tp, topology, tp_axis, full_mes
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x, dynamic_weight=dyn_w, dynamic_bias=dyn_b) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis, batched=(batch > 1)) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -1066,7 +1067,7 @@ def test_layernorm_per_token_corr(mesh_device, tp, topology, tp_axis, full_mesh)
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x, dynamic_weight=dyn_w, dynamic_bias=dyn_b) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -1111,7 +1112,7 @@ def test_layernorm_per_token_wide_corr(mesh_device, tp, topology, tp_axis, full_
         mesh_device=submesh,
         ccl_manager=ccl,
     )
-    n_launch = int(_os.getenv("LNMOD_LAUNCHES", "3"))
+    n_launch = int(_tt_public_getenv("LNMOD_LAUNCHES", "3"))
     outs = [mod.forward(x, dynamic_weight=dyn_w, dynamic_bias=dyn_b) for _ in range(n_launch)]
     gathered = [_gather(o, tp_axis) for o in outs]
     det = all(torch.equal(gathered[0], g) for g in gathered[1:])
@@ -1380,7 +1381,7 @@ def test_traced_corr(mesh_device, model, tp, topology, op_override, tp_axis, ful
     replay. Eager correctness is covered by test_corr_det; this is the trace guard."""
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
     links = _fused_links(op_override)
-    REPLAYS = int(_os.getenv("TRACED_CORR_REPLAYS", "20"))
+    REPLAYS = int(_tt_public_getenv("TRACED_CORR_REPLAYS", "20"))
     flagged = []
 
     for cfg in _select(_make_cfgs(model, tp), "CORR_ONLY"):
@@ -1760,7 +1761,7 @@ def test_sweep(mesh_device, tp, topology, tp_axis, full_mesh, is_ci_env):
     submesh = _resolve_submesh(mesh_device, tp, tp_axis, full_mesh)
     links = GALAXY_LINKS
     points = _sweep_points(tp)
-    only = _os.getenv("SWEEP_ONLY", "")  # substring filter on the sweep id, for debugging
+    only = _tt_public_getenv("SWEEP_ONLY", "")  # substring filter on the sweep id, for debugging
     if only:
         points = [p for p in points if only in _sweep_id(p)]
     logger.info(f"SWEEP [tp{tp}_{topology.name}] running {len(points)} points")

@@ -222,10 +222,49 @@ FORCE_INLINE void forward_half_block_to_fabric_neighbor(
     uint32_t row_offset = 0;
     uint32_t pages_read_in_row = 0;
     size_t l1_read_addr = in0_start_address + (write_left_half ? 0 : (k_left_tiles * page_size));
+#ifdef AGMM_GBS
+    // cfx 0057 (QWEN36_AGMM_GBS): the gather buffer is DRAM height-sharded with full-width shards, so a K-block row
+    // (half_k_block_tiles consecutive tile ids) is one contiguous span on the peer as well: forward it as unicast packets
+    // of up to AGMM_GBS_TILES_PER_PKT tiles from the contiguous source row in L1 (AGMM_GBS_MUSTFAIL drops the last
+    // tile of every row). The packet header is one L1 slot rewritten per packet, so the flush after each packet stays.
+    {
+        uint32_t row_tile_id = tile_id_start;
+#ifdef AGMM_GBS_MUSTFAIL
+        const uint32_t row_tiles = half_k_block_tiles - 1;
+#else
+        const uint32_t row_tiles = half_k_block_tiles;
+#endif
+        while (tiles_read < tiles_to_read && m_tile_start < m_tile_end) {
+            uint32_t sent = 0;
+            while (sent < row_tiles) {
+                const uint32_t n = std::min(row_tiles - sent, (uint32_t)AGMM_GBS_TILES_PER_PKT);
+                if (do_write) {
+                    const uint64_t dst =
+                        tt::tt_fabric::linear::addrgen_detail::get_noc_address(output_addrgen, row_tile_id + sent, 0);
+                    fabric_unicast_noc_unicast_write_with_state<
+                        UnicastWriteUpdateMask::DstAddr | UnicastWriteUpdateMask::PayloadSize>(
+                        mux_connection_handle,
+                        pkt_unicast_hdr,
+                        l1_read_addr + sent * page_size,
+                        NocUnicastCommandHeader{dst},
+                        page_size * n);
+                    noc.async_writes_flushed();
+                }
+                sent += n;
+            }
+            tiles_read += half_k_block_tiles;
+            l1_read_addr += (half_k_block_tiles + other_half_k_block_tiles) * page_size;
+            row_tile_id += output_tensor_Wt;
+            m_tile_start++;
+        }
+    }
+    while (false) {
+#else
     while (tiles_read < tiles_to_read) {
         if (m_tile_start >= m_tile_end) {
             break;
         }
+#endif
         uint32_t tiles_remaining_to_read = tiles_to_read - tiles_read;
         uint32_t tiles_to_put_in_current_packet = std::min(tiles_remaining_to_read, num_tiles_to_write_per_packet);
         bool reached_half_block_end = false;
@@ -433,6 +472,51 @@ void read_in0_block_sync(
 
     const uint32_t cb_base_write_ptr = cb.get_write_ptr();
     uint32_t write_ptr = cb_base_write_ptr;
+#if defined(AGMM_GBS) && defined(READ_FROM_LOCAL_INPUT)
+    // cfx 0057 (QWEN36_AGMM_GBS): the gather buffer is DRAM height-sharded with full-width shards, so a run of
+    // consecutive gathered tiles in one tile row is contiguous: read it with one NoC read instead of one per tile.
+    // Local tiles still come from the local input (in3) one tile at a time.
+    for (uint32_t i = d0_start; i < d0_end; i++) {
+        if (i >= shape.logical_d0) {
+            break;
+        }
+        for (uint32_t span = 0; span < 2; span++) {
+            const uint32_t d1_start = span == 0 ? d1_start_left : d1_start_right;
+            const uint32_t d1_end = span == 0 ? d1_end_left : d1_end_right;
+            const uint32_t d1_tiles = span == 0 ? d1_tiles_left : d1_tiles_right;
+            const uint32_t j_log_end = std::min(d1_end, shape.logical_d1);
+            uint32_t j = d1_start;
+            while (j < j_log_end) {
+                if (local_k_start <= j && j <= local_k_end) {
+                    uint32_t tile_id = i * input_tensor_Wt + (j - local_k_start);
+                    noc.async_read(
+                        in3_accessor, CoreLocalMem<uint8_t>(write_ptr), tile_size_bytes, {.page_id = tile_id}, {});
+                    write_ptr += tile_size_bytes;
+                    j++;
+                } else {
+                    const uint32_t run_end = (j < local_k_start) ? std::min(j_log_end, local_k_start) : j_log_end;
+                    const uint32_t run = run_end - j;
+                    uint32_t tile_id = i * shape.logical_d1 + j;
+                    noc.async_read(
+                        tensor_accessor,
+                        CoreLocalMem<uint8_t>(write_ptr),
+                        tile_size_bytes * run,
+                        {.page_id = tile_id},
+                        {});
+                    write_ptr += tile_size_bytes * run;
+                    j = run_end;
+                }
+            }
+            for (; j < d1_end; j++) {
+                fill_zeros_async(noc, cb, tile_size_bytes, write_ptr - cb_base_write_ptr);
+                write_ptr += tile_size_bytes;
+            }
+            write_ptr += (d1_tiles - (d1_end - d1_start)) * tile_size_bytes;
+        }
+    }
+    noc.async_read_barrier();
+    return;
+#endif
     for (uint32_t i = d0_start; i < d0_end; i++) {
         if (i >= shape.logical_d0) {
             break;
@@ -1003,7 +1087,12 @@ FORCE_INLINE PacketHeaders allocate_and_init_packet_headers(
     hdrs.sem_inc_hdr = PacketHeaderPool::allocate_header();
 
     {
+#ifdef AGMM_GBS
+        // cfx 0057: the sharded TensorAccessor has no `page_size` member (the pin's addrgen get_page_size reads it)
+        uint16_t page_size = in0_reader.get_aligned_page_size();
+#else
         uint16_t page_size = tt::tt_fabric::linear::addrgen_detail::get_page_size(in0_reader);
+#endif
         uint64_t dummy_addrs[4] = {0, 0, 0, 0};
         uint16_t chunk_sizes[3] = {page_size, page_size, page_size};
 

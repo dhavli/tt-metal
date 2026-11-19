@@ -8,6 +8,7 @@ Run all PCC tests with both pretrained_weight_true and pretrained_weight_false o
 Usage:
     python run_all_pcc_tests.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import sys
@@ -161,7 +162,7 @@ def test_siglip(device, use_pretrained: bool) -> float:
 
     if use_pretrained:
         config = create_siglip_config()
-        tt_metal_home = os.environ.get("TT_METAL_HOME")
+        tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
         if not tt_metal_home:
             raise EnvironmentError("TT_METAL_HOME environment variable is not set")
         checkpoint_path = os.path.join(tt_metal_home, "models/experimental/pi0/weights/pi0_base")

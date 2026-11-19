@@ -51,6 +51,7 @@ Run (craq-sim / emulator, slow dispatch + forced JIT):
   TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_FORCE_JIT_COMPILE=1 \
   pytest models/demos/vision/classification/resnet50/quasar/tests/ops/test_conv2d_split_tilize_hypothesis.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -127,7 +128,7 @@ def _run(mesh_device, *, use_split):
         packer_l1_acc=True,
     )
 
-    prev = os.environ.get("TT_METAL_QSR_CONV_SPLIT_TILIZE")
+    prev = _tt_public_getenv("TT_METAL_QSR_CONV_SPLIT_TILIZE")
     if use_split:
         os.environ["TT_METAL_QSR_CONV_SPLIT_TILIZE"] = "1"
     elif prev is not None:

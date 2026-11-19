@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -196,7 +197,7 @@ def run_demo_inference(
             img = img.unsqueeze(0)
             img = pipeline.image_processor.postprocess(img, output_type="pil")[0]
             images.append(img)
-            skip_saving = os.getenv("TT_SDXL_SKIP_CHECK_AND_SAVE", "0") == "1"
+            skip_saving = _tt_public_getenv("TT_SDXL_SKIP_CHECK_AND_SAVE", "0") == "1"
             if is_ci_env or skip_saving:
                 logger.info(f"Image {len(images)}/{len(prompts) // batch_size} generated successfully")
             else:

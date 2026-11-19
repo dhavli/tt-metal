@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from typing import Dict
 
@@ -161,7 +162,7 @@ def parametrize_mesh_with_fabric(mesh_shapes=None):
 
     # CI mode: pick only the largest fitting shape so that one yaml entry can
     # target multiple SKUs and let each runner select the appropriate mesh.
-    if os.getenv("CI") == "true" and len(mesh_shapes) > 1:
+    if _tt_public_getenv("CI") == "true" and len(mesh_shapes) > 1:
         mesh_shapes = [max(mesh_shapes, key=lambda s: s[0] * s[1])]
 
     if not mesh_shapes:

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import re
 import zipfile
@@ -51,7 +52,7 @@ def _segformer_ckpt_key_to_reference(k):
 
 
 def load_torch_model(reference_model, target_prefix, module="semantic_sub", model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         if module == "image_classification":
             torch_model = SegformerForImageClassification.from_pretrained("nvidia/mit-b0")
         elif module == "semantic_sub":
@@ -102,7 +103,7 @@ def load_torch_model(reference_model, target_prefix, module="semantic_sub", mode
 
 
 def download_and_unzip_dataset(model_location_generator, dataset_path, dataset_name):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         if not os.path.exists(f"models/demos/vision/segmentation/segformer/demo/{dataset_name}"):
             os.system("bash models/demos/vision/segmentation/segformer/demo/data_download.sh")
         return f"models/demos/vision/segmentation/segformer/demo/{dataset_name}"

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -141,7 +142,7 @@ def save_intermediate_output(
     if output_dir is None:
         env_var = f"{name.upper()}_OUTPUT_DIR"
         default_dir = f"/tmp/{name}_outputs"
-        output_dir = Path(os.getenv(env_var, default_dir))
+        output_dir = Path(_tt_public_getenv(env_var, default_dir))
     else:
         output_dir = Path(output_dir)
 

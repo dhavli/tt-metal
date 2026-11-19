@@ -304,6 +304,38 @@ void generate_mask(uint32_t k_num_chunks, uint32_t Sk_chunk_t, uint32_t cur_pos)
     cb_mask.push_back(total_read_tiles);
 }
 
+/*
+ * cfx (tt-stack 0034, SDPA_SPEC_FOLD_T): the per-candidate causal mask for ONE k chunk of a fold program.
+ * Row-tile r of the Q block is candidate r / PNHt_cand, with its own bound; for each (row-tile, column-tile) the tile
+ * covers positions [chunk_start_pos + 32*i, +31]: all visible (0), all masked (-inf) or cut inside (fill_tile_partial).
+ * The mask is uniform within a row-tile (every q-head row of one candidate shares its bound). Called once per chunk
+ * that spec_fold_chunk_needs_mask() selects; compute pops each block after adding it, and the factory sizes the mask
+ * CB for two blocks (the most a fold core owns), so the writer never waits on compute for mask space.
+ */
+template <uint32_t cb_mask_in, uint32_t PNHt, uint32_t PNHt_cand>
+void generate_mask_spec_fold(uint32_t Sk_chunk_t, uint32_t chunk_start_pos, const uint32_t* bound) {
+    constexpr uint32_t NEG_INF = 0xFF80FF80;
+    constexpr uint32_t tile_bytes = get_tile_size(cb_mask_in);
+    const uint32_t total_tiles = PNHt * Sk_chunk_t;
+    CircularBuffer cb_mask(cb_mask_in);
+    cb_mask.reserve_back(total_tiles);
+    for (uint32_t r = 0; r < PNHt; ++r) {
+        const uint32_t b = bound[r / PNHt_cand];
+        for (uint32_t i = 0; i < Sk_chunk_t; ++i) {
+            const uint32_t tile_id = r * Sk_chunk_t + i;
+            const uint32_t tile_first_pos = chunk_start_pos + i * 32;
+            if (b >= tile_first_pos + 31) {
+                fill_tile<tile_bytes>(cb_mask_in, tile_id, 0);
+            } else if (b < tile_first_pos) {
+                fill_tile<tile_bytes>(cb_mask_in, tile_id, NEG_INF);
+            } else {
+                fill_tile_partial<tile_bytes>(cb_mask_in, tile_id, b - tile_first_pos, NEG_INF);
+            }
+        }
+    }
+    cb_mask.push_back(total_tiles);
+}
+
 template <uint32_t cb_mask_in, uint32_t PNHt>
 void generate_sliding_window_mask(uint32_t k_num_chunks, uint32_t Sk_chunk_t, uint32_t window_start) {
     Noc noc;
@@ -480,6 +512,69 @@ uint32_t write_partial_tiles_to_memory(
 
     // We've consumed/written out_chunk_tiles tiles worth of data
     out_tile_id += out_chunk_tiles;
+    return barrier_count;
+}
+
+/*
+ * cfx (tt-stack 0034, SDPA_SPEC_FOLD_T): the GQA partial-row output write of a fold program. The CB holds T
+ * candidates x PNHt_cand row-tiles x vDHt tiles (row-tile major); candidate j of batch row cur_batch is output row
+ * u = j*B + cur_batch of the [1, T*B, NQH, vDH] output, i.e. DRAM tile ((u*PNHt_cand + head_tile)*vDHt + hidden).
+ * Per tile, the rows of this kv head's q heads are written exactly as write_partial_tiles_to_memory writes them.
+ */
+template <
+    uint32_t cb_out,
+    uint32_t ELEMENT_SIZE,
+    uint32_t barrier_threshold,
+    uint32_t PNHt_cand,
+    uint32_t T,
+    typename WriterType>
+uint32_t write_partial_tiles_to_memory_spec_fold(
+    uint32_t cur_batch,
+    uint32_t B,
+    const WriterType& out_writer,
+    uint32_t& barrier_count,
+    uint32_t cur_head,
+    uint32_t num_heads_to_write,
+    uint32_t vDHt) {
+    Noc noc;
+    constexpr uint32_t FACE_HW = 16;
+    constexpr uint32_t TILE_HW = 32;
+    constexpr uint32_t FACE_ELEMENT_CNT = FACE_HW * FACE_HW;
+    constexpr uint32_t tile_bytes = get_tile_size(cb_out);
+    constexpr uint32_t FACE_LINE_BYTES = FACE_HW * ELEMENT_SIZE;
+    CircularBuffer cb(cb_out);
+    const uint32_t l1_base_addr = cb.get_read_ptr();
+    for (uint32_t j = 0; j < T; ++j) {
+        const uint32_t out_row = j * B + cur_batch;
+        for (uint32_t hidden_tile = 0; hidden_tile < vDHt; ++hidden_tile) {
+            for (uint32_t head = 0; head < num_heads_to_write; ++head) {
+                const uint32_t starting_row = cur_head * num_heads_to_write + head;
+                const uint32_t tile_row = starting_row % TILE_HW;
+                const uint32_t head_tile = starting_row / TILE_HW;
+                const uint32_t in_tile_offset =
+                    (tile_row < FACE_HW) ? tile_row * FACE_LINE_BYTES : (tile_row + FACE_HW) * FACE_LINE_BYTES;
+                const uint32_t cb_tile = (j * PNHt_cand + head_tile) * vDHt + hidden_tile;
+                const uint32_t l1_read_addr_head = l1_base_addr + cb_tile * tile_bytes + in_tile_offset;
+                const uint32_t dram_tile_id = (out_row * PNHt_cand + head_tile) * vDHt + hidden_tile;
+                noc.async_write(
+                    CoreLocalMem<uint32_t>(l1_read_addr_head),
+                    out_writer,
+                    FACE_LINE_BYTES,
+                    {},
+                    {.page_id = dram_tile_id, .offset_bytes = in_tile_offset});
+                noc.async_write(
+                    CoreLocalMem<uint32_t>(l1_read_addr_head + FACE_ELEMENT_CNT * ELEMENT_SIZE),
+                    out_writer,
+                    FACE_LINE_BYTES,
+                    {},
+                    {.page_id = dram_tile_id, .offset_bytes = in_tile_offset + FACE_ELEMENT_CNT * ELEMENT_SIZE});
+                if (++barrier_count == barrier_threshold) {
+                    noc.async_writes_flushed();
+                    barrier_count = 0;
+                }
+            }
+        }
+    }
     return barrier_count;
 }
 

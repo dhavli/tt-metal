@@ -6,6 +6,7 @@
 A/V sync is checked structurally (duration/ordering); envelope-vs-motion correlation is diagnostic only."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import shutil
@@ -418,7 +419,7 @@ CALIBRATED_FOX_PROMPT = (
 
 def weights_dir(*required_subdirs: str) -> Path:
     """The snapshot dir from MINIMAX_H3_MODEL_PATH; skips when it or a required partition is missing."""
-    root = os.environ.get("MINIMAX_H3_MODEL_PATH", "")
+    root = _tt_public_getenv("MINIMAX_H3_MODEL_PATH", "")
     if not root or not Path(root).is_dir():
         pytest.skip("set MINIMAX_H3_MODEL_PATH to a MiniMax-H3 diffusers snapshot")
     directory = Path(root)

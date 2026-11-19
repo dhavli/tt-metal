@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -15,7 +16,7 @@ VANILLA_UNET_PCC_WH = 0.97700
 
 
 def load_reference_model(model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         weights_path = "models/demos/vision/segmentation/vanilla_unet/unet.pt"
         if not os.path.exists(weights_path):
             os.system("bash models/demos/vision/segmentation/vanilla_unet/weights_download.sh")

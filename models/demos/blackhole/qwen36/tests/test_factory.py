@@ -17,6 +17,7 @@ Centralizes what used to be copy-pasted across the per-test files:
 Heavy imports (ttnn weight loaders, ``Qwen36ModelArgs``) are kept lazy / local so
 pure-CPU tests (``test_weight_mapping``, ``test_substate``) stay fast at collection.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -39,7 +40,7 @@ PREFILL_BUCKETS = [128, 1024, 2048]
 
 def model_path():
     """Resolve the HF model id/dir. Replaces the per-file ``_mp()``/``_model_path()``."""
-    return os.path.expanduser(os.environ.get("HF_MODEL", _DEFAULT_HF_MODEL))
+    return os.path.expanduser(_tt_public_getenv("HF_MODEL", _DEFAULT_HF_MODEL))
 
 
 # --------------------------------------------------------------------------- #
@@ -169,7 +170,7 @@ def _resolve_mesh_shape(max_tp=8):
     # ``dict.get`` default, which Python evaluates eagerly) so an explicit MESH_DEVICE never
     # touches ttnn.get_device_ids() -- that call raises on clusters whose ClusterType lookup
     # fails, which would otherwise break collection even for a fully-specified mesh.
-    shape = {"P150": (1, 1), "P150x4": (1, 4), "P150x8": (1, 8)}.get(os.environ.get("MESH_DEVICE"))
+    shape = {"P150": (1, 1), "P150x4": (1, 4), "P150x8": (1, 8)}.get(_tt_public_getenv("MESH_DEVICE"))
     if shape is not None:
         return shape
     return (1, min(len(ttnn.get_device_ids()), max_tp))

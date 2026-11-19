@@ -9,6 +9,7 @@ canvas to the frozen KV cache, and host-side decode helpers.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -319,7 +320,7 @@ def _pad_prompt_tokens_for_prefill(prompt_tokens: torch.Tensor, *, multiple: int
 
 def fixed_prefill_chunks_enabled() -> bool:
     """Whether every prompt uses the one fixed-size bounded prefill program."""
-    return os.environ.get("DG_PREFILL_FIXED_CHUNKS", "0").strip().lower() in (
+    return _tt_public_getenv("DG_PREFILL_FIXED_CHUNKS", "0").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -355,7 +356,7 @@ def prefill_prompt_tokens(
     prompt_len = prompt_tokens.shape[1]
     cache_tokens = _pad_prompt_tokens_for_prefill(prompt_tokens)
     cache_len = cache_tokens.shape[1]
-    chunk_size = int(os.environ.get("DG_PREFILL_CHUNK_SIZE", "4096"))
+    chunk_size = int(_tt_public_getenv("DG_PREFILL_CHUNK_SIZE", "4096"))
     # A 32K monolithic prefill materializes a ~352 MiB all-reduce temporary
     # that cannot fit beside a resident 32K denoise trace, so the 32K boundary
     # itself must stay in the same bounded-memory regime as larger prefills.
@@ -1021,7 +1022,7 @@ def denoise_and_commit_block(
 
     # Same probe as the prefill one (tt/serving.py): commit is the other hot NON-traced
     # dispatch; the probe splits its wall time into this thread's CPU vs device wait.
-    commit_probe = os.environ.get("DG_PREFILL_CPU_PROBE", "0") == "1"
+    commit_probe = _tt_public_getenv("DG_PREFILL_CPU_PROBE", "0") == "1"
     commit_cpu0 = (time.process_time(), time.thread_time()) if commit_probe else None
     commit_t0 = time.perf_counter()
     commit_fn(

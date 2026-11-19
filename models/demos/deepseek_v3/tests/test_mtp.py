@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -33,16 +34,16 @@ from models.demos.deepseek_v3.utils.test_utils import load_state_dict
 from models.demos.deepseek_v3.utils.weight_config import _try_load_cached_config, get_weight_config
 
 DEFAULT_NUM_STEPS = 128
-GENERATE_REFERENCE = os.getenv("DEEPSEEK_V3_MTP_GENERATE_REFERENCE", "0") == "1"
-TRACE_REGION_SIZE = int(os.getenv("DEEPSEEK_TRACE_REGION_SIZE", "0"))
-TIMEOUT_S = int(os.getenv("DEEPSEEK_V3_MTP_TIMEOUT_S", "1200"))
-MAX_E2E_SECONDS = float(os.getenv("DEEPSEEK_V3_MTP_E2E_MAX_S", "0"))
-MIN_TOKENS_PER_SEC = float(os.getenv("DEEPSEEK_V3_MTP_MIN_TPS", "1.0"))
-MIN_TOKENS_PER_SEC_TRACE = float(os.getenv("DEEPSEEK_V3_MTP_MIN_TPS_TRACE", "0"))
-DEFAULT_PREFILL_LEN = int(os.getenv("DEEPSEEK_V3_MTP_PREFILL_LEN", "16"))
-DEFAULT_VERIFY_STEPS = int(os.getenv("DEEPSEEK_V3_MTP_VERIFY_STEPS", "16"))
-DEFAULT_MTP_TEST_MAX_SEQ_LEN = int(os.getenv("DEEPSEEK_V3_MTP_MAX_SEQ_LEN", "256"))
-SKIP_IN_CI = pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")
+GENERATE_REFERENCE = _tt_public_getenv("DEEPSEEK_V3_MTP_GENERATE_REFERENCE", "0") == "1"
+TRACE_REGION_SIZE = int(_tt_public_getenv("DEEPSEEK_TRACE_REGION_SIZE", "0"))
+TIMEOUT_S = int(_tt_public_getenv("DEEPSEEK_V3_MTP_TIMEOUT_S", "1200"))
+MAX_E2E_SECONDS = float(_tt_public_getenv("DEEPSEEK_V3_MTP_E2E_MAX_S", "0"))
+MIN_TOKENS_PER_SEC = float(_tt_public_getenv("DEEPSEEK_V3_MTP_MIN_TPS", "1.0"))
+MIN_TOKENS_PER_SEC_TRACE = float(_tt_public_getenv("DEEPSEEK_V3_MTP_MIN_TPS_TRACE", "0"))
+DEFAULT_PREFILL_LEN = int(_tt_public_getenv("DEEPSEEK_V3_MTP_PREFILL_LEN", "16"))
+DEFAULT_VERIFY_STEPS = int(_tt_public_getenv("DEEPSEEK_V3_MTP_VERIFY_STEPS", "16"))
+DEFAULT_MTP_TEST_MAX_SEQ_LEN = int(_tt_public_getenv("DEEPSEEK_V3_MTP_MAX_SEQ_LEN", "256"))
+SKIP_IN_CI = pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")
 MTP_REFERENCE_GENERATION_ISSUE = "https://github.com/tenstorrent/tt-metal/issues/45000"
 
 
@@ -51,11 +52,11 @@ def _get_reference_dir() -> Path:
         default_cache = f"/localdev/{os.getlogin()}/deepseek-v3-cache"
     except OSError:
         default_cache = "/proj_sw/user_dev/deepseek-v3-cache"
-    return Path(os.getenv("DEEPSEEK_V3_CACHE", default_cache)) / "test_io_cache"
+    return Path(_tt_public_getenv("DEEPSEEK_V3_CACHE", default_cache)) / "test_io_cache"
 
 
 def _debug_mtp_enabled() -> bool:
-    return os.getenv("DEEPSEEK_DEBUG_MTP", "0") == "1"
+    return _tt_public_getenv("DEEPSEEK_DEBUG_MTP", "0") == "1"
 
 
 def _get_mtp_test_max_seq_len() -> int:
@@ -66,7 +67,7 @@ def _get_mtp_test_max_seq_len() -> int:
     if max_seq_len % ttnn.TILE_SIZE != 0:
         raise ValueError(f"DEEPSEEK_V3_MTP_MAX_SEQ_LEN={max_seq_len} must be divisible by TILE_SIZE={ttnn.TILE_SIZE}")
 
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
     if max_seq_len < num_steps:
         raise ValueError(
             f"DEEPSEEK_V3_MTP_MAX_SEQ_LEN={max_seq_len} is too small for "
@@ -134,8 +135,8 @@ def _run_reference_decode_replay_consistency(
     set_deterministic_env,
     enable_mtp: bool,
 ):
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
-    steps_to_check = min(int(os.getenv("DEEPSEEK_V3_MTP_VERIFY_STEPS", str(DEFAULT_VERIFY_STEPS))), num_steps)
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    steps_to_check = min(int(_tt_public_getenv("DEEPSEEK_V3_MTP_VERIFY_STEPS", str(DEFAULT_VERIFY_STEPS))), num_steps)
     mesh = mesh_device
 
     mtp_label = "on" if enable_mtp else "off"
@@ -1152,9 +1153,9 @@ def test_generate_mtp_reference_io(
     force_recalculate_weight_config,
     set_deterministic_env,
 ):
-    host_rank = int(os.getenv("TT_MESH_HOST_RANK", "0"))
+    host_rank = int(_tt_public_getenv("TT_MESH_HOST_RANK", "0"))
 
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
     if num_steps < 2:
         pytest.skip("Need at least 2 steps to generate MTP reference IO.")
 
@@ -1256,7 +1257,7 @@ def test_mtp_accept_rate_and_perf(
     set_deterministic_env,
 ):
     """Validate MTP-only predictor accept rate and throughput against reference IO."""
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
     mesh = mesh_device
 
     with _prepare_mtp_module_runner(
@@ -1373,7 +1374,7 @@ def test_mtp_prefill_priming(
     set_deterministic_env,
 ):
     """Validate prefill priming for MTP (user0) and post-prefill accept rate."""
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
     mesh = mesh_device
 
     prefill_seq_tile = ttnn.TILE_SIZE
@@ -1504,7 +1505,7 @@ def test_mtp_verify_batching_aliasing(
     set_deterministic_env,
 ):
     """Validate verify-lane batching + page-table aliasing invariance."""
-    num_steps = int(os.getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
+    num_steps = int(_tt_public_getenv("DEEPSEEK_V3_MTP_REF_STEPS", str(DEFAULT_NUM_STEPS)))
     mesh = mesh_device
 
     with _prepare_generator(
@@ -1537,7 +1538,7 @@ def test_mtp_verify_batching_aliasing(
         prompts_per_row = gen.batch_size_per_row // 2
         # Total prompt lanes across mesh rows (can be capped for debugging).
         full_num_prompts = prompts_per_row * mesh.shape[0]
-        max_prompts_env = int(os.getenv("DEEPSEEK_V3_MTP_VERIFY_MAX_PROMPTS", "0"))
+        max_prompts_env = int(_tt_public_getenv("DEEPSEEK_V3_MTP_VERIFY_MAX_PROMPTS", "0"))
         num_prompts = min(full_num_prompts, max_prompts_env) if max_prompts_env > 0 else full_num_prompts
         if max_prompts_env > 0:
             logger.info(
@@ -1641,9 +1642,9 @@ def test_mtp_verify_batching_aliasing(
         # Debug toggles for KV cache snapshots and verify table prints.
         enable_kv_log = False
         enable_verify_table = debug_mtp
-        log_host_rank_env = os.getenv("TT_LOG_HOST_RANK")
+        log_host_rank_env = _tt_public_getenv("TT_LOG_HOST_RANK")
         log_host_rank = int(log_host_rank_env) if log_host_rank_env not in (None, "") else None
-        host_rank = int(os.getenv("TT_MESH_HOST_RANK", "0"))
+        host_rank = int(_tt_public_getenv("TT_MESH_HOST_RANK", "0"))
         if log_host_rank is not None and host_rank != log_host_rank:
             enable_kv_log = False
             enable_verify_table = False

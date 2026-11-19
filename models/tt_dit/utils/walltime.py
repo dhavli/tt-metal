@@ -24,6 +24,7 @@ it cannot be folded into this in-process ledger. Read it from the device log.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import atexit
 import os
@@ -59,7 +60,7 @@ _ledger = _Ledger()
 
 # Read once at import: an instrumentation toggle should hold for a whole process, and record()
 # consults it on every span.
-_ENABLED = os.environ.get("TT_WALLTIME", "1") != "0"
+_ENABLED = _tt_public_getenv("TT_WALLTIME", "1") != "0"
 
 
 def _enabled() -> bool:

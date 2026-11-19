@@ -34,6 +34,7 @@ Usage:
     # 128k batched-prefill ceiling documentation:
     pytest models/demos/gemma4/demo/text_demo.py::test_demo_batch_prefill_4096_ceiling -v
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import math
@@ -205,7 +206,7 @@ def _mesh_shape_from_env():
     unknown → ``(1, N)`` over all visible devices so a LoudBox opens full 1×8
     TP instead of a 4-chip subset. Set ``MESH_DEVICE`` for non-line meshes.
     """
-    env = os.environ.get("MESH_DEVICE")
+    env = _tt_public_getenv("MESH_DEVICE")
     if env in _MESH_DEVICE_SHAPES:
         return _MESH_DEVICE_SHAPES[env]
     if env and "x" in env.lower():
@@ -272,7 +273,7 @@ _BATCH_PREFILL_LENGTHS = [128, 1024, 2048]
 
 def _batch_demo_size():
     """Demo concurrent-user count; defaults to 32, overridable for smaller-batch experiments."""
-    size = int(os.getenv("GEMMA4_BATCH_DEMO_SIZE", str(_DEFAULT_BATCH_DEMO_SIZE)))
+    size = int(_tt_public_getenv("GEMMA4_BATCH_DEMO_SIZE", str(_DEFAULT_BATCH_DEMO_SIZE)))
     if size not in SUPPORTED_PREFILL_BATCH_SIZES:
         supported = ", ".join(str(b) for b in SUPPORTED_PREFILL_BATCH_SIZES)
         raise ValueError(f"GEMMA4_BATCH_DEMO_SIZE={size} must be one of: {supported}")
@@ -411,7 +412,7 @@ def run_batch_generation(
     if batch_size is None:
         batch_size = _batch_demo_size()
 
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     profiler = BenchmarkProfiler()
     profiler.start("run")
 
@@ -599,7 +600,7 @@ def _run_generation_via_generator(
     Required for bounded sliding + auto multi-chunk prefill (e.g. 256k on 31B/12B/26B).
     Page tables are identity (same as v2) — do not randomize.
     """
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     batch_size = len(prompts)
     assert batch_size == 1, "Generator long-context path is batch=1 in text_demo.py"
 
@@ -644,7 +645,7 @@ def _run_generation_via_generator(
 
     from models.demos.gemma4.tt.generator_trace import chunked_prefill_trace_enabled
 
-    prefill_trace_max = int(os.environ.get("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
+    prefill_trace_max = int(_tt_public_getenv("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
     prefill_enable_trace = enable_decode_trace and (max_seq_len < prefill_trace_max or chunked_prefill_trace_enabled())
     if enable_decode_trace and not prefill_enable_trace:
         logger.info(
@@ -654,7 +655,7 @@ def _run_generation_via_generator(
         )
 
     # Default on-device sample (product parity). Opt into host with GEMMA4_HOST_SAMPLE=1.
-    force_host = os.environ.get("GEMMA4_HOST_SAMPLE", "0").lower() in ("1", "true", "yes")
+    force_host = _tt_public_getenv("GEMMA4_HOST_SAMPLE", "0").lower() in ("1", "true", "yes")
     can_sample = (not force_host) and model_can_sample_on_device(generator.model[0])
     # Generator long-context path is greedy-only today.
     device_sampling_params = build_device_sampling_params({"temperature": 0}, can_sample=can_sample)
@@ -783,13 +784,13 @@ def run_generation(
     """
     from transformers import AutoTokenizer
 
-    max_new_tokens = int(os.environ.get("GEMMA4_MAX_NEW_TOKENS", max_new_tokens))
-    max_seq_len = int(os.environ.get("GEMMA4_MAX_SEQ_LEN", max_seq_len))
-    _layers_env = os.environ.get("GEMMA4_NUM_LAYERS")
+    max_new_tokens = int(_tt_public_getenv("GEMMA4_MAX_NEW_TOKENS", max_new_tokens))
+    max_seq_len = int(_tt_public_getenv("GEMMA4_MAX_SEQ_LEN", max_seq_len))
+    _layers_env = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     if _layers_env:
         num_layers = int(_layers_env)
 
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     batch_size = 1  # Gemma4 demo is single-user
 
     if page_params is None:
@@ -1353,7 +1354,7 @@ def run_generation(
 
 @pytest.fixture
 def model_path():
-    return os.getenv("HF_MODEL") or os.getenv(
+    return _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
 
@@ -1426,15 +1427,15 @@ def test_demo(mesh_device, model_path, prefill_len, request):
     if prefill_len > max_prefill:
         pytest.skip(f"prefill_len={prefill_len} > --max-prefill={max_prefill}")
 
-    if os.environ.get("CI") == "true" and prefill_len != 128:
+    if _tt_public_getenv("CI") == "true" and prefill_len != 128:
         pytest.skip(f"CI: only prefill_128 runs in CI; skipping prefill_{prefill_len}")
 
     prompt = load_demo_prompt(prefill_len, instruct=True)
 
     # KV cache must hold the prefill plus the 200 decode tokens. Keep a small
     # floor so short-bucket runs still allocate a usable cache.
-    max_new_tokens = int(os.environ.get("GEMMA4_MAX_NEW_TOKENS", 200))
-    max_seq_len = int(os.environ.get("GEMMA4_MAX_SEQ_LEN", max(prefill_len + max_new_tokens, 4096)))
+    max_new_tokens = int(_tt_public_getenv("GEMMA4_MAX_NEW_TOKENS", 200))
+    max_seq_len = int(_tt_public_getenv("GEMMA4_MAX_SEQ_LEN", max(prefill_len + max_new_tokens, 4096)))
     page_block_size = 64
     page_params = {
         "page_block_size": page_block_size,
@@ -1490,11 +1491,11 @@ def test_demo_long_context(
     # PREFILL_BUCKETS / short demo buckets. Long-context rows are explicitly
     # selected via ``-k long-context-*`` (same as text_demo_v2).
 
-    if os.environ.get("CI") == "true":
+    if _tt_public_getenv("CI") == "true":
         pytest.skip("CI: long-context rows are local/sweep only")
 
-    max_new_tokens = int(os.environ.get("GEMMA4_MAX_NEW_TOKENS", 200))
-    max_seq_len = int(os.environ.get("GEMMA4_MAX_SEQ_LEN", max_seq_len))
+    max_new_tokens = int(_tt_public_getenv("GEMMA4_MAX_NEW_TOKENS", 200))
+    max_seq_len = int(_tt_public_getenv("GEMMA4_MAX_SEQ_LEN", max_seq_len))
     prompt = load_demo_prompt(max_seq_len, instruct=True)
     page_params = {
         "page_block_size": page_block_size,
@@ -1538,7 +1539,7 @@ def test_demo_batch_prefill(mesh_device, model_path, prefill_len, request):
     if prefill_len > max_prefill:
         pytest.skip(f"prefill_len={prefill_len} > --max-prefill={max_prefill}")
 
-    if os.environ.get("CI") == "true" and prefill_len != 128:
+    if _tt_public_getenv("CI") == "true" and prefill_len != 128:
         pytest.skip(f"CI: only prefill_128 runs in CI; skipping prefill_{prefill_len}")
 
     batch_size = _batch_demo_size()
@@ -1592,7 +1593,7 @@ def test_demo_batch_32(mesh_device, model_path, prefill_len, request):
     if prefill_len > max_prefill:
         pytest.skip(f"prefill_len={prefill_len} > --max-prefill={max_prefill}")
 
-    if os.environ.get("CI") == "true" and prefill_len != 128:
+    if _tt_public_getenv("CI") == "true" and prefill_len != 128:
         pytest.skip(f"CI: only prefill_128 runs in CI; skipping prefill_{prefill_len}")
 
     batch_size = _batch_demo_size()

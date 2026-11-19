@@ -12,6 +12,7 @@ Decode program / activation grids follow tt_transformers + mlp_1d
 (``find_grid_k_n``, ``per_core_N = ceil(n/(tile*cores))``). Prefill 2D progcfg
 helpers are adapted from the Qwen3.6 Blackhole TP path (tp_common.py).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -25,7 +26,7 @@ TILE_SIZE = 32
 # Override with GEMMA4_DRAM_CORES only when also rebuilding .ws weight caches —
 # a mismatched bank count reuses stale WIDTH_SHARDED bins and produces garbage.
 # Matches tt_transformers: WH forces 8; BH uses device dram_grid_size.x (7/8).
-DRAM_CORES = max(1, int(os.environ.get("GEMMA4_DRAM_CORES", "8")))
+DRAM_CORES = max(1, int(_tt_public_getenv("GEMMA4_DRAM_CORES", "8")))
 DRAM_GRID = ttnn.CoreRangeSet({ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(DRAM_CORES - 1, 0))})
 # BH QuietBox / P150 usable L1 for statically allocated CBs.
 _L1_MAX_BYTES = 1_572_864
@@ -33,7 +34,7 @@ _L1_HEADROOM_BYTES = 64_000
 # Optional upper bound on decode in0_block_w (tt_transformers / mlp_1d default
 # to find_largest_divisor(..., 8)). Prefer L1-aware shrinking below over a hard
 # empirical cap — set GEMMA4_DECODE_IN0_BLOCK_W_MAX only for sweeps.
-_DECODE_IN0_BLOCK_W_MAX = max(1, int(os.environ.get("GEMMA4_DECODE_IN0_BLOCK_W_MAX", "8")))
+_DECODE_IN0_BLOCK_W_MAX = max(1, int(_tt_public_getenv("GEMMA4_DECODE_IN0_BLOCK_W_MAX", "8")))
 
 
 def _roundup(a, b):
@@ -112,7 +113,7 @@ def prefill_max_cols_default(mesh_device=None):
     Override with ``GEMMA4_PREFILL_MAX_COLS`` for sweeps (9 stays coherent on
     31B/P150x8; 11 is faster but incorrect). ``mesh_device`` is API parity only.
     """
-    env = os.environ.get("GEMMA4_PREFILL_MAX_COLS")
+    env = _tt_public_getenv("GEMMA4_PREFILL_MAX_COLS")
     if env is not None:
         return max(1, int(env))
     return prefill_grid_default()[0]

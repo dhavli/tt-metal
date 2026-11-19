@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import ast
 import os
 from pathlib import Path
@@ -228,7 +229,7 @@ def test_phi4_stop_guard_preserves_chatml_turn_semantics(expect_error, monkeypat
 
     def shared_guard(outputs, tokenizer, **kwargs):
         shared_calls.append(outputs)
-        if kwargs["is_ci_env"] is None and os.environ.get("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1":
+        if kwargs["is_ci_env"] is None and _tt_public_getenv("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1":
             if any(99 in output for output in outputs):
                 raise AssertionError("model produced special tokens")
 

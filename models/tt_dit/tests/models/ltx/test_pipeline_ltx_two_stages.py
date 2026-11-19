@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import itertools
 import os
 
@@ -23,7 +24,7 @@ from .ltx_mesh_params import LTX_TWO_STAGES_I2V_MESH_PARAMS_DL, LTX_TWO_STAGES_M
 
 def _default_distilled_lora() -> str:
     """Resolve distilled stage-2 LoRA: env var > local file > HF (auto-downloaded here)."""
-    explicit = os.environ.get("DISTILLED_LORA_PATH")
+    explicit = _tt_public_getenv("DISTILLED_LORA_PATH")
     if explicit:
         return explicit
     local = os.path.expanduser("~/.cache/ltx-checkpoints/ltx-2.3-22b-distilled-lora-384-1.1.safetensors")
@@ -39,7 +40,7 @@ def _default_distilled_lora() -> str:
 
 @pytest.mark.parametrize(
     "no_prompt",
-    [{"1": True, "0": False}.get(os.environ.get("NO_PROMPT"), True)],
+    [{"1": True, "0": False}.get(_tt_public_getenv("NO_PROMPT"), True)],
 )
 @pytest.mark.parametrize(
     "mesh_device, sp_axis, tp_axis, num_links, device_params, topology, is_fsdp, dynamic_load",
@@ -66,12 +67,12 @@ def test_pipeline_two_stages(
     mesh_shape = tuple(parent_mesh.shape)
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    num_frames = int(os.environ.get("NUM_FRAMES", "145"))
-    height = int(os.environ.get("HEIGHT", "1088"))
-    width = int(os.environ.get("WIDTH", "1920"))
-    num_inference_steps = int(os.environ.get("NUM_INFERENCE_STEPS", "30"))
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "145"))
+    height = int(_tt_public_getenv("HEIGHT", "1088"))
+    width = int(_tt_public_getenv("WIDTH", "1920"))
+    num_inference_steps = int(_tt_public_getenv("NUM_INFERENCE_STEPS", "30"))
 
-    run_warmup = os.environ.get("RUN_WARMUP", "0") in ("1", "true", "True")
+    run_warmup = _tt_public_getenv("RUN_WARMUP", "0") in ("1", "true", "True")
     pipeline = LTXTwoStagesPipeline.create_pipeline(
         mesh_device=mesh_device,
         checkpoint_name=ckpt,
@@ -89,10 +90,10 @@ def test_pipeline_two_stages(
         width=width,
     )
 
-    prompt = os.environ.get("PROMPT", DEFAULT_LTX_PROMPT)
+    prompt = _tt_public_getenv("PROMPT", DEFAULT_LTX_PROMPT)
 
     def run(*, prompt, number, seed):
-        output_filename = os.environ.get("OUTPUT_PATH", f"ltx_av_two_stages_{width}x{height}_{number}.mp4")
+        output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_av_two_stages_{width}x{height}_{number}.mp4")
         logger.info(f"Running LTX AV Two-Stages: '{prompt[:80]}...'")
         logger.info(f"Config: {height}x{width}, {num_frames} frames, {num_inference_steps} stage-1 steps")
 
@@ -125,7 +126,7 @@ def test_pipeline_two_stages(
         )
 
     if no_prompt:
-        run(prompt=prompt, number=0, seed=int(os.environ.get("SEED", "10")))
+        run(prompt=prompt, number=0, seed=int(_tt_public_getenv("SEED", "10")))
     else:
         for i in itertools.count():
             new_prompt = input("Enter the input prompt, or q to exit: ")
@@ -159,7 +160,7 @@ def test_pipeline_two_stages_i2v_smoke(
     Gated behind LTX_I2V_IMAGE (path to a conditioning image); skips otherwise so it never runs
     in the default CI sweep without an input image / checkpoint present.
     """
-    image_path = os.environ.get("LTX_I2V_IMAGE")
+    image_path = _tt_public_getenv("LTX_I2V_IMAGE")
     if not image_path or not os.path.exists(image_path):
         pytest.skip("set LTX_I2V_IMAGE to a conditioning image path to run the I2V smoke test")
 
@@ -173,11 +174,11 @@ def test_pipeline_two_stages_i2v_smoke(
     mesh_shape = tuple(parent_mesh.shape)
     mesh_device = parent_mesh.create_submesh(ttnn.MeshShape(*mesh_shape))
 
-    num_frames = int(os.environ.get("NUM_FRAMES", "25"))
-    height = int(os.environ.get("HEIGHT", "512"))
-    width = int(os.environ.get("WIDTH", "768"))
-    num_inference_steps = int(os.environ.get("NUM_INFERENCE_STEPS", "8"))
-    strength = float(os.environ.get("LTX_I2V_STRENGTH", "1.0"))
+    num_frames = int(_tt_public_getenv("NUM_FRAMES", "25"))
+    height = int(_tt_public_getenv("HEIGHT", "512"))
+    width = int(_tt_public_getenv("WIDTH", "768"))
+    num_inference_steps = int(_tt_public_getenv("NUM_INFERENCE_STEPS", "8"))
+    strength = float(_tt_public_getenv("LTX_I2V_STRENGTH", "1.0"))
 
     pipeline = LTXTwoStagesPipeline.create_pipeline(
         mesh_device=mesh_device,
@@ -200,8 +201,8 @@ def test_pipeline_two_stages_i2v_smoke(
         logger.info(f"Skipping generation on rank {ttnn.distributed_context_get_rank()}")
         return
 
-    output_filename = os.environ.get("OUTPUT_PATH", f"ltx_i2v_two_stages_{width}x{height}.mp4")
-    prompt = os.environ.get("PROMPT", DEFAULT_LTX_PROMPT)
+    output_filename = _tt_public_getenv("OUTPUT_PATH", f"ltx_i2v_two_stages_{width}x{height}.mp4")
+    prompt = _tt_public_getenv("PROMPT", DEFAULT_LTX_PROMPT)
     pipeline.generate(
         prompt,
         output_path=output_filename,
@@ -210,7 +211,7 @@ def test_pipeline_two_stages_i2v_smoke(
         height=height,
         width=width,
         num_inference_steps=num_inference_steps,
-        seed=int(os.environ.get("SEED", "10")),
+        seed=int(_tt_public_getenv("SEED", "10")),
     )
 
     assert os.path.exists(output_filename), f"no MP4 produced at {output_filename}"

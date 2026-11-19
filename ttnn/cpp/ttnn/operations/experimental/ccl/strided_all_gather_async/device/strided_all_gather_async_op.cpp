@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2024 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -72,7 +73,7 @@ Tensor strided_all_gather_async(
     using OperationType = ttnn::experimental::prim::StridedAllGatherAsync;
 
     TT_FATAL(
-        std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr,
+        tt_stack_public::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr,
         "strided_all_gather_async op is only supported for Fast Dispatch");
 
     uint32_t num_devices = ::ttnn::ccl::get_topological_dimension(input_tensor, cluster_axis);

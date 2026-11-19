@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import time
@@ -179,7 +180,7 @@ def run_falcon_demo_kv(
     logger.info("Tokenizing inputs...")
     profiler.start(f"tokenizing_inputs")
 
-    tokenizer = AutoTokenizer.from_pretrained(model_version, local_files_only=os.getenv("CI") == "true")
+    tokenizer = AutoTokenizer.from_pretrained(model_version, local_files_only=_tt_public_getenv("CI") == "true")
     prefill_ids, num_users, num_input_tokens = preprocess_and_validate_inputs(
         input_prompts, tokenizer, max_seq_len, perf_mode
     )

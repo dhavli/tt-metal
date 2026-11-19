@@ -9,6 +9,7 @@ QWEN_GDN_INV_DOUBLING=1). C++ kernel: blocked forward substitution + inter-chunk
 
 Layout (FLA): q,k [BH,T,K]; beta [BH,T,1]; g [BH,T]; v [BH,T,V]; state [BH,K,V].
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math as _math
 import os as _os
@@ -17,7 +18,7 @@ import torch
 
 import ttnn
 
-_DBG = _os.environ.get("QWEN9B_GDN_DBG")
+_DBG = _tt_public_getenv("QWEN9B_GDN_DBG")
 
 
 def _ck(name, t):
@@ -198,7 +199,7 @@ def chunk_gated_delta_rule_seq_adapter(
 
     # final_state [BH,K,V] -> [B,H,K,V]. Default bf16; QWEN_GDN_FP32_STATE=1 avoids ~128x requant in long prefill.
     new_state = ttnn.reshape(final_state, [B, H, K, V])
-    _state_dtype = ttnn.float32 if _os.environ.get("QWEN_GDN_FP32_STATE", "0") != "0" else ttnn.bfloat16
+    _state_dtype = ttnn.float32 if _tt_public_getenv("QWEN_GDN_FP32_STATE", "0") != "0" else ttnn.bfloat16
     if new_state.dtype != _state_dtype:
         new_state = ttnn.typecast(new_state, _state_dtype, memory_config=_DRAM)
 
@@ -272,7 +273,7 @@ def _solve_lower_triangular_ttnn(L, eye_1cc, mesh_device):
 
     # Block inverse (I+N)^{-1}. DEFAULT=Horner; legacy doubling behind QWEN_GDN_INV_DOUBLING=1.
     # Doubling overflows fp32 when ||N||~19 (N^16 ~1e9); Horner matches FLA forward-substitution.
-    if _os.environ.get("QWEN_GDN_INV_DOUBLING", "0") != "0":
+    if _tt_public_getenv("QWEN_GDN_INV_DOUBLING", "0") != "0":
         # LEGACY: doubling + Newton-Schulz; paired with damped L_mat under same flag.
         P = ttnn.neg(N, memory_config=mc)  # P = -N
         ttnn.deallocate(N)
@@ -566,13 +567,13 @@ def chunk_gated_delta_rule_seq(
     # alpha=0: exact HF/FLA (unit diag, undamped ||N||~19). alpha=1: full 1/(1+beta) damping.
     # Default 0.25: partial damping prevents GDN state saturation at 256k (alpha=0 rides doc narrative).
     # Horner inverse stable at any alpha; QWEN_GDN_INV_DOUBLING=1 forces alpha=1 + doubling (A/B pair).
-    if _os.environ.get("QWEN_GDN_INV_DOUBLING", "0") != "0":
+    if _tt_public_getenv("QWEN_GDN_INV_DOUBLING", "0") != "0":
         # A/B: full diagonal-included L_mat + doubling inverse.
         L_mat = ttnn.add(_eye_1cc, ttnn.multiply(kk, L_mask, memory_config=_cmc), memory_config=_cmc)
         ttnn.deallocate(kk)
     else:
         # L_mat = I + kk*L_mask - (1-alpha)*diag(kk*L_mask)
-        alpha = float(_os.environ.get("QWEN_GDN_DIAG_ALPHA", "0.25"))
+        alpha = float(_tt_public_getenv("QWEN_GDN_DIAG_ALPHA", "0.25"))
         kk_lmask = ttnn.multiply(kk, L_mask, memory_config=_cmc)
         ttnn.deallocate(kk)
         kk_diag = ttnn.multiply(kk_lmask, _eye_1cc, memory_config=_cmc)  # diag(kk*L_mask)

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import struct
@@ -20,7 +21,7 @@ import ttnn
 
 def get_mesh_device():
     """Fixture to provide mesh device configuration."""
-    mesh_device = os.environ.get("MESH_DEVICE", "N150")
+    mesh_device = _tt_public_getenv("MESH_DEVICE", "N150")
     mesh_config = {
         "N150": (1, 1),
         "N300": (2, 1),
@@ -1051,22 +1052,22 @@ def is_wormhole_b0():
 
 
 def is_watcher_enabled():
-    watcher = os.environ.get("TT_METAL_WATCHER")
-    lightweight_asserts = os.environ.get("TT_METAL_LIGHTWEIGHT_KERNEL_ASSERTS")
+    watcher = _tt_public_getenv("TT_METAL_WATCHER")
+    lightweight_asserts = _tt_public_getenv("TT_METAL_LIGHTWEIGHT_KERNEL_ASSERTS")
     return (watcher is not None and watcher != "") or lightweight_asserts == "1"
 
 
 def is_llk_assert_enabled():
-    llk_assert = os.environ.get("TT_METAL_LLK_ASSERTS")
+    llk_assert = _tt_public_getenv("TT_METAL_LLK_ASSERTS")
     return llk_assert == "1"
 
 
 def is_n300():
-    return os.environ.get("MESH_DEVICE", "N150") == "N300"
+    return _tt_public_getenv("MESH_DEVICE", "N150") == "N300"
 
 
 def is_slow_dispatch():
-    return os.environ.get("TT_METAL_SLOW_DISPATCH_MODE") == "1"
+    return _tt_public_getenv("TT_METAL_SLOW_DISPATCH_MODE") == "1"
 
 
 def ti_skip(condition, reason="Invalid test parameters"):

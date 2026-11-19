@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Fixtures for deepseek_v3_b1 unit tests (e.g. real HuggingFace weights)."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -158,7 +159,7 @@ def _add_reference_global_weights(state: dict[str, torch.Tensor], seed: int = 42
 
 def _resolve_hf_model_path() -> Path:
     """Resolve HuggingFace model path from DEEPSEEK_V3_HF_MODEL; skip if unset or invalid."""
-    raw = os.getenv("DEEPSEEK_V3_HF_MODEL")
+    raw = _tt_public_getenv("DEEPSEEK_V3_HF_MODEL")
     if not raw or not raw.strip():
         pytest.skip("DEEPSEEK_V3_HF_MODEL is not set; use random_weights=True or set env for real-weights tests")
     path = Path(raw.strip()).resolve()
@@ -263,7 +264,7 @@ def hf_model_path():
 
     Skips when DEEPSEEK_V3_HF_MODEL is not set or when the index file is missing.
     """
-    raw = os.getenv("DEEPSEEK_V3_HF_MODEL")
+    raw = _tt_public_getenv("DEEPSEEK_V3_HF_MODEL")
     if not raw or not raw.strip():
         pytest.skip("DEEPSEEK_V3_HF_MODEL is not set; skip real-weights tests")
     path = Path(raw.strip()).resolve()

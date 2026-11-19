@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import glob
 import inspect
 import os
@@ -588,7 +589,7 @@ def test_ttnn_whisper(
     # Use load_from_disk() when the Arrow cache exists under HF_HOME/datasets — pure
     # read, no lock file. Falls back to load_dataset() which writes a lock to
     # HF_DATASETS_CACHE (=/tmp in CI) if no Arrow cache is found.
-    _hf_datasets = os.path.join(os.environ.get("HF_HOME", ""), "datasets")
+    _hf_datasets = os.path.join(_tt_public_getenv("HF_HOME", ""), "datasets")
     _arrow_dirs = (
         [
             os.path.dirname(p)

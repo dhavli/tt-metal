@@ -17,6 +17,7 @@ Env: BENCH_N (default 5), BENCH_OUT (default `generated/minimax_h3_audio/bench`)
 For latency *with* PSNR against a CPU reference, and for mesh/sharding/trace configurations, use
 `cpu_vs_device.py` instead; this script is single-device and reports timing only.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 import re
@@ -33,12 +34,12 @@ from models.tt_dit.models.audio_vae.minimax_h3.decoder_minimax_h3_audio import M
 
 # Reaches a filename below, so keep it to one path-safe component.
 LABEL = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(sys.argv[1])) or "bench"
-N = int(os.environ.get("BENCH_N", "5"))
-OUT = os.environ.get("BENCH_OUT") or os.path.join(
-    os.environ.get("TT_METAL_HOME", os.getcwd()), "generated", "minimax_h3_audio", "bench"
+N = int(_tt_public_getenv("BENCH_N", "5"))
+OUT = _tt_public_getenv("BENCH_OUT") or os.path.join(
+    _tt_public_getenv("TT_METAL_HOME", os.getcwd()), "generated", "minimax_h3_audio", "bench"
 )
 # `MINIMAX_H3_MODEL_PATH` matches the test suite; the older var is still accepted.
-_root = os.environ.get("MINIMAX_H3_MODEL_PATH") or os.environ.get("MINIMAX_H3_DIFFUSERS_DIR", "")
+_root = _tt_public_getenv("MINIMAX_H3_MODEL_PATH") or _tt_public_getenv("MINIMAX_H3_DIFFUSERS_DIR", "")
 if not _root:
     raise SystemExit("set MINIMAX_H3_MODEL_PATH to a MiniMax-H3 diffusers snapshot")
 wd = os.path.join(_root, "audio_vae")

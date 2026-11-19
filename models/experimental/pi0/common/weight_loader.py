@@ -14,6 +14,7 @@ Weight Structure:
     - paligemma_with_expert.paligemma.*: VLM backbone (Gemma 2B + SigLIP)
     - paligemma_with_expert.gemma_expert.*: Action expert (Gemma 300M)
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -99,7 +100,7 @@ def load_pi0_state_dict(
             safetensors_path = hf_hub_download(
                 repo_id=str(model_path),
                 filename="model.safetensors",
-                token=os.environ.get("HF_TOKEN"),
+                token=_tt_public_getenv("HF_TOKEN"),
             )
             state_dict = safetensors_load_file(safetensors_path)
         except Exception as e:

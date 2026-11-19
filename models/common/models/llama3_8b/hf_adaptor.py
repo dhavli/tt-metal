@@ -4,6 +4,7 @@
 """Hugging Face adaptor for the TTTv2 Llama-3.1-8B path."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import errno
 import math
@@ -105,7 +106,7 @@ def should_pad_sampling_logits_to_power_of_2(padded_vocab_size: int, sampling_sp
 
 
 def resolve_hf_model_id(hf_model: str | None = None) -> str:
-    hf_model = hf_model or os.getenv("HF_MODEL")
+    hf_model = hf_model or _tt_public_getenv("HF_MODEL")
     if not hf_model:
         raise ValueError("Please set HF_MODEL to a HuggingFace name e.g. meta-llama/Llama-3.1-8B-Instruct")
     return hf_model
@@ -220,7 +221,7 @@ def convert_hf_state_dict_to_meta(state_dict, *, head_dim: int, n_heads: int, n_
 def load_tokenizer(hf_model: str, *, trust_remote_code: bool = False):
     tokenizer = AutoTokenizer.from_pretrained(
         hf_model,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
         trust_remote_code=trust_remote_code,
     )
     if not hasattr(tokenizer, "stop_tokens") or tokenizer.stop_tokens is None:
@@ -355,7 +356,7 @@ def load_converted_state_dict(
         hf_model,
         torch_dtype="auto",
         trust_remote_code=trust_remote_code,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     state_dict = model.state_dict()
     state_dict = _standardize_hf_keys(state_dict)
@@ -374,7 +375,7 @@ def load_converted_state_dict(
 
 
 def _model_cache_path(hf_model: str, mesh_device) -> Path:
-    cache_path = os.getenv("TT_CACHE_PATH")
+    cache_path = _tt_public_getenv("TT_CACHE_PATH")
     device_name = get_device_name(mesh_device)
     if not cache_path:
         return Path("model_cache") / hf_model / device_name
@@ -387,7 +388,7 @@ def _model_cache_path(hf_model: str, mesh_device) -> Path:
         if exc.errno not in (errno.EROFS, errno.EACCES, errno.EPERM):
             raise
 
-    fallback_root = Path(os.getenv("TT_CACHE_FALLBACK_PATH", "/tmp/tttv2_model_cache"))
+    fallback_root = Path(_tt_public_getenv("TT_CACHE_FALLBACK_PATH", "/tmp/tttv2_model_cache"))
     fallback_path = fallback_root / Path(hf_model).name / device_name
     fallback_path.mkdir(parents=True, exist_ok=True)
     logger.warning(
@@ -397,7 +398,7 @@ def _model_cache_path(hf_model: str, mesh_device) -> Path:
 
 
 def _max_prefill_chunk_size(mesh_device) -> int:
-    override = os.getenv("MAX_PREFILL_CHUNK_SIZE")
+    override = _tt_public_getenv("MAX_PREFILL_CHUNK_SIZE")
     if override is not None:
         return int(override) * 1024
     return {"N150": 4, "N300": 64, "N150x4": 4, "T3K": 128}[get_device_name(mesh_device)] * 1024
@@ -449,7 +450,7 @@ def from_pretrained(
 
     hf_config = AutoConfig.from_pretrained(
         hf_model,
-        local_files_only=os.getenv("CI") == "true",
+        local_files_only=_tt_public_getenv("CI") == "true",
     )
     text_config = hf_config.to_dict()
     model_name = Path(hf_model).name

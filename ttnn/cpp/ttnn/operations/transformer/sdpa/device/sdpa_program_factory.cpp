@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -14,10 +15,13 @@
 #include "ttnn/operations/math.hpp"
 #include <tt-metalium/tensor_accessor_args.hpp>
 #include <hostdevcommon/common_values.hpp>
+#include <algorithm>
 #include <bit>
+#include <cstdlib>
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 #include <cmath>
 
 using namespace tt::constants;
@@ -60,9 +64,171 @@ struct CoreChainInfo {
     bool use_mcast = false;
     uint32_t mcast_num_dests = 0;    // num_dests for mcast API (includes self if injector inside rect)
     uint32_t mcast_sender_wait = 0;  // number of actual receivers that signal back (always chain_size - 1)
+    // GQA mcast mode only: K is injected by `is_injector`, V by `gqa_is_v_injector` (a different core).
+    bool gqa_is_v_injector = false;
+    CoreCoord gqa_k_injector_physical = CoreCoord{0, 0};
+    CoreCoord gqa_v_injector_physical = CoreCoord{0, 0};
+    CoreCoord gqa_rect_start = CoreCoord{0, 0};
+    CoreCoord gqa_rect_end = CoreCoord{0, 0};
 };
 
 namespace {
+
+// ---- Experimental GQA K/V multicast schedule (env-gated: TT_SDPA_GQA_MCAST=1) -------------------------------
+// For causal (incl. chunked/paged) SDPA, the NQH/NKH q-heads that share one kv head and process the same q_chunk
+// have identical K/V loops. Place each such group on a tight core rectangle, give every core exactly one
+// (head, q_chunk) unit, and let one injector core read each K/V chunk from DRAM and multicast it into the
+// receivers' K/V CBs with the existing chain_link mcast handshake. Cuts K/V DRAM traffic by NQH/NKH and lets all
+// B*NQH*q_num_chunks units run on distinct cores (the default zigzag pairing uses only half of them).
+struct GqaMcastGroup {
+    uint32_t batch = 0;
+    uint32_t kv_head = 0;
+    uint32_t q_chunk = 0;
+    std::vector<CoreCoord> cores;  // logical cores, row-major inside the rectangle; cores[j] -> head kv_head*G + j
+    uint32_t injector = 0;         // index into cores: reads + multicasts K
+    uint32_t v_injector = 0;       // index into cores (!= injector): reads + multicasts V
+    CoreCoord rect_start_physical{0, 0};
+    CoreCoord rect_end_physical{0, 0};
+};
+
+bool gqa_mcast_env_enabled() {
+    static const bool enabled = [] {
+        const char* e = tt_stack_public::getenv("TT_SDPA_GQA_MCAST");
+        return e != nullptr && std::string(e) == "1";
+    }();
+    return enabled;
+}
+
+// Outstanding-read batch (tiles between read barriers) for the injector's paged K/V reads. The default formula
+// gives 2 for a 110-core grid, which is latency-bound (~7.5 GB/s/core); the injector must feed G cores.
+uint32_t gqa_mcast_barrier_threshold() {
+    static const uint32_t v = [] {
+        const char* e = tt_stack_public::getenv("TT_SDPA_GQA_MCAST_BARRIER");
+        return (e != nullptr) ? static_cast<uint32_t>(std::max(1, std::atoi(e))) : 8u;
+    }();
+    return v;
+}
+
+// K/V CB depth (chunks) in GQA mcast mode. The group runs in lockstep (each step waits for the slowest member),
+// so more than the default 2 slots lets per-core jitter average out. L1 cost: one K + one V chunk per extra slot.
+uint32_t gqa_mcast_kv_slots() {
+    static const uint32_t v = [] {
+        const char* e = tt_stack_public::getenv("TT_SDPA_GQA_MCAST_KV_SLOTS");
+        return (e != nullptr) ? static_cast<uint32_t>(std::max(2, std::atoi(e))) : 2u;
+    }();
+    return v;
+}
+
+// First-fit packing of B*NKH*q_num_chunks groups of `group_size` cores as rectangles on the logical grid.
+// Returns false (=> fall back to the default schedule) if the groups do not fit or a rectangle's physical
+// (NoC) footprint would contain a worker core that is not a member (multicast would corrupt its L1).
+bool pack_gqa_mcast_groups(
+    IDevice* device,
+    CoreCoord grid_size,
+    uint32_t B,
+    uint32_t NKH,
+    uint32_t q_num_chunks,
+    uint32_t group_size,
+    std::vector<GqaMcastGroup>& out,
+    uint32_t qpair = 1) {
+    out.clear();
+    // qpair adjacent q_chunks share one group (and one K/V stream); grp.q_chunk then indexes the PAIR.
+    const uint32_t nq_groups = q_num_chunks / qpair;
+    const uint32_t num_groups = B * NKH * nq_groups;
+    if (group_size < 2 || num_groups * group_size > grid_size.x * grid_size.y) {
+        return false;
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> shapes;  // (w, h), w*h == group_size, most square first
+    for (uint32_t h = 1; h <= group_size; ++h) {
+        if (group_size % h == 0) {
+            shapes.emplace_back(group_size / h, h);
+        }
+    }
+    std::stable_sort(shapes.begin(), shapes.end(), [](const auto& a, const auto& b) {
+        const int da = std::abs(static_cast<int>(a.first) - static_cast<int>(a.second));
+        const int db = std::abs(static_cast<int>(b.first) - static_cast<int>(b.second));
+        return (da != db) ? da < db : a.first > b.first;
+    });
+    std::vector<uint8_t> used(grid_size.x * grid_size.y, 0);
+    auto fits = [&](uint32_t x0, uint32_t y0, uint32_t w, uint32_t h) {
+        if (x0 + w > grid_size.x || y0 + h > grid_size.y) {
+            return false;
+        }
+        for (uint32_t y = y0; y < y0 + h; ++y) {
+            for (uint32_t x = x0; x < x0 + w; ++x) {
+                if (used[y * grid_size.x + x]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    const CoreCoord full_grid = device->logical_grid_size();
+    for (uint32_t g = 0; g < num_groups; ++g) {
+        bool placed = false;
+        for (const auto& [w, h] : shapes) {
+            for (uint32_t y0 = 0; y0 < grid_size.y && !placed; ++y0) {
+                for (uint32_t x0 = 0; x0 < grid_size.x && !placed; ++x0) {
+                    if (!fits(x0, y0, w, h)) {
+                        continue;
+                    }
+                    GqaMcastGroup grp;
+                    grp.batch = g / (NKH * nq_groups);
+                    grp.kv_head = (g / nq_groups) % NKH;
+                    grp.q_chunk = g % nq_groups;
+                    uint32_t min_x = UINT32_MAX, min_y = UINT32_MAX, max_x = 0, max_y = 0;
+                    for (uint32_t y = y0; y < y0 + h; ++y) {
+                        for (uint32_t x = x0; x < x0 + w; ++x) {
+                            used[y * grid_size.x + x] = 1;
+                            grp.cores.push_back(CoreCoord{x, y});
+                            const CoreCoord p = device->worker_core_from_logical_core(CoreCoord{x, y});
+                            min_x = std::min<uint32_t>(min_x, p.x);
+                            max_x = std::max<uint32_t>(max_x, p.x);
+                            min_y = std::min<uint32_t>(min_y, p.y);
+                            max_y = std::max<uint32_t>(max_y, p.y);
+                        }
+                    }
+                    grp.injector = g % group_size;  // rotate the DRAM reader positions across groups
+                    grp.v_injector = (g + group_size / 2) % group_size;
+                    grp.rect_start_physical = CoreCoord{min_x, min_y};
+                    grp.rect_end_physical = CoreCoord{max_x, max_y};
+                    // Tightness: every worker core whose NoC coords fall in the rectangle must be a member.
+                    uint32_t inside = 0;
+                    for (uint32_t y = 0; y < full_grid.y; ++y) {
+                        for (uint32_t x = 0; x < full_grid.x; ++x) {
+                            const CoreCoord p = device->worker_core_from_logical_core(CoreCoord{x, y});
+                            if (p.x >= min_x && p.x <= max_x && p.y >= min_y && p.y <= max_y) {
+                                ++inside;
+                            }
+                        }
+                    }
+                    if (inside != group_size) {
+                        log_debug(
+                            tt::LogOp,
+                            "GQA mcast: rectangle ({},{})-({},{}) is not tight ({} worker cores inside); disabled",
+                            min_x,
+                            min_y,
+                            max_x,
+                            max_y,
+                            inside);
+                        out.clear();
+                        return false;
+                    }
+                    out.push_back(std::move(grp));
+                    placed = true;
+                }
+            }
+            if (placed) {
+                break;
+            }
+        }
+        if (!placed) {
+            out.clear();
+            return false;
+        }
+    }
+    return true;
+}
 
 // Select the mask data format: user-provided mask dtype, or Float16_b for streaming (avoids Bfp4_b precision loss),
 // or Bfp4_b for legacy path.
@@ -471,10 +637,94 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
     const uint32_t max_global_q_chunks_per_core =
         global_q_base_chunks_per_core + (global_q_cores_doing_extra > 0 ? global_q_extra_chunks_per_core : 0);
 
-    const uint32_t q_buffer_factor = (max_global_q_chunks_per_core > 1) ? 2 : 1;
+    // Experimental GQA K/V multicast schedule (see helpers at the top of this file). Only for the plain causal
+    // path (lightweight causal mask) with the whole (B, NQH, q_chunk) space fitting one unit per core.
+    const uint32_t gqa_group_size = (NKH > 0 && NVH == NKH && NQH % NKH == 0) ? NQH / NKH : 0;
+    // TT_SDPA_GQA_MCAST_QPAIR=1: two adjacent q_chunks share one group (12 cores at NQH/NKH=6), halving the K/V DRAM
+    // traffic and the injector count. Valid when k_chunk == 2*q_chunk (then q_chunks 2m and 2m+1 have identical causal
+    // k-loop counts for any 2048-aligned chunk offset, so the lockstep multicast holds) and q_num_chunks is even.
+    const uint32_t gqa_qpair = [&] {
+        static const bool want = [] {
+            const char* e = tt_stack_public::getenv("TT_SDPA_GQA_MCAST_QPAIR");
+            return e != nullptr && std::string(e) == "1";
+        }();
+        return (want && Sk_chunk_t == 2 * Sq_chunk_t && q_num_chunks % 2 == 0) ? 2u : 1u;
+    }();
+    const uint32_t gqa_mcast_group_size = gqa_group_size * gqa_qpair;
+    std::vector<GqaMcastGroup> gqa_groups;
+    const bool gqa_mcast_cfg = program_config.has_value() && program_config->gqa_kv_mcast;
+    // cfx (tt-stack 0026): zigzag-pair mode (SDPAProgramConfig::gqa_kv_mcast_pairs). When the units do not fit one
+    // per core but the DEFAULT schedule gives every busy core exactly one zigzag pair (causal, even q_num_chunks,
+    // total_pairs <= num_cores => base 0, extra 2), keep that exact per-core work -- the same global_q_start/count,
+    // zigzag remap and Q double buffer, so each core runs the default's q_chunks {p, N-1-p} of one head in the same
+    // order -- and only re-place the cores so that the G q-heads of one kv head holding the same pair p sit on one
+    // tight rectangle and share one K/V stream (their causal k-loops are identical for both chunks). Per-unit math
+    // and accumulation order are the default schedule's at the SAME q/k chunk size (e.g. q=k=128 for 12 q-heads x
+    // 2048 tokens: 96 pairs -> 16 groups of 6 on 110 cores, the same rectangles as the q=256 one-unit mode).
+    const bool gqa_pairs_cfg = program_config.has_value() && program_config->gqa_kv_mcast_pairs;
+    const bool gqa_pairs = gqa_pairs_cfg && total_q_chunks > num_cores && global_q_pair_distribute &&
+                           global_q_base_chunks_per_core == 0 && global_q_extra_chunks_per_core == 2 &&
+                           (total_q_chunks / 2) <= num_cores && gqa_qpair == 1;
+    const uint32_t gqa_units_per_core = gqa_pairs ? 2u : 1u;
+    const bool gqa_mcast_eligible = is_causal && !is_windowed && (sliding_window_size.value_or(0) == 0) &&
+                                    !use_provided_mask && !use_attention_sink && !use_mla && gqa_group_size >= 2 &&
+                                    (gqa_pairs || total_q_chunks <= num_cores);
+    const bool gqa_mcast_requested = (gqa_mcast_env_enabled() || gqa_mcast_cfg) && gqa_mcast_eligible;
+    const bool gqa_mcast =
+        gqa_mcast_requested && pack_gqa_mcast_groups(
+                                   device,
+                                   grid_size,
+                                   B,
+                                   NKH,
+                                   q_num_chunks / gqa_units_per_core,
+                                   gqa_mcast_group_size,
+                                   gqa_groups,
+                                   gqa_qpair);
+    // One-unit-per-core mode drops zigzag (identity index); pair mode keeps the default's zigzag remap.
+    const bool gqa_one_unit = gqa_mcast && !gqa_pairs;
+    // cfx: a per-call request (SDPAProgramConfig::gqa_kv_mcast) never falls back silently -- the arm
+    // that asked for it must not be measured on the default schedule.
+    TT_FATAL(
+        !gqa_mcast_cfg || gqa_mcast,
+        "SDPA gqa_kv_mcast requested but not applicable: causal={} windowed={} provided_mask={} sink={} mla={} "
+        "group_size(NQH/NKH)={} units(B*NQH*q_chunks)={} cores={} pairs_requested={} pairs={} packed={} (needs causal, "
+        "NQH%NKH==0, units <= cores -- or with gqa_kv_mcast_pairs even q_chunks and units/2 <= cores -- and tight "
+        "group rectangles; e.g. q_chunk=256, or q_chunk=128 with pairs, for 12 q-heads x 2048 tokens)",
+        is_causal,
+        is_windowed,
+        use_provided_mask,
+        use_attention_sink,
+        use_mla,
+        gqa_group_size,
+        total_q_chunks,
+        num_cores,
+        gqa_pairs_cfg,
+        gqa_pairs,
+        gqa_mcast_requested);
+    if (gqa_mcast_requested) {
+        log_info(
+            tt::LogOp,
+            "SDPA GQA K/V mcast: {} (groups={}, group_size={} [qpair={}], units_per_core={}, units={}, cores={}, "
+            "barrier_threshold={}, kv_slots={})",
+            gqa_mcast ? "ENABLED" : "not applicable (fallback to default schedule)",
+            gqa_groups.size(),
+            gqa_mcast_group_size,
+            gqa_qpair,
+            gqa_units_per_core,
+            total_q_chunks,
+            num_cores,
+            gqa_mcast_barrier_threshold(),
+            gqa_mcast_kv_slots());
+    }
+    // Zigzag pairing balances light/heavy causal q_chunks on one core; with one unit per core it is moot and
+    // would break the identity (nb, nq, q_chunk) -> global index mapping used for the groups.
+    // One unit per core in GQA mcast mode -> a single Q slot suffices.
+    // Pair mode keeps the default's double-buffered Q (max_global_q_chunks_per_core == 2 there).
+    const uint32_t q_buffer_factor = (!gqa_one_unit && max_global_q_chunks_per_core > 1) ? 2 : 1;
 
-    // Host code is responsible for determining matmul configuration
-    const uint32_t dst_size = fp32_dest_acc_en ? 4 : 8;
+    // Host code is responsible for determining matmul configuration. Must match the kernel's DEST_AUTO_LIMIT
+    // (dest_helpers.hpp): half-sync 4 (fp32) / 8, full-sync 8 (fp32) / 16.
+    const uint32_t dst_size = fp32_dest_acc_en ? (dst_full_sync_en ? 8 : 4) : (dst_full_sync_en ? 16 : 8);
     const uint32_t qk_in0_block_w = DHt;
 
     auto [qk_out_subblock_h, qk_out_subblock_w] =
@@ -500,8 +750,27 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
     const bool lw_partial_active = (k_partial_col > 0);
     // These tile capacity counts for CBs need to match the number of tiles expected by the kernel (softmax.cpp)
     uint32_t q_tiles = Sq_chunk_t * DHt * q_buffer_factor;
-    uint32_t k_tiles = Sk_chunk_t * DHt * 2;   // double buffer
-    uint32_t v_tiles = Sk_chunk_t * vDHt * 2;  // double buffer
+    // cfx (tt-stack 0027): per-call reader depth (SDPAProgramConfig::reader_barrier_tiles / kv_cb_slots). 0 keeps the
+    // defaults below, so a config without them builds exactly the program it built before.
+    const uint32_t cfg_reader_barrier = program_config.has_value() ? program_config->reader_barrier_tiles : 0u;
+    const uint32_t cfg_kv_slots = program_config.has_value() ? program_config->kv_cb_slots : 0u;
+    TT_FATAL(
+        cfg_kv_slots == 0 || (cfg_kv_slots >= 2 && cfg_kv_slots <= 4),
+        "SDPAProgramConfig.kv_cb_slots must be 0 (default) or 2..4, got {}",
+        cfg_kv_slots);
+    const uint32_t kv_cb_slots = cfg_kv_slots != 0 ? cfg_kv_slots : (gqa_mcast ? gqa_mcast_kv_slots() : 2u);
+    if (cfg_reader_barrier != 0 || cfg_kv_slots != 0) {
+        log_info(
+            tt::LogOp,
+            "SDPA reader depth: reader_barrier_tiles={} kv_cb_slots={} (gqa_mcast={}, Sk_chunk_t={}, DHt={})",
+            cfg_reader_barrier != 0 ? std::to_string(cfg_reader_barrier) : std::string("default"),
+            kv_cb_slots,
+            gqa_mcast,
+            Sk_chunk_t,
+            DHt);
+    }
+    uint32_t k_tiles = Sk_chunk_t * DHt * kv_cb_slots;   // double buffer (deeper in GQA mcast mode)
+    uint32_t v_tiles = Sk_chunk_t * vDHt * kv_cb_slots;  // double buffer (deeper in GQA mcast mode)
     uint32_t mask_tiles = lightweight_mask
                               ? lightweight_mask_tile_count(is_causal, has_sliding_window, lw_partial_active)
                               : Sq_chunk_t * Sk_chunk_t * 2;  // double buffer
@@ -588,7 +857,7 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
 
     const uint32_t scale_packed = std::bit_cast<uint32_t>(scale.value_or(1.0f));
 
-    const bool use_zigzag_balancing = is_causal;
+    const bool use_zigzag_balancing = is_causal && !gqa_one_unit;
 
     std::vector<uint32_t> reader_compile_time_args = {// interleaved accessor args
                                                       B,
@@ -652,11 +921,15 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
     uint32_t sender_semaphore_id = 0;
     uint32_t receiver_semaphore_id = 0;
     uint32_t valid_semaphore_id = 0;
+    uint32_t receiver_v_semaphore_id = 0;  // GQA mcast: V arrives from a different injector than K
 
-    if (!is_causal) {
+    if (!is_causal || gqa_mcast) {
         sender_semaphore_id = 0;
         receiver_semaphore_id = 1;
         valid_semaphore_id = 2;
+        if (gqa_mcast) {
+            receiver_v_semaphore_id = 3;
+        }
 
         // Update the placeholder compile-time args with actual semaphore IDs
         reader_compile_time_args[sem_args_offset + 0] = sender_semaphore_id;
@@ -756,9 +1029,23 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
     defines_map["DHT_GRANULARITY"] = std::to_string(dht_granularity);
     defines_map["REDUCE_GRANULARITY"] = std::to_string(reduce_granularity);
     defines_map["EXP_APPROX_MODE"] = std::to_string(exp_approx_mode);
+    // Reader-only defines (writer/compute binaries stay identical across modes).
+    std::map<std::string, std::string> reader_defines_map = defines_map;
+    if (gqa_mcast) {
+        // Enable the causal GQA mcast branches, a larger outstanding-read batch for the injectors, and the
+        // dedicated V-arrival semaphore id (K and V come from different injector cores).
+        reader_defines_map["SDPA_GQA_KV_MCAST"] = "1";
+        reader_defines_map["SDPA_BARRIER_THRESHOLD"] = std::to_string(gqa_mcast_barrier_threshold());
+        reader_defines_map["SDPA_GQA_RECV_SEM_V"] = std::to_string(receiver_v_semaphore_id);
+    }
+    if (cfg_reader_barrier != 0) {
+        // cfx (tt-stack 0027): the per-call depth overrides both the kernel formula and the GQA injector default.
+        reader_defines_map["SDPA_BARRIER_THRESHOLD"] = std::to_string(cfg_reader_barrier);
+    }
     log_debug(tt::LogOp, "use_zigzag_balancing: {}", use_zigzag_balancing);
 
     KernelDescriptor::Defines defines(defines_map.begin(), defines_map.end());
+    KernelDescriptor::Defines reader_defines(reader_defines_map.begin(), reader_defines_map.end());
 
     // NOTE: Kernel descriptors are appended to the program descriptor after chain construction so that
     // the mcast_enabled compile-time arg can be determined first.
@@ -901,7 +1188,7 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
 
     // Semaphores for KV chain forwarding (non-causal only).
     // IDs match the order they were assigned above: sender=0, receiver=1, valid=2.
-    if (!is_causal) {
+    if (!is_causal || gqa_mcast) {
         desc.semaphores.push_back(SemaphoreDescriptor{
             .id = sender_semaphore_id,
             .core_type = tt::CoreType::WORKER,
@@ -920,6 +1207,14 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
             .core_ranges = core_grid,
             .initial_value = VALID,
         });
+        if (gqa_mcast) {
+            desc.semaphores.push_back(SemaphoreDescriptor{
+                .id = receiver_v_semaphore_id,
+                .core_type = tt::CoreType::WORKER,
+                .core_ranges = core_grid,
+                .initial_value = INVALID,
+            });
+        }
     }
 
     uint32_t num_phases = 1;
@@ -1410,6 +1705,68 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
             total_multi_core_chains);
     }
 
+    // GQA K/V mcast groups (causal path): one (head, q_chunk) unit per core; the injector of each rectangle reads
+    // K/V and multicasts to the other group members. Identity global-index mapping (zigzag is off in this mode).
+    std::vector<std::pair<uint32_t, uint32_t>> gqa_core_q;  // per core: (global_q_start, global_q_count)
+    if (gqa_mcast) {
+        gqa_core_q.assign(num_cores, std::pair<uint32_t, uint32_t>{total_q_chunks, 0u});
+        for (const auto& grp : gqa_groups) {
+            const CoreCoord injector_physical = device->worker_core_from_logical_core(grp.cores[grp.injector]);
+            const CoreCoord v_injector_physical = device->worker_core_from_logical_core(grp.cores[grp.v_injector]);
+            for (uint32_t j = 0; j < gqa_mcast_group_size; ++j) {
+                const CoreCoord core = grp.cores[j];
+                const uint32_t core_idx = core.y * grid_size.x + core.x;
+                const uint32_t head = grp.kv_head * gqa_group_size + (j % gqa_group_size);
+                // Pair mode: grp.q_chunk is the zigzag pair p; the core takes the default's positional range
+                // [2p, 2p+2) of its head, which the shared zigzag remap turns into q_chunks p and N-1-p.
+                const uint32_t q_chunk = grp.q_chunk * gqa_qpair * gqa_units_per_core + (j / gqa_group_size);
+                const uint32_t global_idx = (grp.batch * NQH + head) * q_num_chunks + q_chunk;
+                gqa_core_q[core_idx] = {global_idx, gqa_units_per_core};
+                auto& chain = core_chain_info[core_idx];
+                chain.participates = true;
+                chain.batch = grp.batch;
+                chain.head = head;
+                chain.q_chunk_start = q_chunk;
+                chain.q_chunk_count = gqa_units_per_core;
+                chain.use_mcast = true;
+                chain.next_core_q_chunks = gqa_units_per_core;
+                chain.gqa_is_v_injector = (j == grp.v_injector);
+                chain.gqa_k_injector_physical = injector_physical;
+                chain.gqa_v_injector_physical = v_injector_physical;
+                chain.gqa_rect_start = grp.rect_start_physical;
+                chain.gqa_rect_end = grp.rect_end_physical;
+                if (j == grp.injector) {
+                    chain.is_injector = true;
+                    chain.prev_physical = grp.rect_start_physical;  // mcast rect start
+                    chain.next_physical = grp.rect_end_physical;    // mcast rect end
+                    chain.mcast_num_dests = gqa_mcast_group_size - 1;
+                    chain.mcast_sender_wait = gqa_mcast_group_size - 1;
+                } else {
+                    chain.is_sink = true;
+                    chain.prev_physical = injector_physical;  // K receivers signal readiness to the K injector
+                    chain.next_physical = CoreCoord{0, 0};
+                    // The V injector also multicasts: same fan-out as the K injector.
+                    chain.mcast_num_dests = gqa_mcast_group_size - 1;
+                    chain.mcast_sender_wait = gqa_mcast_group_size - 1;
+                }
+            }
+            log_debug(
+                tt::LogOp,
+                "GQA mcast group b={} kvh={} q_chunk={}: {} cores, injector logical ({},{}), rect ({},{})-({},{})",
+                grp.batch,
+                grp.kv_head,
+                grp.q_chunk,
+                grp.cores.size(),
+                grp.cores[grp.injector].x,
+                grp.cores[grp.injector].y,
+                grp.rect_start_physical.x,
+                grp.rect_start_physical.y,
+                grp.rect_end_physical.x,
+                grp.rect_end_physical.y);
+        }
+        mcast_chains = gqa_groups.size();
+    }
+
     // Update mcast_enabled compile-time arg now that chain construction is complete
     reader_compile_time_args[sem_args_offset + 3] = (mcast_chains > 0) ? 1 : 0;
 
@@ -1421,7 +1778,7 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
     reader_desc.source_type = KernelDescriptor::SourceType::FILE_PATH;
     reader_desc.core_ranges = core_grid;
     reader_desc.compile_time_args = reader_compile_time_args;
-    reader_desc.defines = defines;
+    reader_desc.defines = reader_defines;
     reader_desc.config = ReaderConfigDescriptor{};
 
     KernelDescriptor writer_desc;
@@ -1461,6 +1818,12 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
         } else if (global_q_start + global_q_count > total_q_chunks) {
             global_q_count = total_q_chunks - global_q_start;
         }
+        if (gqa_mcast) {
+            // Placed by the group packer: one unit per core (identity index, zigzag off), or in pair mode the
+            // default's zigzag pair of the core's (head, p) (zigzag on).
+            global_q_start = gqa_core_q[i].first;
+            global_q_count = gqa_core_q[i].second;
+        }
 
         log_debug(
             tt::LogOp,
@@ -1487,8 +1850,9 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
         reader_args.push_back(chunked_q_chunk_offset);
         reader_args.push_back(read_offset);  // read_offset
 
-        // Add chain metadata for non-causal case
-        if (!is_causal) {
+        // Add chain metadata for the non-causal chains and the causal GQA mcast groups (the reader parses these
+        // under the same `!is_causal || SDPA_GQA_KV_MCAST` condition).
+        if (!is_causal || gqa_mcast) {
             reader_args.push_back(static_cast<uint32_t>(chain.participates));
             reader_args.push_back(static_cast<uint32_t>(chain.is_injector));
             reader_args.push_back(static_cast<uint32_t>(chain.is_sink));
@@ -1503,6 +1867,19 @@ ProgramDescriptor SDPAOperation::SDPAProgramFactory::create_descriptor(
             reader_args.push_back(chain.next_core_q_chunks);
             reader_args.push_back(chain.mcast_num_dests);
             reader_args.push_back(chain.mcast_sender_wait);
+            if (gqa_mcast) {
+                // GQA mcast extras (parsed by the reader under SDPA_GQA_KV_MCAST): V injector role, both injectors'
+                // NoC coords (readiness targets) and the multicast rectangle used by both injectors.
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_is_v_injector));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_k_injector_physical.x));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_k_injector_physical.y));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_v_injector_physical.x));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_v_injector_physical.y));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_rect_start.x));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_rect_start.y));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_rect_end.x));
+                reader_args.push_back(static_cast<uint32_t>(chain.gqa_rect_end.y));
+            }
         }
 
         // Global-Q tail (read by kernel after chain block when non-causal, immediately when causal).

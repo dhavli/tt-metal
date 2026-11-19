@@ -1,0 +1,42 @@
+{
+  "source_model": "Qwen/Qwen3.8-27B",
+  "source_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "sha256": "921830e37cc83f5d5e14a607dd585910bc0af59a62ffa9fc54da2dbf6f72d602",
+  "npy_sha256": "921830e37cc83f5d5e14a607dd585910bc0af59a62ffa9fc54da2dbf6f72d602",
+  "vocab_size": 248320,
+  "kind": "CALIBRATION_TOKEN_FREQUENCY",
+  "model_generated": false,
+  "method": "descending calibration count; ties including unseen ids in ascending token order",
+  "observed_ids": 13078,
+  "calibration_manifest_sha256": "84eabdc0ec505fb54fc57e387266df0c95eb8e7039ea037a1e6a372f719cb9c7",
+  "tokenizer": {
+    "special_ids": [
+      248044,
+      248045,
+      248046,
+      248047,
+      248048,
+      248049,
+      248050,
+      248051,
+      248052,
+      248053,
+      248054,
+      248055,
+      248056,
+      248057,
+      248070,
+      248071,
+      248076
+    ],
+    "eos_ids_generation_config": [
+      248046,
+      248044
+    ]
+  },
+  "eval_coverage": {
+    "32768": 0.9811604817708334,
+    "65536": 0.9945475260416666,
+    "131072": 1.0
+  }
+}

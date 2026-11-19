@@ -10,6 +10,7 @@ core, so Gemma3 exposes a multimodal-specific public entrypoint
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -35,7 +36,7 @@ from models.tt_transformers.tt.generator import (
 
 
 def _deepseek_kvdbg_enabled() -> bool:
-    return os.getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
+    return _tt_public_getenv("DEEPSEEK_KVDBG", "").lower() in ("1", "true", "yes", "y")
 
 
 class GemmaMultimodalGenerator(Generator):

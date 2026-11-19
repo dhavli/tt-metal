@@ -13,6 +13,7 @@ Parametrized over every YAML model config in `models/common/modules/moe/configs/
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import faulthandler
 import os
@@ -73,7 +74,7 @@ MESH_GRAPH_DESC_BH_LB_8x1 = "tests/tt_metal/tt_fabric/custom_mesh_descriptors/bh
 
 def is_mesh_graph_descriptor_set(expected_path):
     """Check if TT_MESH_GRAPH_DESC_PATH is set to the expected path."""
-    return os.environ.get("TT_MESH_GRAPH_DESC_PATH") == expected_path
+    return _tt_public_getenv("TT_MESH_GRAPH_DESC_PATH") == expected_path
 
 
 # ---------------------------------------------------------------------------

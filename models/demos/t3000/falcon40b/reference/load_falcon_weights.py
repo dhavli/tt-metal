@@ -9,6 +9,7 @@ correctly-populated vendored ``hf_modeling_falcon.FalconForCausalLM``. This live
 ``tests/`` so non-test code (the demo) can import it without depending on the test package.
 See issue #47924 for why ``from_pretrained`` cannot be used under transformers 5.x.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import json
@@ -57,7 +58,7 @@ def _native_falcon_state_dict(model_version, num_hidden_layers):
     pre-transformers-5.x (native) behavior the TT model is validated against. Only the tensors
     for ``num_hidden_layers`` layers are read, so the single-layer decoder test stays cheap.
     """
-    ci = os.getenv("CI") == "true"
+    ci = _tt_public_getenv("CI") == "true"
 
     def want(key):
         m = re.match(r"transformer\.h\.(\d+)\.", key)
@@ -135,7 +136,7 @@ def load_falcon_reference_model(model_version, num_hidden_layers=None, dtype=tor
     embedding/lm_head tensors, so rebuilding it for every parametrization made the decoder sweep
     exceed its step timeout. Building once and reusing it keeps the sweep within budget.
     """
-    ci = os.getenv("CI") == "true"
+    ci = _tt_public_getenv("CI") == "true"
     config_kwargs = {"local_files_only": ci}
     if num_hidden_layers is not None:
         config_kwargs["num_hidden_layers"] = num_hidden_layers

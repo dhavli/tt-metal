@@ -13,6 +13,7 @@ verifies, with rollovers across page boundaries, keeps matching sequential).
 
 Requires HF_MODEL (target). The drafter is irrelevant here.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -110,7 +111,7 @@ def _is_l1_cb_overflow(exc):
 
 @parametrize_mesh_with_fabric()
 def test_packed_verify_matches_sequential(mesh_device, reset_seeds):
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
 
@@ -265,7 +266,7 @@ def test_packed_verify_matches_sequential(mesh_device, reset_seeds):
 def test_packed_verify_batch_perf(mesh_device, reset_seeds):
     import time
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if not model_path:
         pytest.skip("set HF_MODEL (target) to run")
     if _is_moe_model(model_path):
@@ -290,16 +291,16 @@ def test_packed_verify_batch_perf(mesh_device, reset_seeds):
     # max_seq_len >= the sliding window (1024) — the sliding-window decode slices
     # `window` keys from the cache, so a shorter cache overruns it. ctx=1024 gives
     # max_seq_len=1088 (>= 1024); do not lower it below the window.
-    _ci = os.getenv("CI") == "true"
-    Bs = [int(b) for b in os.environ.get("GEMMA4_BENCH_B", "1,8" if _ci else "1,8,16,32").split(",") if b.strip()]
-    ctx = int(os.environ.get("GEMMA4_BENCH_CTX", 1024 if _ci else 2048))
-    K = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 3))
+    _ci = _tt_public_getenv("CI") == "true"
+    Bs = [int(b) for b in _tt_public_getenv("GEMMA4_BENCH_B", "1,8" if _ci else "1,8,16,32").split(",") if b.strip()]
+    ctx = int(_tt_public_getenv("GEMMA4_BENCH_CTX", 1024 if _ci else 2048))
+    K = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 3))
     P = K + 1
-    reps = int(os.environ.get("GEMMA4_BENCH_ITERS", 3 if _ci else 20))
+    reps = int(_tt_public_getenv("GEMMA4_BENCH_ITERS", 3 if _ci else 20))
     # A packed-vs-alias argmax flip is a real bug only if the reference (alias)
     # preferred its token by more than this logit margin; smaller gaps are
     # near-ties that the ~1e-1 batched-SDPA noise is expected to flip.
-    CONFIDENT_GAP = float(os.environ.get("GEMMA4_BENCH_CONFIDENT_GAP", 5.0))
+    CONFIDENT_GAP = float(_tt_public_getenv("GEMMA4_BENCH_CONFIDENT_GAP", 5.0))
     Bmax = max(Bs)
 
     block_size = 64
@@ -535,7 +536,7 @@ def test_packed_verify_batch_perf(mesh_device, reset_seeds):
     # B>1: allow ≤1 confident flip — WH@TP=8 has shown a single 1/32 confident
     # flip while BH@TP=4 was clean. Override: GEMMA4_BENCH_MAX_CONFIDENT_FLIPS.
     max_cf_b1 = 0
-    max_cf_bgt1 = int(os.environ.get("GEMMA4_BENCH_MAX_CONFIDENT_FLIPS", "1"))
+    max_cf_bgt1 = int(_tt_public_getenv("GEMMA4_BENCH_MAX_CONFIDENT_FLIPS", "1"))
     for B, p_ms, a_ms, kind, sp, nm, md, cf in rows:
         if cf is None:
             continue

@@ -14,6 +14,7 @@ imported lazily inside the methods so ``import ...adapters.gpt_oss`` stays cheap
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass
@@ -63,7 +64,7 @@ class GptOssPrefillAdapter(PrefillModelAdapter):
     def load_hf_config(self):
         from transformers import AutoConfig
 
-        model_path = os.environ.get("PREFILL_HF_MODEL") or self.hf_model_default
+        model_path = _tt_public_getenv("PREFILL_HF_MODEL") or self.hf_model_default
         logger.info(f"Loading HF config for model={self.name!r} from {model_path}")
         cfg = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
         # Defensive unwrap (gpt-oss is not a VL wrapper, but keep the pattern for variants).
@@ -80,7 +81,7 @@ class GptOssPrefillAdapter(PrefillModelAdapter):
         ``_print_config`` before ``open_mesh_device``; with co-located migration workers
         ``GetNumAvailableDevices`` can throw ``unordered_map::at`` and abort Gate 2.
         """
-        env_cache = os.environ.get("PREFILL_TTNN_CACHE", self.ttnn_cache_default)
+        env_cache = _tt_public_getenv("PREFILL_TTNN_CACHE", self.ttnn_cache_default)
         if not env_cache:
             return None
         arch = "bh" if is_blackhole() else "wh"
@@ -137,14 +138,14 @@ class GptOssPrefillAdapter(PrefillModelAdapter):
             owns_kv_cache=False,  # engine owns the cache (from allocate_kv_cache); passed into every call
             # PREFILL_TOPOLOGY=linear runs pods without torus wraparound (same knob as the harness).
             topology=(
-                ttnn.Topology.Linear if os.getenv("PREFILL_TOPOLOGY", "ring") == "linear" else ttnn.Topology.Ring
+                ttnn.Topology.Linear if _tt_public_getenv("PREFILL_TOPOLOGY", "ring") == "linear" else ttnn.Topology.Ring
             ),
             is_first_rank=params.is_first_rank,
             is_last_rank=params.is_last_rank,
             first_layer_idx=params.first_layer_idx,
         )
 
-        if os.getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
+        if _tt_public_getenv("GPT_OSS_WEIGHTS_FROM_CACHE") == "1":
             state_dict = {}
         else:
             model_args = ModelArgs(mesh_device=mesh_device)

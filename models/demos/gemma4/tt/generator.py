@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def _default_max_batched_prefill_users() -> int:
 
 
 def max_batched_prefill_users() -> int:
-    raw = os.environ.get("GEMMA4_MAX_BATCHED_PREFILL_USERS")
+    raw = _tt_public_getenv("GEMMA4_MAX_BATCHED_PREFILL_USERS")
     if raw is None:
         return _default_max_batched_prefill_users()
     val = int(raw)
@@ -142,7 +143,7 @@ def _load_text_tokenizer(model_path):
         # On an offline box AutoTokenizer can't fetch them and raises a misleading
         # "need sentencepiece/tiktoken" error. Fall back to an explicit source
         # (GEMMA4_TOKENIZER) or the 12B tokenizer, which is byte-identical.
-        fallback = os.environ.get("GEMMA4_TOKENIZER", "google/gemma-4-12B-it")
+        fallback = _tt_public_getenv("GEMMA4_TOKENIZER", "google/gemma-4-12B-it")
         if os.path.normpath(str(fallback)) == os.path.normpath(str(model_path)):
             raise
         logger.warning(
@@ -171,8 +172,8 @@ def _patch_model_args(
     # to "lapped…"; policy auto-bounds at 128k and selects chunk=2048 (QB2 path).
     # Overrides: GEMMA4_GEN_PREFILL_CHUNK=<n>, GEMMA4_DEMO_SINGLE_CHUNK=1 (legacy
     # full-ISL single chunk for A/B / correctness — avoid on long ISL).
-    _chunk_override = int(os.environ.get("GEMMA4_GEN_PREFILL_CHUNK", "0"))
-    _force_single = os.environ.get("GEMMA4_DEMO_SINGLE_CHUNK", "0") != "0"
+    _chunk_override = int(_tt_public_getenv("GEMMA4_GEN_PREFILL_CHUNK", "0"))
+    _force_single = _tt_public_getenv("GEMMA4_DEMO_SINGLE_CHUNK", "0") != "0"
     _needs_chunk_for_dram = (not _force_single) and should_auto_enable_chunked_bounded(
         max_seq_len,
         mesh_device,
@@ -1206,7 +1207,7 @@ class ChunkedPrefillPageTableGuardMixin:
         """
         restores = []
         wrote_feedback = False
-        host_commit = os.environ.get("GEMMA4_HOST_COMMIT_FEEDBACK", "0").strip().lower() in (
+        host_commit = _tt_public_getenv("GEMMA4_HOST_COMMIT_FEEDBACK", "0").strip().lower() in (
             "1",
             "true",
             "yes",
@@ -1264,7 +1265,7 @@ class ChunkedPrefillPageTableGuardMixin:
             # already order sample → next decode on the same queue; a full mesh
             # sync every token was costing ~4–8 tok/s on LB 12B. Re-enable with
             # GEMMA4_SAMPLE_FEEDBACK_SYNC=1 for multi-CQ / async races (#51186).
-            need_sync = wrote_feedback and os.environ.get("GEMMA4_SAMPLE_FEEDBACK_SYNC", "0").strip().lower() in (
+            need_sync = wrote_feedback and _tt_public_getenv("GEMMA4_SAMPLE_FEEDBACK_SYNC", "0").strip().lower() in (
                 "1",
                 "true",
                 "yes",

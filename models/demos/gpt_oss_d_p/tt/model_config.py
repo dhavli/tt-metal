@@ -9,6 +9,7 @@ Loads the HF gpt-oss config (dims live at the top level — gpt-oss is NOT a VL 
 format for the on-device (indexed) RoPE. Dim constants are cross-checked
 against ``deepseek_v3_d_p/reference/gpt_oss_120b_config.py::GptOss120BConfig``.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import gc
 import os
@@ -57,7 +58,7 @@ class ModelArgs:
 
         # Weights / config from HF_MODEL (tt_transformers standard); fall back to the bundled config
         # dir (config-only, e.g. dummy weights or the config path of a cache-only run).
-        hf_model = os.getenv("HF_MODEL") or DEFAULT_HF_MODEL
+        hf_model = _tt_public_getenv("HF_MODEL") or DEFAULT_HF_MODEL
         self.model_path = hf_model
         self.weights_path = hf_model
         logger.info(
@@ -156,7 +157,7 @@ class ModelArgs:
 
     def weight_cache_path(self, dtype):
         """Weight-cache dir for this model + mesh."""
-        cache_dir = os.getenv("TT_CACHE_PATH")
+        cache_dir = _tt_public_getenv("TT_CACHE_PATH")
         cache_dir = Path(cache_dir) if cache_dir else Path(self.model_path)
         logger.info(f"Cache directory: {cache_dir}")
         dtype_str = {ttnn.bfloat16: "bf16", ttnn.bfloat8_b: "bfp8"}[dtype]

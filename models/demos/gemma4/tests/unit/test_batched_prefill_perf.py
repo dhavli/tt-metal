@@ -27,6 +27,7 @@ Enable speedup assertion when a target threshold is defined:
     export GEMMA4_PREFILL_PERF_ASSERT=1
     export GEMMA4_PREFILL_PERF_MIN_SPEEDUP=1.5
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -56,11 +57,11 @@ _TARGET_MESH = "1x4"
 
 
 def _perf_batch_size():
-    return int(os.environ.get("GEMMA4_PREFILL_PERF_BATCH_SIZE", str(_DEFAULT_BATCH_SIZE)))
+    return int(_tt_public_getenv("GEMMA4_PREFILL_PERF_BATCH_SIZE", str(_DEFAULT_BATCH_SIZE)))
 
 
 def _perf_prefill_len():
-    return int(os.environ.get("GEMMA4_PREFILL_PERF_PREFILL_LEN", str(_DEFAULT_PREFILL_LEN)))
+    return int(_tt_public_getenv("GEMMA4_PREFILL_PERF_PREFILL_LEN", str(_DEFAULT_PREFILL_LEN)))
 
 
 def _mesh_shape_str(mesh_device):
@@ -72,11 +73,11 @@ def _sync_device(mesh_device):
 
 
 def _assert_speedup_enabled():
-    return os.environ.get("GEMMA4_PREFILL_PERF_ASSERT", "0") == "1"
+    return _tt_public_getenv("GEMMA4_PREFILL_PERF_ASSERT", "0") == "1"
 
 
 def _min_speedup():
-    return float(os.environ.get("GEMMA4_PREFILL_PERF_MIN_SPEEDUP", str(_DEFAULT_MIN_SPEEDUP)))
+    return float(_tt_public_getenv("GEMMA4_PREFILL_PERF_MIN_SPEEDUP", str(_DEFAULT_MIN_SPEEDUP)))
 
 
 def _aggregate_prefill_tok_s(batch_size, prompt_len, elapsed_s):

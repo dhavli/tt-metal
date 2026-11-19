@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -158,7 +159,7 @@ def get_base_test_cases(users_per_row, prefill_seq_len, include_decode_random_po
     if include_decode_random_pos_ids:
         base_cases += [("decode", 1, users_per_row, None)]
 
-    max_seq_len_env = os.getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
+    max_seq_len_env = _tt_public_getenv("DEEPSEEK_MAX_SEQ_LEN_OVERRIDE")
     if max_seq_len_env is None:
         # If DEEPSEEK_MAX_SEQ_LEN_OVERRIDE is not set, use the default prefill sequence length.
         base_cases += [("prefill", prefill_seq_len, users_per_row, None)]

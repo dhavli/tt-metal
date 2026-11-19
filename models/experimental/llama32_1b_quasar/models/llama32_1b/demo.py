@@ -36,6 +36,7 @@ Notes:
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -57,7 +58,7 @@ from models.experimental.llama32_1b_quasar.tests.demos.cleanup_utils import clea
 # ─────────────────────────────────────────────────────────────────────────────
 
 _MESH_SHAPE = {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-    os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+    _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
 )
 
 
@@ -84,7 +85,7 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def hf_model_id():
-    return os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    return _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
 
 
 _slow = pytest.mark.slow
@@ -125,9 +126,9 @@ def _create_model(
     """
     from models.experimental.llama32_1b_quasar.models.llama32_1b.model import LLAMA32_1B_PERFORMANCE
 
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
-    num_layers = int(os.environ.get("LLAMA32_1B_DEMO_NUM_LAYERS", 0)) or None
-    cache_dir = os.environ.get("TT_CACHE_PATH", None)
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    num_layers = int(_tt_public_getenv("LLAMA32_1B_DEMO_NUM_LAYERS", 0)) or None
+    cache_dir = _tt_public_getenv("TT_CACHE_PATH", None)
 
     precision = LLAMA32_1B_ACCURACY if optimizations == "accuracy" else LLAMA32_1B_PERFORMANCE
 

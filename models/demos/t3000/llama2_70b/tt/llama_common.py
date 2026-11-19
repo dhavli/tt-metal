@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import re
@@ -60,14 +61,14 @@ def string_similarity_score(ground_truths, predictions):
 
 
 def should_skip_model_load():
-    skip_model_load = bool(os.environ.get("LLAMA_SKIP_MODEL_LOAD", 0))
+    skip_model_load = bool(_tt_public_getenv("LLAMA_SKIP_MODEL_LOAD", 0))
     if skip_model_load:
         logger.warning("LLAMA_SKIP_MODEL_LOAD is set. Skipping model load")
     return skip_model_load
 
 
 def setup_llama_env(llama_version="llama3", max_batch_size=32, max_context_len=4096):
-    if os.getenv("CI") == "true":
+    if _tt_public_getenv("CI") == "true":
         if llama_version == "llama3":
             ckpt_dir = "/mnt/MLPerf/tt_dnn-models/llama-3/llama-3-70b-repacked/"
             tokenizer_path = "/mnt/MLPerf/tt_dnn-models/llama-3/tokenizer.model"
@@ -82,19 +83,19 @@ def setup_llama_env(llama_version="llama3", max_batch_size=32, max_context_len=4
             cache_path = Path("/mnt/MLPerf/tt_dnn-models/llama-2/llama-data-cache/weights-cache-2")
     else:
         if llama_version == "llama3":
-            ckpt_dir = os.getenv("LLAMA3_CKPT_DIR", "/proj_sw/llama3-data-repacked/llama-3-70b/")
-            tokenizer_path = os.getenv("LLAMA3_TOKENIZER_PATH", "/proj_sw/llama3-data-repacked/tokenizer.model")
-            cache_path = Path(os.getenv("LLAMA3_CACHE_PATH", "/proj_sw/llama-cache/llama-3-70b"))
+            ckpt_dir = _tt_public_getenv("LLAMA3_CKPT_DIR", "/proj_sw/llama3-data-repacked/llama-3-70b/")
+            tokenizer_path = _tt_public_getenv("LLAMA3_TOKENIZER_PATH", "/proj_sw/llama3-data-repacked/tokenizer.model")
+            cache_path = Path(_tt_public_getenv("LLAMA3_CACHE_PATH", "/proj_sw/llama-cache/llama-3-70b"))
         elif llama_version == "llama3-405b":
-            ckpt_dir = os.getenv("LLAMA3_405B_CKPT_DIR", "/proj_sw/user_dev/llama3-405B-data-repacked/llama-3-405b/")
-            tokenizer_path = os.getenv(
+            ckpt_dir = _tt_public_getenv("LLAMA3_405B_CKPT_DIR", "/proj_sw/user_dev/llama3-405B-data-repacked/llama-3-405b/")
+            tokenizer_path = _tt_public_getenv(
                 "LLAMA3_405B_TOKENIZER_PATH", "/proj_sw/user_dev/llama3-405B-data-repacked/tokenizer.model"
             )
-            cache_path = Path(os.getenv("LLAMA3_405B_CACHE_PATH", "/proj_sw/user_dev/llama3-405B-cache/llama-3-405b"))
+            cache_path = Path(_tt_public_getenv("LLAMA3_405B_CACHE_PATH", "/proj_sw/user_dev/llama3-405B-cache/llama-3-405b"))
         else:
-            ckpt_dir = os.getenv("LLAMA2_CKPT_DIR", "/proj_sw/llama2-data-repacked/llama-2-70b/")
-            tokenizer_path = os.getenv("LLAMA2_TOKENIZER_PATH", "/proj_sw/llama2-data-repacked/tokenizer.model")
-            cache_path = Path(os.getenv("LLAMA2_CACHE_PATH", "/proj_sw/llama-cache/llama-2-70b"))
+            ckpt_dir = _tt_public_getenv("LLAMA2_CKPT_DIR", "/proj_sw/llama2-data-repacked/llama-2-70b/")
+            tokenizer_path = _tt_public_getenv("LLAMA2_TOKENIZER_PATH", "/proj_sw/llama2-data-repacked/tokenizer.model")
+            cache_path = Path(_tt_public_getenv("LLAMA2_CACHE_PATH", "/proj_sw/llama-cache/llama-2-70b"))
 
         assert os.path.exists(
             ckpt_dir

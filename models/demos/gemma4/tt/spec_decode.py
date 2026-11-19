@@ -24,6 +24,7 @@ candidates), so its per-user RoPE + batched SDPA differ from batch=1 decode by
 spec-decode is token-identical to plain greedy up to the first near-tie token
 and produces an equally-valid greedy trajectory thereafter.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -89,11 +90,11 @@ class SpeculativeDecoder:
         self.tt_kv_cache = tt_kv_cache
         self.page_table_torch = page_table_torch
         self.stop_tokens = set(stop_tokens or [])
-        self.draft_len = int(draft_len if draft_len is not None else os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 3))
+        self.draft_len = int(draft_len if draft_len is not None else _tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 3))
         if self.draft_len < 1:
             raise ValueError("draft_len must be >= 1")
         # Recurrent drafter-seed strategy across verify rounds (see generate()).
-        self._seed_mode = os.environ.get("GEMMA4_SPEC_SEED_MODE", "reseed")
+        self._seed_mode = _tt_public_getenv("GEMMA4_SPEC_SEED_MODE", "reseed")
         if page_table_torch is None:
             raise ValueError("Speculative decoding requires paged attention (page_table_torch is None).")
         self._is_mesh = hasattr(mesh_device, "shape")
@@ -105,7 +106,7 @@ class SpeculativeDecoder:
         # dispatch (the untraced loop is host-bound: ~77ms/decode vs a few ms
         # traced). Verify traces are keyed by batch (K+1 for verify, 1 for
         # seed/reseed). Captured lazily on first call at real inputs.
-        self._use_trace = os.environ.get("GEMMA4_SPEC_TRACE", "0") == "1"
+        self._use_trace = _tt_public_getenv("GEMMA4_SPEC_TRACE", "0") == "1"
         self._verify_traces = {}
         # Single batch=1 drafter-step trace, replayed K times. The recurrent
         # hidden is kept ON DEVICE: between trace replays, ttnn.copy(next_hidden
@@ -132,13 +133,13 @@ class SpeculativeDecoder:
         # anchor's exact target hidden/KV. It raises acceptance, but the extra
         # target forward currently costs more than it saves; keep it as an A/B
         # correctness/reference mode via GEMMA4_SPEC_FUSED_RESEED=1.
-        self._fused_reseed = os.environ.get("GEMMA4_SPEC_FUSED_RESEED", "0") == "1"
+        self._fused_reseed = _tt_public_getenv("GEMMA4_SPEC_FUSED_RESEED", "0") == "1"
         # Cheap approximate seed-row selection for fused shift mode. `next` is
         # the original position-aligned row p+m+1. `current` uses row m (usually
         # the last matched target row), and `last_accepted` uses row m-1 when at
         # least one draft was accepted. These are A/B knobs for acceptance vs
         # seed quality without paying a full target reseed.
-        self._fused_shift_seed = os.environ.get("GEMMA4_SPEC_FUSED_SHIFT_SEED", "current")
+        self._fused_shift_seed = _tt_public_getenv("GEMMA4_SPEC_FUSED_SHIFT_SEED", "current")
         # Persistent anchor-hidden buffer for the traced loop (allocated once).
         # The traced loop MUST be allocation-free: any ttnn.clone/slice between
         # execute_trace calls can land in memory a later trace replay uses as
@@ -1522,7 +1523,7 @@ class SpeculativeDecoder:
         anchor_h = [ttnn.clone(ttnn.slice(seed_h, [0, 0, b, 0], [1, 1, b + 1, backbone])) for b in range(B)]
         seed_h.deallocate(True)
 
-        _draft_mode = os.environ.get("GEMMA4_SPEC_DRAFT_MODE", "batched")
+        _draft_mode = _tt_public_getenv("GEMMA4_SPEC_DRAFT_MODE", "batched")
 
         while not all(done):
             if _draft_mode == "loop":

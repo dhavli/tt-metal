@@ -11,6 +11,7 @@ weight-cache location and the CCL handles — is injected through the constructo
 no reference back to ttMLA (and no MLA weights) and runs its own TP/SP collectives. Inert for dense
 v3.1 (no indexer weights → ttMLA never builds it).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -37,7 +38,7 @@ _fused_ring_host_timing = {"calls": 0, "seconds": 0.0}
 def _fused_ring_host_timing_enabled() -> bool:
     # The focused Galaxy prefill pipeline already gives every run a unique summary directory, so enable
     # this diagnostic there without a workflow change. Local/other CI invocations remain opt-in.
-    return os.environ.get("TT_FUSED_RING_HOST_TIMING") == "1" or bool(os.environ.get("PREFILL_SUMMARIES"))
+    return _tt_public_getenv("TT_FUSED_RING_HOST_TIMING") == "1" or bool(_tt_public_getenv("PREFILL_SUMMARIES"))
 
 
 def reset_fused_ring_host_timing() -> None:

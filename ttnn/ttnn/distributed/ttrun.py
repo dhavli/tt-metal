@@ -5,6 +5,7 @@
 """tt-run - MPI process launcher for TT-Metal and TTNN distributed applications."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import importlib.util
@@ -333,7 +334,7 @@ def find_generate_rank_bindings_executable() -> Path:
         FileNotFoundError: If the executable cannot be found
     """
     # Try TT_METAL_HOME first
-    tt_metal_home = os.environ.get("TT_METAL_HOME")
+    tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
     if tt_metal_home:
         candidate = Path(tt_metal_home) / "build" / "tools" / "scaleout" / "generate_rank_bindings"
         if candidate.exists():
@@ -406,7 +407,7 @@ def _load_resolved_mgd_paths_from_mapping_yaml(mapping_yaml_path: Path) -> list[
     if not isinstance(map_node, dict):
         raise ValueError(f"'{SUBCONTEXT_MGD_MAPPING_YAML_KEY}' must be a mapping in {mapping_yaml_path}")
     base_dir = mapping_yaml_path.parent if mapping_yaml_path.parent.parts else Path(".")
-    tt_metal_home = os.environ.get("TT_METAL_HOME")
+    tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
     out: dict[int, Path] = {}
     for k, v in map_node.items():
         try:
@@ -1264,7 +1265,7 @@ def get_search_paths() -> List[Optional[Path]]:
         List of paths to search, with None entries for unset optional paths.
     """
     return [
-        Path(os.environ["TT_METAL_HOME"]).expanduser() if os.environ.get("TT_METAL_HOME") else None,
+        Path(_tt_public_getitem('TT_METAL_HOME')).expanduser() if _tt_public_getenv("TT_METAL_HOME") else None,
         ORIGINAL_CWD,
         Path.cwd(),
     ]
@@ -1310,7 +1311,7 @@ def resolve_path(
     check_fn = Path.is_file if must_be_file else Path.exists
 
     # Track TT_METAL_HOME for fallback warning
-    tt_metal_home = os.environ.get("TT_METAL_HOME")
+    tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
     tt_metal_home_checked = False
 
     for base_path in search_paths:
@@ -1457,9 +1458,9 @@ def parse_tracy_args(raw: str) -> TracyConfig:
     if output_root is None:
         # Match tt-run's environment propagation: prefer TT_METAL_HOME, then ORIGINAL_CWD,
         # and finally fall back to the module-level ORIGINAL_CWD captured at import time.
-        tt_metal_home = os.environ.get("TT_METAL_HOME")
+        tt_metal_home = _tt_public_getenv("TT_METAL_HOME")
         if tt_metal_home is None:
-            original_cwd_env = os.environ.get("ORIGINAL_CWD")
+            original_cwd_env = _tt_public_getenv("ORIGINAL_CWD")
             base_dir = Path(original_cwd_env) if original_cwd_env is not None else ORIGINAL_CWD
         else:
             base_dir = Path(tt_metal_home)
@@ -1676,7 +1677,7 @@ def get_rank_environment(
 
     # Use ORIGINAL_CWD as the default for TT_METAL_HOME when not explicitly set.
     # This assumes the launch directory is on a shared filesystem (NFS) visible to all nodes.
-    default_tt_metal_home = os.environ.get("TT_METAL_HOME", str(ORIGINAL_CWD))
+    default_tt_metal_home = _tt_public_getenv("TT_METAL_HOME", str(ORIGINAL_CWD))
 
     mesh_graph_path = (
         binding.mesh_graph_desc_path if binding.mesh_graph_desc_path is not None else config.mesh_graph_desc_path
@@ -1689,10 +1690,10 @@ def get_rank_environment(
             "TT_MESH_ID": str(binding.mesh_id),
             "TT_MESH_GRAPH_DESC_PATH": str(mesh_graph_path),
             "TT_METAL_HOME": default_tt_metal_home,
-            "TT_METAL_RUNTIME_ROOT": os.environ.get("TT_METAL_RUNTIME_ROOT", default_tt_metal_home),
-            "PYTHONPATH": os.environ.get("PYTHONPATH", str(ORIGINAL_CWD)),
+            "TT_METAL_RUNTIME_ROOT": _tt_public_getenv("TT_METAL_RUNTIME_ROOT", default_tt_metal_home),
+            "PYTHONPATH": _tt_public_getenv("PYTHONPATH", str(ORIGINAL_CWD)),
             # 26640: TODO - Investigate why this needs to be set for multi-host CI environments
-            "LD_LIBRARY_PATH": os.environ.get(
+            "LD_LIBRARY_PATH": _tt_public_getenv(
                 "LD_LIBRARY_PATH", DEFAULT_LD_LIBRARY_PATH.format(home=str(ORIGINAL_CWD))
             ),
             # Pass the original CWD to subprocesses so they can resolve relative paths correctly
@@ -1707,7 +1708,7 @@ def get_rank_environment(
     # PATH enables finding executables (e.g., pytest in venv).
     # VIRTUAL_ENV enables venv-aware execution on remote hosts.
     for var in ("HOME", "USER", "PATH", "VIRTUAL_ENV"):
-        if os.environ.get(var):
+        if _tt_public_getenv(var):
             env[var] = os.environ[var]
 
     # PYTHONHOME: Only pass through if explicitly set. Do NOT default to ORIGINAL_CWD.
@@ -1715,8 +1716,8 @@ def get_rank_environment(
     # in the wrong location, resulting in "ModuleNotFoundError: No module named 'encodings'".
     # When using a virtualenv, PYTHONHOME should not be set - Python determines the
     # correct paths from the executable location.
-    if os.environ.get("PYTHONHOME"):
-        env["PYTHONHOME"] = os.environ["PYTHONHOME"]
+    if _tt_public_getenv("PYTHONHOME"):
+        env["PYTHONHOME"] = _tt_public_getitem('PYTHONHOME')
 
     # Add TT_MESH_HOST_RANK only if mesh_host_rank is set
     if binding.mesh_host_rank is not None:
@@ -2433,14 +2434,14 @@ def legacy_flow(
             logger.info(f"{TT_RUN_PREFIX}   rank-bindings-mapping input: {rank_bindings_mapping}")
         else:
             logger.info(f"{TT_RUN_PREFIX}   rank-binding input: {rank_binding}")
-        logger.info(f"{TT_RUN_PREFIX}   TT_METAL_HOME env: {os.environ.get('TT_METAL_HOME', '<not set>')}")
-        logger.info(f"{TT_RUN_PREFIX}   HOME env: {os.environ.get('HOME', '<not set>')}")
-        logger.info(f"{TT_RUN_PREFIX}   PYTHONPATH env: {os.environ.get('PYTHONPATH', '<not set>')}")
-        logger.info(f"{TT_RUN_PREFIX}   PYTHONHOME env: {os.environ.get('PYTHONHOME', '<not set>')}")
-        logger.info(f"{TT_RUN_PREFIX}   LD_LIBRARY_PATH env: {os.environ.get('LD_LIBRARY_PATH', '<not set>')}")
-        if os.environ.get("SLURM_JOB_ID"):
-            logger.info(f"{TT_RUN_PREFIX}   SLURM_JOB_ID: {os.environ.get('SLURM_JOB_ID')}")
-            logger.info(f"{TT_RUN_PREFIX}   SLURM_SUBMIT_DIR: {os.environ.get('SLURM_SUBMIT_DIR', '<not set>')}")
+        logger.info(f"{TT_RUN_PREFIX}   TT_METAL_HOME env: {_tt_public_getenv('TT_METAL_HOME', '<not set>')}")
+        logger.info(f"{TT_RUN_PREFIX}   HOME env: {_tt_public_getenv('HOME', '<not set>')}")
+        logger.info(f"{TT_RUN_PREFIX}   PYTHONPATH env: {_tt_public_getenv('PYTHONPATH', '<not set>')}")
+        logger.info(f"{TT_RUN_PREFIX}   PYTHONHOME env: {_tt_public_getenv('PYTHONHOME', '<not set>')}")
+        logger.info(f"{TT_RUN_PREFIX}   LD_LIBRARY_PATH env: {_tt_public_getenv('LD_LIBRARY_PATH', '<not set>')}")
+        if _tt_public_getenv("SLURM_JOB_ID"):
+            logger.info(f"{TT_RUN_PREFIX}   SLURM_JOB_ID: {_tt_public_getenv('SLURM_JOB_ID')}")
+            logger.info(f"{TT_RUN_PREFIX}   SLURM_SUBMIT_DIR: {_tt_public_getenv('SLURM_SUBMIT_DIR', '<not set>')}")
 
     try:
         if rank_bindings_mapping:

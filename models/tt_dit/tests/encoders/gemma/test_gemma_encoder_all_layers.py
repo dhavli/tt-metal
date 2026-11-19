@@ -7,6 +7,7 @@
 
     pytest models/tt_dit/tests/encoders/gemma/test_gemma_encoder_all_layers.py -s
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import glob
 import os
@@ -29,7 +30,7 @@ from models.tt_dit.parallel.config import EncoderParallelConfig, ParallelFactor
 from models.tt_dit.parallel.manager import CCLManager
 from models.tt_dit.utils.check import assert_quality
 
-N_LAYERS = int(os.environ.get("N_LAYERS", "6"))
+N_LAYERS = int(_tt_public_getenv("N_LAYERS", "6"))
 SEQ_LEN = 128  # must be >= SDPA q/k chunk size (128) in model_gemma to avoid a device hang
 # Per-state real-token PCC floor at the default N_LAYERS=6 (measured min ~0.9963 at the final
 # norm; shallower states ride ~0.9998). bf16 drifts with depth, so a much larger N_LAYERS may
@@ -54,7 +55,7 @@ PROMPT = (
 
 
 def _gemma_path() -> str:
-    explicit = os.environ.get("GEMMA_PATH")
+    explicit = _tt_public_getenv("GEMMA_PATH")
     if explicit:
         return explicit
     # HF_HUB_CACHE resolves HF_HUB_CACHE / HF_HOME / the default. Hardcoding ~/.cache/huggingface

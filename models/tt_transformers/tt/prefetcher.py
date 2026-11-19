@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 from dataclasses import dataclass
@@ -253,7 +254,7 @@ class Prefetcher(LightweightModule):
         self.global_cb_size: int = 0  # Size of the global circular buffer in bytes storing prefetched matmul weights
         self.max_tensor_block_size: int = 0  # Max tensor block size is the largest block size of a tensor in bytes
         self.receiver_mapping_override: Optional[dict] = None
-        self.model_name = os.getenv("HF_MODEL", "")
+        self.model_name = _tt_public_getenv("HF_MODEL", "")
         assert self.model_name != "", "HF_MODEL is not set. DRAM Prefetcher must be run with a model."
         assert (
             num_receiver_cores is None or num_receiver_cores in self.legal_receiver_cores

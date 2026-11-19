@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -14,10 +15,107 @@
 
 #include <tt-metalium/hal.hpp>
 
+#include <atomic>
+#include <cstdlib>
+#include <cstring>
+#include <tt-logger/tt-logger.hpp>
+
 using namespace tt::constants;
 using namespace tt::tt_metal;
 
 namespace ttnn::experimental::prim {
+
+// cfx 0049: QWEN36_AGMM_SWIGLU_PACK = 1 (pack-thread SwiGLU + injector write deferral) | nodefer (pack-thread SwiGLU
+// only) | defer (write deferral only, every AGMM call) | mustfail (1 + the pack-thread path skips the partial-sum
+// add); unset or 0 = the stock kernels, byte-identical programs. Read on every call (one getenv; the model's warmup
+// self-test runs the stock and the candidate programs in one process), hashed through AllGatherMinimalMatmulAsyncParams.
+// The pack bit applies only to fuse_swiglu calls without a bias; the defer bit to every call.
+static uint32_t agmm_swiglu_pack_mode(bool fuse_swiglu, bool use_bias) {
+    const char* e = tt_stack_public::getenv("QWEN36_AGMM_SWIGLU_PACK");
+    uint32_t mode = 0;
+    if (e == nullptr || e[0] == '\0' || std::strcmp(e, "0") == 0) {
+        return 0;
+    } else if (std::strcmp(e, "1") == 0) {
+        mode = 3;
+    } else if (std::strcmp(e, "nodefer") == 0) {
+        mode = 1;
+    } else if (std::strcmp(e, "defer") == 0) {
+        mode = 2;
+    } else if (std::strcmp(e, "mustfail") == 0) {
+        mode = 7;
+    } else {
+        TT_THROW("QWEN36_AGMM_SWIGLU_PACK={}: expected unset, 0, 1, nodefer, defer or mustfail", e);
+    }
+    if (!fuse_swiglu || use_bias) {
+        mode &= 2u;
+    }
+    static std::atomic<uint32_t> logged{0};
+    if (mode != 0 && (logged.fetch_or(1u << mode) & (1u << mode)) == 0) {
+        log_warning(
+            tt::LogOp,
+            "QWEN36_AGMM_SWIGLU_PACK engaged (mode={}: pack-thread SwiGLU {}, injector write deferral {}{})",
+            mode,
+            (mode & 1u) ? "on" : "off",
+            (mode & 2u) ? "on" : "off",
+            (mode & 4u) ? ", MUSTFAIL: no partial-sum add" : "");
+    }
+    return mode;
+}
+
+// cfx 0057: QWEN36_AGMM_GBS = 1 (sharded gather buffer: one NoC read per K-block row of the gathered half, contiguous
+// multi-tile fabric packets) | mustfail (1 + the last tile of every forwarded row is dropped); unset or 0 = the stock
+// kernels, byte-identical programs. Read on every call (one getenv; the model's warmup self-test runs the stock and
+// the candidate programs in one process), hashed through AllGatherMinimalMatmulAsyncParams::gbs.
+static uint32_t agmm_gbs_mode() {
+    const char* e = tt_stack_public::getenv("QWEN36_AGMM_GBS");
+    uint32_t mode = 0;
+    if (e == nullptr || e[0] == '\0' || std::strcmp(e, "0") == 0) {
+        return 0;
+    } else if (std::strcmp(e, "1") == 0) {
+        mode = 1;
+    } else if (std::strcmp(e, "mustfail") == 0) {
+        mode = 3;
+    } else {
+        TT_THROW("QWEN36_AGMM_GBS={}: expected unset, 0, 1 or mustfail", e);
+    }
+    static std::atomic<uint32_t> logged{0};
+    if ((logged.fetch_or(1u << mode) & (1u << mode)) == 0) {
+        log_warning(
+            tt::LogOp,
+            "QWEN36_AGMM_GBS engaged (mode={}: DRAM height-sharded gather buffer, row reads + contiguous fabric packets{})",
+            mode,
+            (mode & 2u) ? ", MUSTFAIL: last tile of every forwarded row dropped" : "");
+    }
+    return mode;
+}
+
+// cfx 0063: QWEN36_AGMM_FWO = 1 (the in0 forward to the peer runs on one forwarder core per in0 row, off the chain) |
+// mustfail (1 + the forwarder zeroes the last tile of every forwarded block); unset or 0 = the stock kernels,
+// byte-identical programs. Read on every call (the model's warmup self-test runs the stock and the candidate programs
+// in one process), hashed through AllGatherMinimalMatmulAsyncParams::fwo.
+static uint32_t agmm_fwo_mode() {
+    const char* e = tt_stack_public::getenv("QWEN36_AGMM_FWO");
+    uint32_t mode = 0;
+    if (e == nullptr || e[0] == '\0' || std::strcmp(e, "0") == 0) {
+        return 0;
+    } else if (std::strcmp(e, "1") == 0) {
+        mode = 1;
+    } else if (std::strcmp(e, "mustfail") == 0) {
+        mode = 3;
+    } else {
+        TT_THROW("QWEN36_AGMM_FWO={}: expected unset, 0, 1 or mustfail", e);
+    }
+    static std::atomic<uint32_t> logged{0};
+    if ((logged.fetch_or(1u << mode) & (1u << mode)) == 0) {
+        log_warning(
+            tt::LogOp,
+            "QWEN36_AGMM_FWO engaged (mode={}: in0 peer forward on one forwarder core per in0 row, row full_grid.y-2, "
+            "reading the local input; chain cores no longer forward{})",
+            mode,
+            (mode & 2u) ? ", MUSTFAIL: last tile of every forwarded block zeroed" : "");
+    }
+    return mode;
+}
 
 AllGatherMinimalMatmulAsyncOp::program_factory_t AllGatherMinimalMatmulAsyncOp::select_program_factory(
     const operation_attributes_t& /*args*/, const tensor_args_t& /*tensor_args*/) {
@@ -110,6 +208,47 @@ void AllGatherMinimalMatmulAsyncOp::validate_on_program_cache_miss(
             "2*TILE_WIDTH={}",
             N,
             2 * tt::constants::TILE_WIDTH);
+    }
+
+    if (attributes.gbs & 1u) {
+        // cfx 0057: the kernels read K-block rows of the gather buffer as one contiguous span and forward them as
+        // contiguous packets: the buffer must be DRAM height-sharded with full-width (K) shards on both chips.
+        TT_FATAL(
+            tensor_args.persistent_output_buffer.has_value(),
+            "QWEN36_AGMM_GBS: needs a persistent_output_buffer (the sharded gather buffer)");
+        const auto& gmc = tensor_args.persistent_output_buffer.value().memory_config();
+        TT_FATAL(
+            gmc.buffer_type() == tt::tt_metal::BufferType::DRAM &&
+                gmc.memory_layout() == tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED && gmc.shard_spec().has_value(),
+            "QWEN36_AGMM_GBS: the gather buffer must be DRAM HEIGHT_SHARDED");
+        TT_FATAL(
+            gmc.shard_spec().value().shape[1] == K && gmc.shard_spec().value().shape[0] % tt::constants::TILE_HEIGHT == 0,
+            "QWEN36_AGMM_GBS: the gather buffer shard must span the full K ({}) and whole tile rows, got [{}, {}]",
+            K,
+            gmc.shard_spec().value().shape[0],
+            gmc.shard_spec().value().shape[1]);
+        TT_FATAL(attributes.topology == ttnn::ccl::Topology::Linear, "QWEN36_AGMM_GBS: Linear topology only");
+    }
+
+    if (attributes.fwo & 1u) {
+        // cfx 0063: the forwarder replays the two-device Linear schedule (each device forwards exactly its local K
+        // blocks); the grid checks (untransposed, a free row above the mux row) are in the program factory.
+        TT_FATAL(
+            attributes.topology == ttnn::ccl::Topology::Linear && attributes.ring_size == 2,
+            "QWEN36_AGMM_FWO: Linear topology on exactly 2 devices only (got ring_size {})",
+            attributes.ring_size);
+        TT_FATAL(!attributes.fsdp_cluster_axis.has_value(), "QWEN36_AGMM_FWO: not with FSDP fusion");
+    }
+
+    if (attributes.swiglu_pack & 1u) {
+        // cfx 0049: the pack-thread SwiGLU runs gate/up PAIRS of one DST subblock on the SFPU
+        TT_FATAL(
+            attributes.fuse_swiglu && !tensor_args.bias_tensor.has_value(),
+            "QWEN36_AGMM_SWIGLU_PACK: the pack-thread SwiGLU needs fuse_swiglu without a bias");
+        TT_FATAL(
+            !attributes.config.has_value() || attributes.config.value().subblock_w % 2 == 0,
+            "QWEN36_AGMM_SWIGLU_PACK: subblock_w ({}) must be even (gate/up pairs)",
+            attributes.config.has_value() ? attributes.config.value().subblock_w : 0u);
     }
 
     // FSDP fusion validation
@@ -511,6 +650,10 @@ std::vector<ttnn::Tensor> all_gather_minimal_matmul_async(
         fsdp_topology_,
         fuse_swiglu,
         chunk_sizes};
+    operation_attributes.swiglu_pack =
+        ttnn::experimental::prim::agmm_swiglu_pack_mode(fuse_swiglu, bias_tensor.has_value());
+    operation_attributes.gbs = ttnn::experimental::prim::agmm_gbs_mode();
+    operation_attributes.fwo = ttnn::experimental::prim::agmm_fwo_mode();
     auto tensor_args = OperationType::tensor_args_t{
         input_tensor,
         weight_tensor,

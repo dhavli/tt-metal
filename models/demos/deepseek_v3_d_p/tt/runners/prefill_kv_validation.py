@@ -14,6 +14,7 @@ them. Everything prefixed ``_`` is internal.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from models.demos.deepseek_v3_d_p.tt.tt_prefill_runtime import TtPrefillRuntime
 
 # Model-aware golden trace dir, used only when DEEPSEEK_PREFILL_TRACE_{PT,DIR} are unset.
-DEFAULT_PREFILL_TRACE_DIR = get_adapter(os.environ.get("PREFILL_MODEL", DEFAULT_MODEL)).prefill_trace_default
+DEFAULT_PREFILL_TRACE_DIR = get_adapter(_tt_public_getenv("PREFILL_MODEL", DEFAULT_MODEL)).prefill_trace_default
 _kv_pt_trace_cache: dict = {}
 
 
@@ -177,7 +178,7 @@ def kv_cache_pcc_check(
     # exact-multiple case (real_len unset).
     compare_len = real_len if real_len is not None else total_len
 
-    pt_path = (pt_path_override or os.environ.get("DEEPSEEK_PREFILL_TRACE_PT", "")).strip()
+    pt_path = (pt_path_override or _tt_public_getenv("DEEPSEEK_PREFILL_TRACE_PT", "")).strip()
     if pt_path:
         if not Path(pt_path).is_file():
             raise FileNotFoundError(f"DEEPSEEK_PREFILL_TRACE_PT={pt_path} does not exist or is not a file")
@@ -194,7 +195,7 @@ def kv_cache_pcc_check(
         resolved_dir = resolve_trace_dir(trace_dir)
         kv_pt = None
     else:
-        resolved_dir = Path(os.environ.get("DEEPSEEK_PREFILL_TRACE_DIR", DEFAULT_PREFILL_TRACE_DIR))
+        resolved_dir = Path(_tt_public_getenv("DEEPSEEK_PREFILL_TRACE_DIR", DEFAULT_PREFILL_TRACE_DIR))
         if not resolved_dir.exists():
             raise FileNotFoundError(
                 f"golden trace dir not found: {resolved_dir} "
@@ -202,8 +203,8 @@ def kv_cache_pcc_check(
             )
         kv_pt = None
 
-    threshold = float(os.environ.get("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
-    record_only = os.environ.get("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1"
+    threshold = float(_tt_public_getenv("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
+    record_only = _tt_public_getenv("PREFILL_STANDALONE_CHUNKED_RECORD_ONLY", "0") == "1"
     kv_lora = pipeline.hf_config.kv_lora_rank
     kvpe_dim = pipeline.hf_config.qk_rope_head_dim + kv_lora
 

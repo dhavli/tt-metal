@@ -11,6 +11,7 @@ TT hardware at each step. Generates a PCC-vs-iteration plot per layer.
 
 This is observational/diagnostic — no PCC threshold assertions.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import copy
 import os
@@ -149,7 +150,7 @@ def test_prefill_block_loop(
         pytest.skip("State dict not available (no pretrained weights)")
 
     # The 4x4 subtorus sweep is intentionally local/experimental until a dedicated CI owner exists.
-    if (os.getenv("CI") == "true" or "TT_GH_CI_INFRA" in os.environ) and tuple(mesh_device.shape) == (4, 4):
+    if (_tt_public_getenv("CI") == "true" or _tt_public_contains('TT_GH_CI_INFRA')) and tuple(mesh_device.shape) == (4, 4):
         pytest.skip("the 4x4 subtorus sweep is local/experimental; not run in CI")
 
     # Deep-copy the HF config: hf_config returns a process-wide lru_cache'd object, so mutating it in
@@ -167,7 +168,7 @@ def test_prefill_block_loop(
     n_routed = config.n_routed_experts  # 256
     # Preserve the existing 4x4 diagnostic's per-chip expert load: 128/16 == 256/32. The device
     # grouped-gate kernels require 256 experts, so this path uses the host gate below.
-    halve_experts_4x4 = mesh_shape == [4, 4] and not os.environ.get("DS_4X4_FULL_EXPERTS")
+    halve_experts_4x4 = mesh_shape == [4, 4] and not _tt_public_getenv("DS_4X4_FULL_EXPERTS")
     if halve_experts_4x4:
         n_routed = config.n_routed_experts // 2
         config.n_routed_experts = n_routed

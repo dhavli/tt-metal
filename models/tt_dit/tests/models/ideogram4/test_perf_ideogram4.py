@@ -10,6 +10,7 @@
 # test. Single-block device perf comes from the PCC test (test_transformer_ideogram4.py).
 # =============================================================================
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import pytest
@@ -24,7 +25,7 @@ from ....utils.test import line_params, ring_params
 # The pipeline needs the gated fp8 checkpoint (create_pipeline raises ValueError without it);
 # skip (don't error) when it isn't configured, matching the component tests.
 _NEEDS_WEIGHTS = pytest.mark.skipif(
-    not os.environ.get("IDEOGRAM4_WEIGHTS"), reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)"
+    not _tt_public_getenv("IDEOGRAM4_WEIGHTS"), reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)"
 )
 
 PROMPT = "a watercolor painting of a red panda reading a book under a cherry tree, soft morning light"

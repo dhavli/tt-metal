@@ -30,6 +30,7 @@ Env the operator sets (mirrors the rest of the M3 ecosystem):
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -65,7 +66,7 @@ class MiniMaxM3Config:
 def _model_path() -> str:
     """Resolve the MiniMax-M3 checkpoint dir: PREFILL_HF_MODEL > HF_MODEL > hf_model_default. This is the
     dir AutoConfig / the weight loader read, and (absent TT_CACHE_PATH) the tilized-cache root."""
-    return os.environ.get("PREFILL_HF_MODEL") or os.environ.get("HF_MODEL") or MiniMaxM3PrefillAdapter.hf_model_default
+    return _tt_public_getenv("PREFILL_HF_MODEL") or _tt_public_getenv("HF_MODEL") or MiniMaxM3PrefillAdapter.hf_model_default
 
 
 class MiniMaxM3PrefillAdapter(PrefillModelAdapter):
@@ -111,7 +112,7 @@ class MiniMaxM3PrefillAdapter(PrefillModelAdapter):
         """The tilized ``.tensorbin`` cache dir, mirroring ``ModelArgs.weight_cache_path(bfloat8_b)`` (the
         layout the cache-populate run wrote): ``{TT_CACHE_PATH or checkpoint_dir}/tensor_cache_bfp8_{MeshShape}``.
         The model reads its per-tensor caches from here (on a hit the bf16 source is never touched)."""
-        cache_dir = os.environ.get("TT_CACHE_PATH")
+        cache_dir = _tt_public_getenv("TT_CACHE_PATH")
         cache_dir = Path(cache_dir) if cache_dir else Path(_model_path())
         sp, tp = mesh_shape
         path = cache_dir / f"tensor_cache_bfp8_{ttnn.MeshShape(sp, tp)}"
@@ -147,12 +148,12 @@ class MiniMaxM3PrefillAdapter(PrefillModelAdapter):
         # EXPERT_DTYPE selects the MoE routed-expert weight dtype (bf4 default here / bf8). The tilized
         # cache holds both, so either stays on the fast cache path. Same knob name as the M3 generate +
         # PCC harnesses. It feeds TtPrefillRuntimeConfig.expert_weight_dtype below.
-        expert_dtype = ttnn.bfloat4_b if os.environ.get("EXPERT_DTYPE", "bf4") == "bf4" else ttnn.bfloat8_b
-        logger.info(f"[minimax_m3] expert_dtype={expert_dtype} (EXPERT_DTYPE={os.environ.get('EXPERT_DTYPE', 'bf4')})")
+        expert_dtype = ttnn.bfloat4_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf4" else ttnn.bfloat8_b
+        logger.info(f"[minimax_m3] expert_dtype={expert_dtype} (EXPERT_DTYPE={_tt_public_getenv('EXPERT_DTYPE', 'bf4')})")
         cache_path = params.weight_cache_path
-        force_load = os.environ.get("M3_FORCE_LOAD_WEIGHTS") == "1"
+        force_load = _tt_public_getenv("M3_FORCE_LOAD_WEIGHTS") == "1"
         cache_only = not force_load and (
-            os.environ.get("M3_WEIGHTS_FROM_CACHE") == "1"
+            _tt_public_getenv("M3_WEIGHTS_FROM_CACHE") == "1"
             or weight_cache_is_complete(
                 cache_path,
                 hf_config,

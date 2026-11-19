@@ -10,6 +10,7 @@ has no audio), but the shape is identical: the pipeline holds an adapter and cal
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -47,7 +48,7 @@ _FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
 
 def _env_flag(name: str, *, default: bool) -> bool:
     """Boolean env var with one truthiness convention across all trace gates."""
-    val = os.environ.get(name)
+    val = _tt_public_getenv(name)
     if val is None:
         return default
     token = val.strip().lower()
@@ -123,7 +124,7 @@ class LTXAudioDecoderAdapter:
         t_factor = mesh_shape[t_axis]
         c_axis = 1 - t_axis
         c_factor = mesh_shape[c_axis]
-        channel_tp_on = os.environ.get("LTX_AUDIO_CHANNEL_TP", "0") == "1"
+        channel_tp_on = _tt_public_getenv("LTX_AUDIO_CHANNEL_TP", "0") == "1"
         if t_factor > 1 and c_factor > 1 and channel_tp_on:
             audio_parallel_config = AudioTCParallelConfig(
                 time_parallel=ParallelFactor(factor=t_factor, mesh_axis=t_axis),
@@ -153,7 +154,7 @@ class LTXAudioDecoderAdapter:
         )
 
         if isinstance(audio_parallel_config, AudioTCParallelConfig):
-            override = os.environ.get("LTX_BWE_CHANNEL_TP")
+            override = _tt_public_getenv("LTX_BWE_CHANNEL_TP")
             use_bwe_ctp = override == "1" if override is not None else audio_parallel_config.channel_parallel.factor > 2
             bwe_pc = audio_parallel_config if use_bwe_ctp else audio_parallel_config.time_parallel
         else:

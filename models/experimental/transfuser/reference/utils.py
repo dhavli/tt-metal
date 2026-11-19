@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import inspect
 import warnings
 import functools
@@ -29,7 +30,7 @@ import models.experimental.transfuser.reference.ext_loader as ext_loader
 
 logger = logging.getLogger(__name__)
 
-DEBUG_COMPLETED_TIME = bool(os.environ.get("DEBUG_COMPLETED_TIME", False))
+DEBUG_COMPLETED_TIME = bool(_tt_public_getenv("DEBUG_COMPLETED_TIME", False))
 
 TORCH_VERSION = torch.__version__
 
@@ -1502,7 +1503,7 @@ class NMSop(torch.autograd.Function):
 
         has_custom_op = is_custom_op_loaded()
         # TensorRT nms plugin is aligned with original nms in ONNXRuntime
-        is_trt_backend = os.environ.get("ONNX_BACKEND") == "MMCVTensorRT"
+        is_trt_backend = _tt_public_getenv("ONNX_BACKEND") == "MMCVTensorRT"
         if has_custom_op and (not is_trt_backend):
             return g.op(
                 "mmcv::NonMaxSuppression", bboxes, scores, iou_threshold_f=float(iou_threshold), offset_i=int(offset)

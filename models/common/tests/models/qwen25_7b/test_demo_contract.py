@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import ast
 import os
 from pathlib import Path
@@ -247,7 +248,7 @@ def test_qwen_stop_guard_truncates_both_turn_boundaries_before_shared_strict_sca
 
     def shared_guard(generated_token_ids, tokenizer, **kwargs):
         shared_calls.append((generated_token_ids, kwargs))
-        if kwargs["is_ci_env"] is None and os.environ.get("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1":
+        if kwargs["is_ci_env"] is None and _tt_public_getenv("TT_DEMO_STRICT_SPECIAL_TOKENS") == "1":
             outputs_before_eos = [
                 output[: output.index(tokenizer.eos_token_id)] if tokenizer.eos_token_id in output else output
                 for output in generated_token_ids

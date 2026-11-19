@@ -40,6 +40,7 @@ Usage:
         models/demos/gemma4/demo/text_demo_v2.py -k "batch-1" -sv \
         --max_generated_tokens 64
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import hashlib
 import json
@@ -91,7 +92,7 @@ def _mesh_device_param():
     unknown → ``(1, N)`` over all visible devices so a LoudBox opens full 1×8
     TP instead of a 4-chip subset. Set ``MESH_DEVICE`` for non-line meshes.
     """
-    env = os.environ.get("MESH_DEVICE")
+    env = _tt_public_getenv("MESH_DEVICE")
     if env in _MESH_DEVICE_SHAPES:
         return _MESH_DEVICE_SHAPES[env]
     if env and "x" in env.lower():
@@ -108,7 +109,7 @@ def _mesh_device_param():
 
 
 def _model_path():
-    return os.getenv("HF_MODEL") or os.getenv(
+    return _tt_public_getenv("HF_MODEL") or _tt_public_getenv(
         "GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it"
     )
 
@@ -230,8 +231,8 @@ def _device_params():
     ``l1_small_size`` is set so all_gather semaphores land in L1_SMALL (avoids
     fragmenting the main L1 pool).
     """
-    num_cqs = max(1, int(os.environ.get("GEMMA4_NUM_CQS", "1")))
-    fabric_env = os.environ.get("GEMMA4_FABRIC", "1d").strip().lower()
+    num_cqs = max(1, int(_tt_public_getenv("GEMMA4_NUM_CQS", "1")))
+    fabric_env = _tt_public_getenv("GEMMA4_FABRIC", "1d").strip().lower()
     if fabric_env in ("ring", "1d_ring", "fabric_1d_ring"):
         fabric_config = ttnn.FabricConfig.FABRIC_1D_RING
     else:
@@ -241,16 +242,16 @@ def _device_params():
         "fabric_config": fabric_config,
         "num_command_queues": num_cqs,
         # CCL all_gather allocates semaphores in L1_SMALL when this is > 0.
-        "l1_small_size": int(os.environ.get("GEMMA4_L1_SMALL_SIZE", 24576)),
+        "l1_small_size": int(_tt_public_getenv("GEMMA4_L1_SMALL_SIZE", 24576)),
     }
     # Wormhole has 12 GB/ASIC vs Blackhole's 32 GB, so the trace budget is much
     # tighter, but 30 MB is not enough for the 31B/26B decode+prefill traces on
     # T3K (WH-T3K nightly EngineCore OOM). Honour GEMMA4_TRACE_REGION_SIZE on
     # both arches; only the default differs.
     default_trace_region = 256_000_000 if is_blackhole() else 90_000_000
-    params["trace_region_size"] = int(os.environ.get("GEMMA4_TRACE_REGION_SIZE", default_trace_region))
+    params["trace_region_size"] = int(_tt_public_getenv("GEMMA4_TRACE_REGION_SIZE", default_trace_region))
 
-    pkt_env = os.environ.get("GEMMA4_CCL_PACKET_BYTES")
+    pkt_env = _tt_public_getenv("GEMMA4_CCL_PACKET_BYTES")
     if pkt_env is None:
         pkt_bytes = _default_ccl_packet_bytes() if is_blackhole() else None
     elif pkt_env.strip().lower() in ("0", "none", "default", ""):
@@ -449,15 +450,15 @@ def test_demo_text(
     # hook to build a few-layer model for a fast end-to-end wiring check.
     import math
 
-    max_generated_tokens = int(os.environ.get("GEMMA4_MAX_NEW_TOKENS", max_generated_tokens))
-    max_seq_len = int(os.environ.get("GEMMA4_MAX_SEQ_LEN", max_seq_len))
-    num_layers = os.environ.get("GEMMA4_NUM_LAYERS")
+    max_generated_tokens = int(_tt_public_getenv("GEMMA4_MAX_NEW_TOKENS", max_generated_tokens))
+    max_seq_len = int(_tt_public_getenv("GEMMA4_MAX_SEQ_LEN", max_seq_len))
+    num_layers = _tt_public_getenv("GEMMA4_NUM_LAYERS")
     num_layers = int(num_layers) if num_layers else None
     # Batch sweep hook: GEMMA4_BATCH overrides the config's batch_size so the
     # same config can probe batch-1 / 8 / 32 to find the QB2 ceiling.
-    batch_size = int(os.environ.get("GEMMA4_BATCH", batch_size))
+    batch_size = int(_tt_public_getenv("GEMMA4_BATCH", batch_size))
     # Prefetcher bring-up: GEMMA4_DECODE_TRACE=0 disables Metal Trace capture.
-    _decode_trace = os.environ.get("GEMMA4_DECODE_TRACE")
+    _decode_trace = _tt_public_getenv("GEMMA4_DECODE_TRACE")
     if _decode_trace is not None:
         enable_trace = _decode_trace.lower() in ("1", "true", "yes")
         logger.info(f"GEMMA4_DECODE_TRACE override: enable_trace={enable_trace}")
@@ -469,7 +470,7 @@ def test_demo_text(
     if request.config.getoption("--speculative"):
         draft_len = request.config.getoption("--spec-draft-len")
         if draft_len is None:
-            draft_len = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 3))
+            draft_len = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 3))
         if batch_size != 1:
             # Batched (B>1) spec-decode: drafts each user at batch=1 and runs ONE
             # batched packed verify over all users (KV-amortization win). Greedy,
@@ -583,7 +584,7 @@ def test_demo_text(
     # we still capture the 4k sp0/sp1 buckets used by long-ISL chunk replay.
     from models.demos.gemma4.tt.generator_trace import chunked_prefill_trace_enabled
 
-    prefill_trace_max = int(os.environ.get("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
+    prefill_trace_max = int(_tt_public_getenv("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
     prefill_enable_trace = enable_trace and (max_seq_len < prefill_trace_max or chunked_prefill_trace_enabled())
     if enable_trace and not prefill_enable_trace:
         logger.info(
@@ -593,7 +594,7 @@ def test_demo_text(
         )
     # Default on-device sample (product decode_only parity). Opt into host with
     # GEMMA4_HOST_SAMPLE=1 if device-sample + decode-trace misbehaves.
-    force_host = os.environ.get("GEMMA4_HOST_SAMPLE", "0").lower() in ("1", "true", "yes")
+    force_host = _tt_public_getenv("GEMMA4_HOST_SAMPLE", "0").lower() in ("1", "true", "yes")
     can_sample = (not force_host) and model_can_sample_on_device(generator.model[0])
     device_sampling_params = build_device_sampling_params(sampling_params, can_sample=can_sample)
     greedy_only = temperature <= 0
@@ -788,7 +789,7 @@ def _run_spec_decode(
     from models.demos.gemma4.tt.spec_decode import SpeculativeDecoder
 
     model_path = _model_path()
-    assistant_path = os.getenv("GEMMA4_ASSISTANT_MODEL")
+    assistant_path = _tt_public_getenv("GEMMA4_ASSISTANT_MODEL")
     if not assistant_path:
         # Default to the matching it-assistant drafter so the demo runs without
         # an explicit env (e.g. google/gemma-4-12B-it -> ...-it-assistant).
@@ -798,7 +799,7 @@ def _run_spec_decode(
     top_p = sampling_params.get("top_p", 1.0)
     top_k = sampling_params.get("top_k", 0)
     if draft_len is None:
-        draft_len = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 3))
+        draft_len = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 3))
     batch_size = 1
 
     block_size = page_params["page_block_size"]
@@ -825,7 +826,7 @@ def _run_spec_decode(
     # traced multi-chunk is measuring (GEMMA4_CHUNKED_PREFILL_TRACE=1).
     from models.demos.gemma4.tt.generator_trace import chunked_prefill_trace_enabled
 
-    prefill_trace_max = int(os.environ.get("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
+    prefill_trace_max = int(_tt_public_getenv("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
     prefill_enable_trace = enable_trace and (max_seq_len < prefill_trace_max or chunked_prefill_trace_enabled())
     generator.warmup_model_prefill(
         kv_cache=tt_kv_cache, enable_trace=prefill_enable_trace, can_sample_on_device=False, greedy_only=True
@@ -905,7 +906,7 @@ def _run_spec_decode(
     # `enable_trace` so spec-decode is fast out of the box; GEMMA4_SPEC_TRACE
     # overrides explicitly (=1 force on, =0 force off — e.g. to A/B the cost).
     if use_fused:
-        _trace_env = os.environ.get("GEMMA4_SPEC_TRACE")
+        _trace_env = _tt_public_getenv("GEMMA4_SPEC_TRACE")
         spec._use_trace = enable_trace if _trace_env is None else (_trace_env == "1")
     logger.info(
         f"Spec-decode generate (draft_len={draft_len}, temp={temperature}, "
@@ -988,7 +989,7 @@ def _run_spec_decode_batched(
 
     B = len(prompts)
     model_path = _model_path()
-    assistant_path = os.getenv("GEMMA4_ASSISTANT_MODEL")
+    assistant_path = _tt_public_getenv("GEMMA4_ASSISTANT_MODEL")
     if not assistant_path:
         assistant_path = f"{model_path}-assistant"
         logger.info(f"GEMMA4_ASSISTANT_MODEL unset; defaulting drafter to {assistant_path}")
@@ -996,7 +997,7 @@ def _run_spec_decode_batched(
     if temperature and temperature > 0:
         pytest.skip("batched spec-decode supports greedy only (set temperature=0)")
     if draft_len is None:
-        draft_len = int(os.environ.get("GEMMA4_SPEC_DRAFT_LEN", 3))
+        draft_len = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 3))
 
     block_size = page_params["page_block_size"]
     blocks_per_user = math.ceil(max_seq_len / block_size)
@@ -1021,7 +1022,7 @@ def _run_spec_decode_batched(
     # unless traced multi-chunk is measuring (GEMMA4_CHUNKED_PREFILL_TRACE=1).
     from models.demos.gemma4.tt.generator_trace import chunked_prefill_trace_enabled
 
-    prefill_trace_max = int(os.environ.get("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
+    prefill_trace_max = int(_tt_public_getenv("GEMMA4_PREFILL_TRACE_MAX_SEQ", 4096))
     prefill_enable_trace = enable_trace and (max_seq_len < prefill_trace_max or chunked_prefill_trace_enabled())
     generator.warmup_model_prefill(
         kv_cache=tt_kv_cache, enable_trace=prefill_enable_trace, can_sample_on_device=False, greedy_only=True
@@ -1084,7 +1085,7 @@ def _run_spec_decode_batched(
     # is captured as ONE metal trace and replayed per step; the one-time capture
     # (setup) is excluded from the steady decode rate. Prefill is NEVER traced.
     # Default tracing to the demo's enable_trace; GEMMA4_SPEC_TRACE overrides.
-    _trace_env = os.environ.get("GEMMA4_SPEC_TRACE")
+    _trace_env = _tt_public_getenv("GEMMA4_SPEC_TRACE")
     spec._use_trace = enable_trace if _trace_env is None else (_trace_env == "1")
 
     logger.info(f"Spec-decode batched generate (B={B}, draft_len={draft_len}, greedy, trace={spec._use_trace})...")
@@ -1136,11 +1137,11 @@ def _run_spec_decode_batched(
 def test_demo_spec_decode(mesh_device, reset_seeds):
     """Speculative-decode demo (target HF_MODEL + drafter GEMMA4_ASSISTANT_MODEL)."""
     _run_spec_decode(
-        prompt=os.getenv("GEMMA4_SPEC_PROMPT", "Tell me about the history of computing in three sentences."),
+        prompt=_tt_public_getenv("GEMMA4_SPEC_PROMPT", "Tell me about the history of computing in three sentences."),
         instruct=True,
-        max_seq_len=int(os.environ.get("GEMMA4_MAX_SEQ_LEN", 4096)),
-        max_generated_tokens=int(os.environ.get("GEMMA4_MAX_NEW_TOKENS", 200)),
+        max_seq_len=int(_tt_public_getenv("GEMMA4_MAX_SEQ_LEN", 4096)),
+        max_generated_tokens=int(_tt_public_getenv("GEMMA4_MAX_NEW_TOKENS", 200)),
         page_params={"page_block_size": 64, "page_max_num_blocks": 2048},
-        sampling_params={"temperature": float(os.environ.get("GEMMA4_TEMPERATURE", 0.0)), "top_p": 0.95, "top_k": 64},
+        sampling_params={"temperature": float(_tt_public_getenv("GEMMA4_TEMPERATURE", 0.0)), "top_p": 0.95, "top_k": 64},
         mesh_device=mesh_device,
     )

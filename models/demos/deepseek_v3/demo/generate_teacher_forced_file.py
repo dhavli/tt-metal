@@ -7,6 +7,7 @@ Reproducibility helper for DeepSeek V3 teacher-forcing reference files.
 This script regenerates the checked-in `.refpt` artifact so the reference can
 be refreshed or reproduced when needed.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -32,7 +33,7 @@ from models.demos.deepseek_v3.utils.hf_model_utils import (
 )
 
 MODEL_PATH = Path(
-    os.getenv(
+    _tt_public_getenv(
         "DEEPSEEK_V3_HF_MODEL",
         "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked",
     )

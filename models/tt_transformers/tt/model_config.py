@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import hashlib
 import inspect
 import json
@@ -64,8 +65,8 @@ ACCURACY_DECODER_CONFIG_FILENAME = "accuracy_decoder_config.json"
 # LOCAL_HF_PARAMS independent of the caller's current working directory, which
 # matters when tt-run scripts cd into an example directory before launching.
 _REPO_ROOT = Path(
-    os.environ.get("TT_METAL_RUNTIME_ROOT")
-    or os.environ.get("TT_METAL_HOME")
+    _tt_public_getenv("TT_METAL_RUNTIME_ROOT")
+    or _tt_public_getenv("TT_METAL_HOME")
     or str(Path(__file__).resolve().parents[3])
 )
 
@@ -675,13 +676,13 @@ class ModelArgs:
         self.sdpa_decode_use_default_compute_config = False
         self.use_hf_rope = use_hf_rope
 
-        assert not os.getenv(
+        assert not _tt_public_getenv(
             "FAKE_DEVICE"
         ), "FAKE_DEVICE has been renamed to MESH_DEVICE for consistency with vLLM, please update your environment variables and run again."
 
         # Remove trailing slashes so basename gets the right model name
-        HF_MODEL = os.getenv("HF_MODEL")
-        self.CACHE_PATH = os.getenv("TT_CACHE_PATH")
+        HF_MODEL = _tt_public_getenv("HF_MODEL")
+        self.CACHE_PATH = _tt_public_getenv("TT_CACHE_PATH")
         if HF_MODEL:
             self.checkpoint_type = CheckpointType.HuggingFace
             self.CKPT_DIR = HF_MODEL
@@ -767,7 +768,7 @@ class ModelArgs:
         self.tile_padded_batch_rows = ttnn.TILE_SIZE * int(math.ceil(self.max_batch_size / ttnn.TILE_SIZE))
 
         # Enable workarounds by default until di/dt issues are fixed
-        self.di_dt_workaround = os.getenv("DISABLE_DI_DT_WORKAROUND") != "1"
+        self.di_dt_workaround = _tt_public_getenv("DISABLE_DI_DT_WORKAROUND") != "1"
         if not self.di_dt_workaround:
             logger.info("Disabling di/dt workaround, re-enable if you see hangs")
 
@@ -2527,7 +2528,7 @@ class ModelArgs:
     # =========================================================================
     def get_max_prefill_chunk_size(self):
         # Set the max number of tokens for each prefill chunk based on the model and device
-        max_prefill_chunk_size_div1024 = os.getenv("MAX_PREFILL_CHUNK_SIZE")
+        max_prefill_chunk_size_div1024 = _tt_public_getenv("MAX_PREFILL_CHUNK_SIZE")
         if max_prefill_chunk_size_div1024 is None:
             # TODO Improve this to be more general to more devices and models
             MAX_PREFILL_CHUNK_SIZES_DIV1024 = {
@@ -2927,7 +2928,7 @@ class ModelArgs:
             }.get(self.base_model_name, 0)
 
             # Override MLP padding cores from env var
-            mlp_padded_cores = int(os.environ.get("PAD_MLP_CORES", default_padded_cores))
+            mlp_padded_cores = int(_tt_public_getenv("PAD_MLP_CORES", default_padded_cores))
 
             # Only pad if MLP_PADDED_CORES is non-zero
             if mlp_padded_cores > 0:
@@ -3108,7 +3109,7 @@ class ModelArgs:
             self.hf_config = AutoConfig.from_pretrained(
                 self.CKPT_DIR,
                 trust_remote_code=self.trust_remote_code_hf,
-                local_files_only=os.getenv("CI") == "true",
+                local_files_only=_tt_public_getenv("CI") == "true",
             )
 
         config = self.hf_config.to_dict()
@@ -3456,7 +3457,7 @@ class ModelArgs:
                 self.CKPT_DIR,
                 torch_dtype="auto",
                 trust_remote_code=self.trust_remote_code_hf,
-                local_files_only=os.getenv("CI") == "true",
+                local_files_only=_tt_public_getenv("CI") == "true",
                 # Note that the default setting is torch.dtype.float32, but model weights are
                 # may come in any dtype. If the model's weights are in torch.dtype.bfloat16, this would result in 2x memory usage from an
                 # unnecessary cast.
@@ -3906,7 +3907,7 @@ class ModelArgs:
             # If there is no Processor, it will return Tokenizer (useful for multimodal models)
             tokenizer = AutoTokenizer.from_pretrained(
                 self.TOKENIZER_PATH,
-                local_files_only=os.getenv("CI") == "true",
+                local_files_only=_tt_public_getenv("CI") == "true",
                 trust_remote_code=self.trust_remote_code_hf,
             )
             logger.info(f"Successfully loaded tokenizer from {self.TOKENIZER_PATH}")
@@ -3956,7 +3957,7 @@ class ModelArgs:
                 logger.info(f"Attempting to use fallback tokenizer: {fallback_tokenizer_path}")
                 try:
                     tokenizer = AutoTokenizer.from_pretrained(
-                        fallback_tokenizer_path, local_files_only=os.getenv("CI") == "true"
+                        fallback_tokenizer_path, local_files_only=_tt_public_getenv("CI") == "true"
                     )
                     logger.info(f"Successfully loaded fallback tokenizer from {fallback_tokenizer_path}")
                 except Exception as fallback_e:
@@ -3979,7 +3980,7 @@ class ModelArgs:
 
         processor = None
         try:
-            processor = AutoProcessor.from_pretrained(self.TOKENIZER_PATH, local_files_only=os.getenv("CI") == "true")
+            processor = AutoProcessor.from_pretrained(self.TOKENIZER_PATH, local_files_only=_tt_public_getenv("CI") == "true")
             logger.info(f"Successfully loaded processor from {self.TOKENIZER_PATH}")
         except Exception as e:
             logger.warning(f"Failed to load processor from {self.TOKENIZER_PATH}: {e}")
@@ -4016,7 +4017,7 @@ class ModelArgs:
             config = AutoConfig.from_pretrained(
                 self.LOCAL_HF_PARAMS[self.model_name],
                 trust_remote_code=self.trust_remote_code_hf,
-                local_files_only=os.getenv("CI") == "true",
+                local_files_only=_tt_public_getenv("CI") == "true",
             )
             if hasattr(config, "text_config"):
                 config.text_config.num_layers = self.n_layers
@@ -4025,7 +4026,7 @@ class ModelArgs:
                 config.num_layers = self.n_layers
                 config.num_hidden_layers = self.n_layers
 
-            if os.getenv("CI") == "true":
+            if _tt_public_getenv("CI") == "true":
                 # In CI, from_pretrained on NFS can spend ~54s scanning before failing for models
                 # that don't have clean checkpoint artifacts. Skip straight to from_config.
                 model = model_cls.from_config(config, trust_remote_code=self.trust_remote_code_hf)
@@ -4053,7 +4054,7 @@ class ModelArgs:
                 config = AutoConfig.from_pretrained(
                     self.LOCAL_HF_PARAMS[self.model_name],
                     trust_remote_code=self.trust_remote_code_hf,
-                    local_files_only=os.getenv("CI") == "true",
+                    local_files_only=_tt_public_getenv("CI") == "true",
                 )
                 if hasattr(config, "text_config"):
                     config.text_config.num_layers = self.n_layers
@@ -4062,7 +4063,7 @@ class ModelArgs:
                     config.num_layers = self.n_layers
                     config.num_hidden_layers = self.n_layers
 
-                if os.getenv("CI") == "true":
+                if _tt_public_getenv("CI") == "true":
                     # In CI, from_pretrained on NFS can spend ~54s scanning before failing for models
                     # that don't have clean checkpoint artifacts. Skip straight to from_config.
                     model = model_cls.from_config(config, trust_remote_code=self.trust_remote_code_hf)
@@ -4088,7 +4089,7 @@ class ModelArgs:
                     model = model_cls.from_pretrained(
                         self.CKPT_DIR,
                         torch_dtype="auto",
-                        local_files_only=os.getenv("CI") == "true",
+                        local_files_only=_tt_public_getenv("CI") == "true",
                         trust_remote_code=self.trust_remote_code_hf,
                     )
                     self.cached_hf_model = model
@@ -4100,7 +4101,7 @@ class ModelArgs:
                         self.CKPT_DIR,
                         torch_dtype="auto",
                         trust_remote_code=self.trust_remote_code_hf,
-                        local_files_only=os.getenv("CI") == "true",
+                        local_files_only=_tt_public_getenv("CI") == "true",
                     )
 
         # HACK: Assume that we want the language model layers only.
@@ -4162,7 +4163,7 @@ class ModelArgs:
                 config.num_layers = self.n_layers
                 config.num_hidden_layers = self.n_layers
 
-            if os.getenv("CI") == "true":
+            if _tt_public_getenv("CI") == "true":
                 # In CI, from_pretrained on NFS can spend ~54s scanning before failing for models
                 # that don't have clean checkpoint artifacts. Skip straight to from_config.
                 model = model_cls.from_config(config, trust_remote_code=self.trust_remote_code_hf)
@@ -4184,7 +4185,7 @@ class ModelArgs:
         else:
             if self.cached_hf_model is None:
                 model = model_cls.from_pretrained(
-                    self.CKPT_DIR, torch_dtype="auto", local_files_only=os.getenv("CI") == "true"
+                    self.CKPT_DIR, torch_dtype="auto", local_files_only=_tt_public_getenv("CI") == "true"
                 )
                 self.cached_hf_model = model
             else:

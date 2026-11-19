@@ -48,6 +48,7 @@ in a single call — zero L1 pinning between forward passes. Inline containers
 (new each call) use the same dispatch state after a build-cache lookup;
 persistent containers bypass that lookup after their first call.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -83,7 +84,7 @@ _ENABLE_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 def _check_fusion_enabled() -> None:
-    if os.environ.get(_ENABLE_ENV_VAR, "").strip().lower() not in _ENABLE_TRUTHY_VALUES:
+    if _tt_public_getenv(_ENABLE_ENV_VAR, "").strip().lower() not in _ENABLE_TRUTHY_VALUES:
         raise RuntimeError(
             f"Sequential/Parallel fusion is disabled until ProgramSpec is exposed to Python. Set {_ENABLE_ENV_VAR}=1 to opt in."
         )
@@ -94,7 +95,7 @@ def _check_fusion_enabled() -> None:
 # =============================================================================
 
 _BUILD_CACHE: OrderedDict[tuple, "_CacheEntry"] = OrderedDict()
-_BUILD_CACHE_MAX = int(os.environ.get("TT_METAL_FUSION_BUILD_CACHE_MAX_ENTRIES", "256"))
+_BUILD_CACHE_MAX = int(_tt_public_getenv("TT_METAL_FUSION_BUILD_CACHE_MAX_ENTRIES", "256"))
 
 
 def _build_cache_get(key):

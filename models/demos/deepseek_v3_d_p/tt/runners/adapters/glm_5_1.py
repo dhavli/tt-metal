@@ -18,6 +18,7 @@ semaphores go to L1_SMALL (needs the L1_SMALL carve-out at mesh-open).
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import Callable
@@ -48,7 +49,7 @@ class GLM51Adapter(MLAPrefillAdapter):
         """GLM's ``glm_moe_dsa`` isn't AutoConfig-loadable, so return the hand-built HF-attribute
         config (carries the dims + the DSA ``index_*`` attrs the sparse path resolves against). The
         runner overwrites ``max_seq_len`` after; seed the builder with it so rope config is consistent."""
-        max_seq = int(os.environ.get("PREFILL_MAX_SEQ_LEN", 8192))
+        max_seq = int(_tt_public_getenv("PREFILL_MAX_SEQ_LEN", 8192))
         return glm_hf_config(max_seq=max_seq)
 
     def allocate_kv_cache(self, *, mesh_device, hf_config, params) -> MlaKvCaches:

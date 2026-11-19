@@ -25,6 +25,7 @@ Examples:
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import os
@@ -277,7 +278,7 @@ def _validate_args(args: argparse.Namespace, cache_root: Path) -> None:
 
 
 def _ensure_fabric_env() -> None:
-    if not os.environ.get("TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"):
+    if not _tt_public_getenv("TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"):
         os.environ["TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS"] = "30000"
         logger.info("Set TT_METAL_FABRIC_ROUTER_SYNC_TIMEOUT_MS=30000")
 

@@ -32,6 +32,7 @@ Run (emulator):
   TTNN_CONFIG_OVERRIDES='{"enable_fast_runtime_mode": false, "enable_logging": true}' \
   pytest -q models/demos/vision/classification/resnet50/quasar/tests/test_resnet50_e2e.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -54,7 +55,7 @@ def test_resnet50_e2e(device, use_pretrained_weight, model_location_generator):
     if (device.compute_with_storage_grid_size().x, device.compute_with_storage_grid_size().y) == (8, 7):
         pytest.skip("Test is not supported on n300 (8,7) grid")
 
-    saved = {k: os.environ.get(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM", "RESNET_PCC_LOG")}
+    saved = {k: _tt_public_getenv(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM", "RESNET_PCC_LOG")}
     # No TT_METAL_QSR_RESNET_STOP_AFTER_LAYER3 -> the model runs the FULL network including layer4/avgpool/fc.
     os.environ["TT_METAL_QSR_CONV_SPLIT_PROGRAM"] = "1"  # HS convs -> split path (off the fused conv_bmm 0x19)
     os.environ["RESNET_PCC_LOG"] = "1"  # per-op [GOLDENPCC] so the FIRST diverging op is visible on failure

@@ -47,6 +47,15 @@ void kernel_main() {
     constexpr uint32_t num_tree_reduction_rounds = get_compile_time_arg_val(26);
     constexpr uint32_t original_block_size = get_compile_time_arg_val(27);
     constexpr bool has_block_padding = original_block_size > 0 && original_block_size < 32;
+    // cfx (tt-stack 0034): speculative-verify fold (rt_args_common.hpp). 0 = the legacy program.
+    constexpr uint32_t spec_fold_T = SDPA_SPEC_FOLD_T;
+    constexpr uint32_t spec_fold_pnht_cand = SDPA_SPEC_FOLD_PNHT_CAND;
+    // MUSTFAIL rung: every valid candidate bound is one position too far (candidate j also sees draft j+1).
+    constexpr uint32_t spec_fold_bound_shift = SDPA_SPEC_FOLD_MUSTFAIL ? 1u : 0u;
+    static_assert(spec_fold_T == 0 || (!is_out_sharded && q_heads_parallel_factor == 1 && !has_block_padding &&
+                                       sliding_window_size == 0 && num_heads_per_core == 1),
+                  "SDPA_SPEC_FOLD_T: interleaved output, one head per core, no q-parallel/block padding/window");
+    static_assert(spec_fold_T == 0 || PNHt == spec_fold_T * spec_fold_pnht_cand, "SDPA_SPEC_FOLD_T: PNHt = T*PNHt_cand");
 
     constexpr auto out_args = TensorAccessorArgs<28>();
 
@@ -118,6 +127,10 @@ void kernel_main() {
     constexpr uint32_t cur_pos_base = St * 32 - 1;
     uint32_t cur_pos = cur_pos_base;  // default to non-causal, which we do attention on the entire kv cache. In this
                                       // case we set cur_pos to the last position
+    // Fold: this batch row's per-candidate mask bounds (a skipped candidate gets the group's smallest bound, so its
+    // row stays finite; the caller ignores it, as a legacy skip row's output is never read), and the smallest one.
+    uint32_t spec_fold_bound[spec_fold_T > 0 ? spec_fold_T : 1];
+    uint32_t spec_fold_pos_min = 0;
     // using UINT32_MAX as a flag to indicate that cur_pos is not provided as a list
     if constexpr (is_causal) {
         if (cur_pos_arg != UINT32_MAX) {
@@ -127,7 +140,18 @@ void kernel_main() {
             cb_index.wait_front(1);
             uint32_t index_cb_ptr = cb_index.get_read_ptr();
             volatile tt_l1_ptr uint32_t* index_ptr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(index_cb_ptr);
-            cur_pos = index_ptr[(uint32_t)(cur_batch / q_heads_parallel_factor)];
+            if constexpr (spec_fold_T > 0) {
+                const SpecFoldPositions fp = spec_fold_positions<spec_fold_T>(
+                    cur_batch, B, [&](uint32_t i) -> uint32_t { return index_ptr[i]; });
+                for (uint32_t j = 0; j < spec_fold_T; ++j) {
+                    const uint32_t v = index_ptr[j * B + cur_batch];
+                    spec_fold_bound[j] = (v == UINT32_MAX) ? fp.pos_min : v + spec_fold_bound_shift;
+                }
+                cur_pos = fp.skip ? UINT32_MAX : fp.pos_max;
+                spec_fold_pos_min = fp.pos_min;
+            } else {
+                cur_pos = index_ptr[(uint32_t)(cur_batch / q_heads_parallel_factor)];
+            }
             cb_index.pop_front(1);
         }
 
@@ -148,8 +172,9 @@ void kernel_main() {
 
     // Sequence length assignment
     auto [PSt, k_num_chunks, k_chunk_start, k_chunk_end, window_start_unaligned, window_start_chunk] =
-        get_workload_for_core(
+        get_workload_for_core_spec_fold<spec_fold_T>(
             cur_pos,
+            spec_fold_pos_min,
             cur_batch,
             core_num_in_reduce,
             num_cores_per_head,
@@ -228,7 +253,16 @@ void kernel_main() {
     }
 
     // generate and send mask to compute if causal (only if we have local data to process)
-    if constexpr (is_causal) {
+    if constexpr (spec_fold_T > 0) {
+        // Fold: one per-candidate mask block per chunk the predicate selects (only core 0 has any, at most two; the
+        // mask CB holds two), in ascending chunk order, the order compute pops them in.
+        for (uint32_t k_chunk = k_chunk_start; k_chunk < k_chunk_end; ++k_chunk) {
+            if (spec_fold_chunk_needs_mask(k_chunk, k_chunk_size_dynamic, spec_fold_pos_min)) {
+                generate_mask_spec_fold<cb_mask_in, PNHt, spec_fold_pnht_cand>(
+                    Sk_chunk_t_dynamic, k_chunk * k_chunk_size_dynamic, spec_fold_bound);
+            }
+        }
+    } else if constexpr (is_causal) {
         // These helper functions respect tile size of CBs (ie. no need for special handling of tiny tiles)
         generate_mask<cb_mask_in, PNHt>(k_num_chunks, Sk_chunk_t_dynamic, cur_pos);
     }
@@ -412,7 +446,14 @@ void kernel_main() {
             // we are assuming here that num_heads_to_write = nh/nkv is a power of 2 here, so that we don't write
             // partial across phase
             constexpr uint32_t num_heads_to_write = num_q_heads / num_kv_heads;  // each head is one row in a tile
-            if (!is_out_sharded) {
+            if constexpr (spec_fold_T > 0) {
+                barrier_count = write_partial_tiles_to_memory_spec_fold<
+                    cb_out,
+                    ELEMENT_SIZE,
+                    barrier_threshold,
+                    spec_fold_pnht_cand,
+                    spec_fold_T>(cur_batch, B, out_writer, barrier_count, cur_head, num_heads_to_write, vDHt);
+            } else if (!is_out_sharded) {
                 barrier_count = write_partial_tiles_to_memory<cb_out, ELEMENT_SIZE, barrier_threshold, PNHt>(
                     out_tile_id, out_writer, barrier_count, cur_head, num_heads_to_write, out_chunk_tiles);
             }
@@ -483,7 +524,15 @@ void kernel_main() {
         } else {
             // MQA (Multi Query Attention):  we don't need to gather outputs for other heads so we can just write entire
             // tiles to memory
-            if (!is_out_sharded) {
+            if constexpr (spec_fold_T > 0) {
+                // Fold, one kv head: every q-head row of each candidate, into its candidate-major output row.
+                barrier_count = write_partial_tiles_to_memory_spec_fold<
+                    cb_out,
+                    ELEMENT_SIZE,
+                    barrier_threshold,
+                    spec_fold_pnht_cand,
+                    spec_fold_T>(cur_batch, B, out_writer, barrier_count, 0, num_q_heads, vDHt);
+            } else if (!is_out_sharded) {
                 barrier_count = write_tiles_to_memory<cb_out, out_chunk_tiles, barrier_threshold>(
                     out_tile_id, out_writer, barrier_count);
             }

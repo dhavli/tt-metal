@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import contextlib
 import os
 import time
@@ -797,7 +798,7 @@ def get_tensor_run_implementation():
     # Environment variable takes precedence for backward compatibility
     global _current_run_mode
     global _RUN_MODE_REGISTRY
-    env_mode = os.environ.get("TT_SYMBIOTE_RUN_MODE", _current_run_mode)
+    env_mode = _tt_public_getenv("TT_SYMBIOTE_RUN_MODE", _current_run_mode)
     if env_mode is None and _current_run_mode is None:
         _current_run_mode = "NORMAL"
     if env_mode != _current_run_mode and _current_run_mode is not None and env_mode is not None:

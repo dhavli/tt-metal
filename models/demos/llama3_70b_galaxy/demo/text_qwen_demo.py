@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import math
 import os
@@ -532,7 +533,7 @@ def test_qwen_demo_text(
     Simple Qwen demo with limited dependence on reference code.
     """
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("Qwen TG only supports batch-32")
     # Always assume 6U Galaxy configuration - skip APC test if needed
     if apc_test:

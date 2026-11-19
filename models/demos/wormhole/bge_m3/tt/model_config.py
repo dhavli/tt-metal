@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 from ttnn.device import is_blackhole as ttnn_is_blackhole
@@ -84,7 +85,7 @@ class ModelArgs:
         self.dummy_weights = dummy_weights
         self.cache_hf = cache_hf
 
-        self.hf_model_name = hf_model_name if hf_model_name else os.getenv("HF_MODEL")
+        self.hf_model_name = hf_model_name if hf_model_name else _tt_public_getenv("HF_MODEL")
 
         if self.hf_model_name:
             self.model_name = self.hf_model_name.strip("/").split("/")[-1]

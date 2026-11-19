@@ -14,6 +14,7 @@ Handles:
 - No bias on any projection
 - scaling=1.0 (no 1/sqrt(d_k))
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -34,12 +35,12 @@ PREFILL_SDPA_HARD_MAX = 32768
 # above the hardware cliff (non-chunked SDPA is wrong past 2^15).
 PREFILL_SDPA_MAX_SEQ = min(
     PREFILL_SDPA_HARD_MAX,
-    int(os.environ.get("GEMMA4_PREFILL_SDPA_MAX_SEQ", str(PREFILL_SDPA_HARD_MAX))),
+    int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_MAX_SEQ", str(PREFILL_SDPA_HARD_MAX))),
 )
 # Q chunk size for chunked prefill. Must be <= 32768 and a multiple of the SDPA
 # q/k_chunk_size (128) and the page block size. 8192 keeps L1 bounded for the
 # global layers' head_dim=512.
-PREFILL_CHUNK_SIZE = int(os.environ.get("GEMMA4_PREFILL_CHUNK_SIZE", "8192"))
+PREFILL_CHUNK_SIZE = int(_tt_public_getenv("GEMMA4_PREFILL_CHUNK_SIZE", "8192"))
 # Sliding-layer chunked prefill stride. The chunked SDPA op is causal-only (no
 # sliding window), and the non-chunked op requires Q.s == K.s, so sliding layers
 # are chunked with an OVERLAPPING window: each chunk runs SDPA over a slice of
@@ -48,7 +49,7 @@ PREFILL_CHUNK_SIZE = int(os.environ.get("GEMMA4_PREFILL_CHUNK_SIZE", "8192"))
 # Default 16384 (power-of-two): measured faster than near-cliff 30720 on 31B
 # 128k prefill (~62s vs ~73s TTFT) while staying well under the 32768 SDPA cliff.
 # Must be a multiple of TILE (32). Override via GEMMA4_PREFILL_SLIDING_CHUNK_SIZE.
-PREFILL_SLIDING_CHUNK_SIZE = int(os.environ.get("GEMMA4_PREFILL_SLIDING_CHUNK_SIZE", "16384"))
+PREFILL_SLIDING_CHUNK_SIZE = int(_tt_public_getenv("GEMMA4_PREFILL_SLIDING_CHUNK_SIZE", "16384"))
 
 
 def prefill_short_lived_memcfg() -> ttnn.MemoryConfig:
@@ -61,7 +62,7 @@ def prefill_short_lived_memcfg() -> ttnn.MemoryConfig:
     ``GEMMA4_PREFILL_L1_ACT=0|1`` (default 0). Measured OOM on 31B / P150x8 /
     chunk4k 128k with L1=1 (``ccl_prefill_ab.tsv``); leave off for long ISL.
     """
-    if os.environ.get("GEMMA4_PREFILL_L1_ACT", "0").lower() in ("1", "true", "yes"):
+    if _tt_public_getenv("GEMMA4_PREFILL_L1_ACT", "0").lower() in ("1", "true", "yes"):
         return ttnn.L1_MEMORY_CONFIG
     return ttnn.DRAM_MEMORY_CONFIG
 
@@ -243,8 +244,8 @@ def prefill_sdpa_program_config(head_dim, seq_len, sliding_window=None):
         # still giving wider Q parallelism than the default.
         grid = ttnn.CoreCoord(8, 8)
         dq, dk = 256, 128
-    q_chunk = int(os.environ.get("GEMMA4_PREFILL_SDPA_QCHUNK", dq))
-    k_chunk = int(os.environ.get("GEMMA4_PREFILL_SDPA_KCHUNK", dk))
+    q_chunk = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_QCHUNK", dq))
+    k_chunk = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_KCHUNK", dk))
     if sliding_window is not None:
         # Wider k_chunk than the window walks masked tiles and can regress vs
         # the flat-32 default on short windows (#51911).
@@ -322,8 +323,8 @@ def chunked_prefill_sdpa(
     else:
         grid = ttnn.CoreCoord(8, 8)
         dq, dk = 256, 128
-    q_chunk_size = int(os.environ.get("GEMMA4_PREFILL_SDPA_QCHUNK", dq))
-    k_chunk_size = int(os.environ.get("GEMMA4_PREFILL_SDPA_KCHUNK", dk))
+    q_chunk_size = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_QCHUNK", dq))
+    k_chunk_size = int(_tt_public_getenv("GEMMA4_PREFILL_SDPA_KCHUNK", dk))
     q_chunk_size = max(32, min(q_chunk_size, PREFILL_CHUNK_SIZE))
     k_chunk_size = max(32, min(k_chunk_size, PREFILL_CHUNK_SIZE))
     # Pad alignment below uses 128; keep q_chunk_size a divisor-friendly multiple of 32.

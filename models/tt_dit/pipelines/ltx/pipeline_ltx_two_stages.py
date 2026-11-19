@@ -9,6 +9,7 @@ Supports text-to-video and image+text-to-video (I2V) conditioning.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import time
@@ -78,7 +79,7 @@ class LTXTwoStagesPipeline(LTXPipeline):
 
         # I2V: compile the encoder at both stage resolutions before the DiT loads (it is
         # coresident-excluded with the transformer, mirroring the generate() ordering).
-        if self.vae_encoder is not None and os.environ.get("LTX_I2V_IMAGE"):
+        if self.vae_encoder is not None and _tt_public_getenv("LTX_I2V_IMAGE"):
             logger.info(f"warmup image encoder: {s1_h}x{s1_w} + {height}x{width}")
             self._warmup_encode(s1_h, s1_w)
             self._warmup_encode(height, width)

@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from datetime import datetime
@@ -13,9 +14,9 @@ from models.demos.deepseek_v3.demo.demo import load_prompts_from_json, run_demo
 from models.demos.deepseek_v3.utils.test_utils import create_prompt_of_length, system_name_to_mesh_shape
 
 MODEL_PATH = Path(
-    os.getenv("DEEPSEEK_V3_HF_MODEL", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked")
+    _tt_public_getenv("DEEPSEEK_V3_HF_MODEL", "/mnt/MLPerf/tt_dnn-models/deepseek-ai/DeepSeek-R1-0528-dequantized-stacked")
 )
-_ds_cache = os.getenv("DEEPSEEK_V3_CACHE")
+_ds_cache = _tt_public_getenv("DEEPSEEK_V3_CACHE")
 CACHE_DIR = Path(_ds_cache) if _ds_cache else None
 PERF_MARGIN = 0.08
 FINAL_DECODE_TPS_PER_USER = "decode_t/s/u"
@@ -53,7 +54,7 @@ def _assert_no_garbage_tokens(results: dict) -> None:
 
 def _is_primary_artifact_writer() -> bool:
     for rank_env in ("TT_MESH_HOST_RANK", "OMPI_COMM_WORLD_RANK", "PMI_RANK", "RANK"):
-        rank_value = os.getenv(rank_env)
+        rank_value = _tt_public_getenv(rank_env)
         if rank_value is None:
             continue
         try:
@@ -413,7 +414,7 @@ def test_demo(case: dict, force_recalculate_weight_config: bool):
 
     results = run_demo(**run_kwargs)
 
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     assert requested_system_name is not None, "MESH_DEVICE must be set for demo tests"
     mesh_shape = system_name_to_mesh_shape(requested_system_name.upper())
     expected_generations = min(len(prompts), case["max_users_per_row"] * int(mesh_shape[0]))

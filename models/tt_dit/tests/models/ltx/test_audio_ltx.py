@@ -18,6 +18,7 @@ Denoise-path audio regressions live in sibling files.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -67,7 +68,7 @@ def _resolve_checkpoint(candidates: list[str], expected_filenames: tuple[str, ..
     # An explicit LTX_CHECKPOINT override wins unconditionally as long as the file
     # exists — that's the whole point of the env var. The expected_filenames tuple
     # only gates the fallback discovery below, never the override.
-    explicit = os.environ.get("LTX_CHECKPOINT")
+    explicit = _tt_public_getenv("LTX_CHECKPOINT")
     if explicit and os.path.exists(explicit):
         return explicit
     for path in candidates:
@@ -961,7 +962,7 @@ def test_stage_c_audio_decode(mesh_device, device_params):
     tt_un.load_torch_state_dict(_diffusers_vocoder_with_bwe_state_to_tt(torch_full.state_dict()))
 
     torch.manual_seed(7)
-    _tf = int(os.environ.get("AUDIO_T_FRAMES", "601"))  # 601 mel frames ≈ the 6s girl clip
+    _tf = int(_tt_public_getenv("AUDIO_T_FRAMES", "601"))  # 601 mel frames ≈ the 6s girl clip
     mel = torch.randn(1, 2, _tf, 64, dtype=torch.float32) * 0.5
     tt = tt_full(mel)
     out_un = tt_un(mel)
@@ -1043,7 +1044,7 @@ def _flush_forward_after(module, mesh_device):
 
 
 @pytest.mark.skipif(
-    os.environ.get("LTX_AUDIO_PROF") != "1",
+    _tt_public_getenv("LTX_AUDIO_PROF") != "1",
     reason="Tracy profiling workload — run via test_audio_decode_perf_table, or manually with "
     "LTX_AUDIO_PROF=1 python -m tracy -p -r -o <out> -m pytest '<file>::test_audio_decode_profile' -s",
 )
@@ -1133,7 +1134,7 @@ def test_audio_decode_profile(mesh_device, device_params):
 
 
 @pytest.mark.skipif(
-    os.environ.get("LTX_AUDIO_PROF") != "1",
+    _tt_public_getenv("LTX_AUDIO_PROF") != "1",
     reason="Tracy driver — run: LTX_AUDIO_PROF=1 LTX_CHECKPOINT=<distilled> pytest "
     "'<file>::test_audio_decode_perf_table' -s",
 )

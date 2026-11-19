@@ -30,6 +30,7 @@ Recalibrating one generation: set its ``expected_ns`` to ``None`` and the test m
 without gating, printing the value to set it back to. Do that on any box whose baseline you need to
 re-cut. Both generations run in one job (``kimi_moe_perf``); select one with ``-k k2_6`` / ``-k k3``.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass, field
@@ -69,7 +70,7 @@ _RECORD_TIMEOUT_S = 5.0
 
 # The team gates perf on the 14kW hosts. Set this to run anywhere for bring-up, where the
 # baseline describes nothing and only "does it run" is being checked.
-_IGNORE_POWER = os.environ.get("KIMI_MOE_PERF_IGNORE_POWER") == "1"
+_IGNORE_POWER = _tt_public_getenv("KIMI_MOE_PERF_IGNORE_POWER") == "1"
 
 
 @dataclass(frozen=True)

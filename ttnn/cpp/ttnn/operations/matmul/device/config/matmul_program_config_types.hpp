@@ -78,6 +78,11 @@ struct MatmulMultiCoreReuseMultiCastDRAMShardedProgramConfig {
     std::size_t per_core_N{};
     std::optional<ttnn::operations::unary::UnaryWithParam> fused_activation;
     std::size_t num_workers_per_dram_bank = 1;
+    // tt-stack 0040 (lift of tenstorrent/tt-metal #58922): 0 keeps the single-reader / multi-reader factory.
+    // N > 0 selects the multi-core decode variant (M = one tile): N cores next to each DRAM bank split that
+    // bank's weight columns, every core accumulates its whole K in fp32 Dest, and in0_block_w becomes the K
+    // tiles per streamed weight block.
+    std::size_t cores_per_bank = 0;
 };
 
 struct MatmulMultiCoreReuseMultiCastBatchedDRAMShardedProgramConfig {

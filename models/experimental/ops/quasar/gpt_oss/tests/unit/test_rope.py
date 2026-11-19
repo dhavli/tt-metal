@@ -7,6 +7,7 @@ Unit tests for GPT-OSS RoPE (Rotary Position Embedding) implementation.
 This module compares our rope setup (sin/cos embedding matrices) with the
 HuggingFace transformers reference implementation.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import pytest
 import torch
@@ -208,7 +209,7 @@ def test_rope_vs_hf_reference(mesh_device, device_params, seq_len, max_local_bat
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -304,7 +305,7 @@ def test_rope_pytorch_vs_hf_reference(mesh_device, device_params, seq_len, reset
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -379,7 +380,7 @@ def test_rope_scaling_parameters(mesh_device, device_params, reset_seeds):
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -457,7 +458,7 @@ def test_rope_embedding_lookup_multi_user(mesh_device, device_params, batch_size
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -574,7 +575,7 @@ def test_rope_embedding_lookup_users_row_sharded(mesh_device, device_params, max
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -906,7 +907,7 @@ def test_rope_yarn_values_match_hf(mesh_device, device_params, reset_seeds):
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -961,7 +962,7 @@ def test_trace_rope_ops_for_corruption(mesh_device, device_params, reset_seeds):
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -1196,7 +1197,7 @@ def test_rope_multiple_iterations(mesh_device, device_params, reset_seeds):
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -1332,7 +1333,7 @@ def test_paged_update_cache_with_large_values(mesh_device, device_params, reset_
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -1530,7 +1531,7 @@ def test_sdpa_with_large_q_values(mesh_device, device_params, reset_seeds):
     """
     import os
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -1777,7 +1778,7 @@ def test_attention_chain_with_yarn_scaling(mesh_device, device_params, reset_see
 
     from models.experimental.ops.quasar.gpt_oss.tt.model import create_rope_setup
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 
@@ -2043,7 +2044,7 @@ def test_single_layer_with_yarn(mesh_device, device_params, reset_seeds, use_yar
 
     from models.experimental.ops.quasar.gpt_oss.tt.model import create_rope_setup
 
-    model_path = os.getenv("HF_MODEL")
+    model_path = _tt_public_getenv("HF_MODEL")
     if model_path is None:
         pytest.skip("HF_MODEL environment variable not set")
 

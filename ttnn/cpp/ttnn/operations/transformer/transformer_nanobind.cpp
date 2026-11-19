@@ -16,6 +16,10 @@
 #include "concatenate_heads/concatenate_heads_nanobind.hpp"
 #include "gated_delta_attn/gated_delta_attn_nanobind.hpp"
 #include "chunk_gated_delta_rule/chunk_gated_delta_rule_nanobind.hpp"
+#include "decode_gated_delta_rule/decode_gated_delta_rule_nanobind.hpp"
+#include "gdn_conv_gates/gdn_conv_gates_nanobind.hpp"
+#include "gdn_norm_gate/gdn_norm_gate_nanobind.hpp"
+#include "attn_prep/attn_prep_nanobind.hpp"
 #include "sdpa/sdpa_nanobind.hpp"
 #include "sdpa_config.hpp"
 #include "sdpa_decode/sdpa_decode_nanobind.hpp"
@@ -32,6 +36,10 @@ void py_module(nb::module_& mod) {
                 std::size_t,
                 std::size_t,
                 std::optional<bool>,
+                uint32_t,
+                bool,
+                bool,
+                uint32_t,
                 uint32_t>(),
             nb::kw_only(),
             nb::arg("compute_with_storage_grid_size"),
@@ -39,23 +47,36 @@ void py_module(nb::module_& mod) {
             nb::arg("q_chunk_size").noconvert(),
             nb::arg("k_chunk_size").noconvert(),
             nb::arg("exp_approx_mode") = nb::none(),
-            nb::arg("max_cores_per_head_batch") = 16)
+            nb::arg("max_cores_per_head_batch") = 16,
+            nb::arg("gqa_kv_mcast") = false,
+            nb::arg("gqa_kv_mcast_pairs") = false,
+            nb::arg("reader_barrier_tiles") = 0,
+            nb::arg("kv_cb_slots") = 0)
         .def_rw("compute_with_storage_grid_size", &SDPAProgramConfig::compute_with_storage_grid_size)
         .def_rw("sub_core_grids", &SDPAProgramConfig::sub_core_grids)
         .def_rw("q_chunk_size", &SDPAProgramConfig::q_chunk_size)
         .def_rw("k_chunk_size", &SDPAProgramConfig::k_chunk_size)
         .def_rw("exp_approx_mode", &SDPAProgramConfig::exp_approx_mode)
         .def_rw("max_cores_per_head_batch", &SDPAProgramConfig::max_cores_per_head_batch)
+        .def_rw("gqa_kv_mcast", &SDPAProgramConfig::gqa_kv_mcast)
+        .def_rw("gqa_kv_mcast_pairs", &SDPAProgramConfig::gqa_kv_mcast_pairs)
+        .def_rw("reader_barrier_tiles", &SDPAProgramConfig::reader_barrier_tiles)
+        .def_rw("kv_cb_slots", &SDPAProgramConfig::kv_cb_slots)
         .def("__repr__", [](const SDPAProgramConfig& config) {
             return fmt::format(
                 "SDPAProgramConfig(compute_with_storage_grid_size={}, sub_core_grids={}, q_chunk_size={}, "
-                "k_chunk_size={}, exp_approx_mode={}, max_cores_per_head_batch={})",
+                "k_chunk_size={}, exp_approx_mode={}, max_cores_per_head_batch={}, gqa_kv_mcast={}, "
+                "gqa_kv_mcast_pairs={}, reader_barrier_tiles={}, kv_cb_slots={})",
                 config.compute_with_storage_grid_size,
                 config.sub_core_grids,
                 config.q_chunk_size,
                 config.k_chunk_size,
                 config.exp_approx_mode,
-                config.max_cores_per_head_batch);
+                config.max_cores_per_head_batch,
+                config.gqa_kv_mcast,
+                config.gqa_kv_mcast_pairs,
+                config.reader_barrier_tiles,
+                config.kv_cb_slots);
         });
 
     nb::class_<PagedCacheGeometryOverride>(mod, "PagedCacheGeometryOverride")
@@ -77,6 +98,10 @@ void py_module(nb::module_& mod) {
     bind_sdpa_decode(mod);
     bind_gated_delta_attn_seq(mod);
     bind_chunk_gated_delta_rule(mod);
+    bind_decode_gated_delta_rule(mod);
+    bind_gdn_conv_gates(mod);
+    bind_gdn_norm_gate(mod);
+    bind_attn_prep(mod);
 }
 
 }  // namespace ttnn::operations::transformer

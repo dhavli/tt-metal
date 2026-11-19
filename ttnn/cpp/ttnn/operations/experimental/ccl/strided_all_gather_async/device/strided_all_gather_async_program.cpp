@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -476,7 +477,7 @@ StridedAllGatherAsyncProgramFactory::strided_all_gather_async_minimal_default_he
     std::map<std::string, std::string> agg_defines;
 
     // Streaming matmul signal: deliver each chunk's M-rows as IN0_SUB_CHUNKS row-bands, one aggregator inc per band
-    const char* in0_sub_chunks_env = std::getenv("IN0_SUB_CHUNKS");
+    const char* in0_sub_chunks_env = tt_stack_public::getenv("IN0_SUB_CHUNKS");
     const std::string in0_sub_chunks_str = (in0_sub_chunks_env != nullptr) ? in0_sub_chunks_env : "1";
     // Only the aggregator emits one matmul signal per band; the reader-signaled path emits one per chunk, which the
     // matmul's per-band waits would outrun.

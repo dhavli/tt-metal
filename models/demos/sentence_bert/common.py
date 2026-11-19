@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 
@@ -21,11 +22,11 @@ def load_config(config_name="configs/config.json"):
 
 
 def load_torch_model(reference_model, target_prefix="", model_location_generator=None):
-    if model_location_generator == None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator == None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         torch_model = transformers.AutoModel.from_pretrained(
             "emrecan/bert-base-turkish-cased-mean-nli-stsb-tr",
             revision="c4d66371214a20c0c91a39c83351ddc24f398800",
-            local_files_only=os.getenv("CI") == "true",
+            local_files_only=_tt_public_getenv("CI") == "true",
         )
         state_dict = torch_model.state_dict()
     else:

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import pickle
 import re
@@ -12,7 +13,7 @@ import pytz
 from loguru import logger
 
 # Decouple dependency of model tests on infra folder unless running in CI
-IS_CI_ENV = os.getenv("CI") == "true"
+IS_CI_ENV = _tt_public_getenv("CI") == "true"
 if IS_CI_ENV:
     from infra.data_collection.pydantic_models import BenchmarkMeasurement, PartialBenchmarkRun
 else:

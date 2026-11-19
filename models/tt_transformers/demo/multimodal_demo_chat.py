@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from pathlib import Path
 from typing import Optional
@@ -32,7 +33,7 @@ from models.tt_transformers.tt.generator import Generator
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -51,7 +52,7 @@ def test_multimodal_demo_chat(
     max_gen_len: Optional[int] = 200,
     model_parallel_size: Optional[int] = None,
 ):
-    ckpt_dir = os.environ["HF_MODEL"]
+    ckpt_dir = _tt_public_getitem('HF_MODEL')
 
     logger.info(f"Creating reference model from checkpoint in '{ckpt_dir}'")
     if target == "cpu":

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import numpy as np
@@ -18,7 +19,7 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
 def _debug_mtp_enabled() -> bool:
-    return os.getenv("DEEPSEEK_DEBUG_MTP", "0") == "1"
+    return _tt_public_getenv("DEEPSEEK_DEBUG_MTP", "0") == "1"
 
 
 def create_paged_kvpe_cache(device, num_users, max_seq_len, head_dim, num_blocks, block_size, mapping):

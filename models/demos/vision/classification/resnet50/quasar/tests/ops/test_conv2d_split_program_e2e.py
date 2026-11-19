@@ -18,6 +18,7 @@ Run (emulator / WH, slow dispatch + forced JIT; the split env is set inside the 
   TT_METAL_SLOW_DISPATCH_MODE=1 TT_METAL_FORCE_JIT_COMPILE=1 \
   pytest -s models/demos/vision/classification/resnet50/quasar/tests/ops/test_conv2d_split_program_e2e.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -112,7 +113,7 @@ def _run(
     )
 
     # Two-program split: Program A tilize + Program B matmul.
-    saved = {k: os.environ.get(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
+    saved = {k: _tt_public_getenv(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
     if use_split:
         os.environ["TT_METAL_QSR_CONV_SPLIT_PROGRAM"] = "1"
     else:
@@ -436,7 +437,7 @@ def test_quasar_bottleneck_integration(mesh_device):
         )
         return out, oh, ow
 
-    saved = {k: os.environ.get(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
+    saved = {k: _tt_public_getenv(k) for k in ("TT_METAL_QSR_CONV_SPLIT_PROGRAM",)}
     os.environ["TT_METAL_QSR_CONV_SPLIT_PROGRAM"] = "1"  # auto-splits conv2 (3x3, K<=72) via force_conv_no_spill
     try:
         c1, h1, w1o = _conv(tt_x, w1, b1, C_IN, C_MID, 1, 0, H, W, relu=True)

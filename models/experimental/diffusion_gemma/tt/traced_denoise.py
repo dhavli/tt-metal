@@ -15,6 +15,7 @@ The supported path is deliberately narrow:
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -92,7 +93,7 @@ def upfront_capture_enabled() -> bool:
     (slower, and the supported choice when per-step trajectory records are
     needed — replayed traces do not produce them).
     """
-    return os.environ.get("DG_UPFRONT_CAPTURE", "1").lower() in ("1", "true", "yes", "on")
+    return _tt_public_getenv("DG_UPFRONT_CAPTURE", "1").lower() in ("1", "true", "yes", "on")
 
 
 def prefix_borrow_enabled() -> bool:
@@ -103,12 +104,12 @@ def prefix_borrow_enabled() -> bool:
     (the downstream concat copies the bytes it needs). ``DG_PREFIX_BORROW=0`` restores the clone
     — it exists to A/B the change on device and as an escape hatch.
     """
-    return os.environ.get("DG_PREFIX_BORROW", "1").lower() not in ("0", "false", "no", "off")
+    return _tt_public_getenv("DG_PREFIX_BORROW", "1").lower() not in ("0", "false", "no", "off")
 
 
 def _resolve_reveal_pmax(adapter) -> int:
     """Resolve and validate the fixed prefix span used by every captured trace."""
-    raw = os.environ.get("DG_DENOISE_REVEAL_PMAX", "").strip()
+    raw = _tt_public_getenv("DG_DENOISE_REVEAL_PMAX", "").strip()
     if _ACTIVE_REVEAL_PMAX is not None:
         p_max = _ACTIVE_REVEAL_PMAX
     elif not raw:

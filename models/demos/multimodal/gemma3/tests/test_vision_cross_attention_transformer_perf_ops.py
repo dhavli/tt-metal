@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from collections import defaultdict
@@ -28,7 +29,7 @@ _PERF_TARGETS_DIR = "models/demos/multimodal/gemma3/tests/perf_targets"
 
 
 def _infer_mesh_device_name():
-    env = os.environ.get("MESH_DEVICE")
+    env = _tt_public_getenv("MESH_DEVICE")
     if env:
         return env
     n = ttnn.get_num_devices()

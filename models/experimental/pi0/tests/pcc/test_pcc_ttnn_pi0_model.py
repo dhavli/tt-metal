@@ -15,6 +15,7 @@ Config:
 Usage:
     pytest test_pcc_ttnn_pi0_model.py -v
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import sys
 import os
@@ -42,7 +43,7 @@ from models.experimental.pi0.common.weight_loader import PI0WeightLoader
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-TT_METAL_HOME = os.environ.get("TT_METAL_HOME")
+TT_METAL_HOME = _tt_public_getenv("TT_METAL_HOME")
 if not TT_METAL_HOME:
     raise EnvironmentError("TT_METAL_HOME environment variable is not set")
 CHECKPOINT_PATH = os.path.join(TT_METAL_HOME, "models/experimental/pi0/weights/pi0_base")

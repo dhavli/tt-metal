@@ -9,6 +9,7 @@ Torch references use diffusers LTX-2 VAE modules (mirrors test_vae_wan2_1.py / t
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from typing import Any
@@ -741,7 +742,7 @@ def _build_tt_decoder(mesh):
     torch_decoder.load_state_dict(state)
 
     # num_links=2 mirrors the BH production device config; NP_LINKS probes the W-transport bound.
-    ccl_manager = CCLManager(mesh, topology=ttnn.Topology.Linear, num_links=int(os.environ.get("NP_LINKS", "2")))
+    ccl_manager = CCLManager(mesh, topology=ttnn.Topology.Linear, num_links=int(_tt_public_getenv("NP_LINKS", "2")))
     parallel_config = VaeHWParallelConfig(
         height_parallel=ParallelFactor(factor=tuple(mesh.shape)[0], mesh_axis=0),
         width_parallel=ParallelFactor(factor=tuple(mesh.shape)[1], mesh_axis=1),

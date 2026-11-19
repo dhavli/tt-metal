@@ -9,6 +9,7 @@ This test suite verifies:
 2. RMSNorm2D class matches PyTorch/HuggingFace reference model
 3. RMSNorm2D correctly rejects non-TG devices
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -201,7 +202,7 @@ def test_rmsnorm_2d_vs_reference(
 
     # Create LazyWeights
     ttnn.SetDefaultDevice(ttnn_mesh_device)
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rmsnorm_2d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/rmsnorm_2d"))
 
     lazy_weight = LazyWeight(
         source=weight_torch,
@@ -246,7 +247,7 @@ def test_rmsnorm_2d_vs_reference(
 
 
 # Get HF model name from environment variable or use default
-HF_MODEL_NAME = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+HF_MODEL_NAME = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 
 
 @pytest.mark.parametrize(
@@ -291,7 +292,7 @@ def test_rmsnorm_2d_vs_reference_from_model_args(ttnn_mesh_device: ttnn.MeshDevi
     tt_ccl = TT_CCL(ttnn_mesh_device)
 
     # Build RMSNorm2D via from_model_args
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/rmsnorm_2d_from_args"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/rmsnorm_2d_from_args"))
     tt_model = RMSNorm2D.from_model_args(
         mesh_device=ttnn_mesh_device,
         tt_ccl=tt_ccl,

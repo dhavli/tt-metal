@@ -23,6 +23,7 @@
 #      (18 -> 20 for tp=4); SP sharding uses ring attention (or K/V gather + mask).
 # =============================================================================
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 
@@ -51,7 +52,7 @@ from ....utils.test import line_params, ring_params
 
 # Real shipped fp8 checkpoint (ideogram-ai/ideogram-4-fp8), dequantized to bf16. Override via
 # env for CI. Used by the weights="real" parametrizations (weights="random" uses fresh init).
-FP8 = os.environ.get("IDEOGRAM4_WEIGHTS")
+FP8 = _tt_public_getenv("IDEOGRAM4_WEIGHTS")
 # Real-weight cases need the gated fp8 checkpoint; skip (don't error) when it isn't configured.
 _NEEDS_WEIGHTS = pytest.mark.skipif(not FP8, reason="IDEOGRAM4_WEIGHTS not set (gated fp8 checkpoint)")
 

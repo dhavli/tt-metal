@@ -11,6 +11,7 @@ helpers; this module owns the real denoise attention wiring.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -207,7 +208,7 @@ def hide_prefill_pads_enabled() -> bool:
     prompt_len-independent steady state. The full-attention layers read the whole p_max prefix and
     keep hiding the pads for the whole run.
     """
-    return os.environ.get("DG_DENOISE_HIDE_PREFILL_PADS", "1").lower() in ("1", "true", "yes", "on")
+    return _tt_public_getenv("DG_DENOISE_HIDE_PREFILL_PADS", "1").lower() in ("1", "true", "yes", "on")
 
 
 def prefill_pad_span(true_prompt_len: int | None, padded_prompt_len: int | None):
@@ -235,7 +236,7 @@ def denoise_sliding_window_enabled() -> bool:
 
     Set ``DG_DENOISE_SLIDING_WINDOW=0`` to restore the old maskless behaviour.
     """
-    return os.environ.get("DG_DENOISE_SLIDING_WINDOW", "1").lower() in ("1", "true", "yes", "on")
+    return _tt_public_getenv("DG_DENOISE_SLIDING_WINDOW", "1").lower() in ("1", "true", "yes", "on")
 
 
 def _layer_type_for_denoise(tt_model, layer_idx: int) -> str | None:
@@ -250,7 +251,7 @@ def _sliding_window_for_denoise(tt_model, layer_idx: int) -> int | None:
     # Validation-only override. The real window masks too few keys to reliably flip an argmax,
     # so an end-to-end output A/B cannot prove the plumbing is live; forcing a small window
     # makes the effect unmistakable.
-    override = os.environ.get("DG_DENOISE_SLIDING_WINDOW_OVERRIDE", "").strip()
+    override = _tt_public_getenv("DG_DENOISE_SLIDING_WINDOW_OVERRIDE", "").strip()
     if override:
         value = int(override)
         if value <= 0:
@@ -663,7 +664,7 @@ _SKIP_TOKENS = frozenset(
 
 
 def _skip_components() -> frozenset:
-    raw = os.environ.get("DG_SKIP", "")
+    raw = _tt_public_getenv("DG_SKIP", "")
     tokens = frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
     unknown = tokens - _SKIP_TOKENS
     if unknown:
@@ -1395,7 +1396,7 @@ class DenoiseLogitsAdapter:
         self.tt_model = tt_model
         self.prompt_hidden_by_layer = prompt_hidden_by_layer
         self.prompt_len = prompt_len
-        disable_self_conditioning = os.environ.get("DG_DISABLE_SELF_CONDITIONING", "0") == "1"
+        disable_self_conditioning = _tt_public_getenv("DG_DISABLE_SELF_CONDITIONING", "0") == "1"
         self.self_conditioning = None if disable_self_conditioning else self_conditioning
         self.self_conditioning_embedding_weight = (
             None if disable_self_conditioning else self_conditioning_embedding_weight

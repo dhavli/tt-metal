@@ -93,7 +93,9 @@ tt::tt_metal::ProgramDescriptor ChunkGatedDeltaRuleProgramFactory::create_descri
         head_cores[h] = CoreCoord{h / grid_y, h % grid_y};
         core_set.insert(CoreRange{head_cores[h], head_cores[h]});
     }
-    CoreRangeSet cores{core_set};
+    // cfx 0030: merge the per-core ranges into rectangles (same cores). A set of single-core ranges makes
+    // dispatch pay per range and per CB: ~35 us per program at 96 cores x 30 CBs ([source validation record]).
+    CoreRangeSet cores = CoreRangeSet{core_set}.merge_ranges();
 
     ProgramDescriptor desc;
     auto add_cb = [&](uint32_t idx, uint32_t n_tiles, uint32_t nbuf = 1, tt::DataFormat fmt = tt::DataFormat::Float32) {

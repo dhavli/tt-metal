@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
@@ -59,7 +60,7 @@ class SentenceBERTPerformanceRunnerInfra:
         self.sequence_length = sequence_length
         config = transformers.BertConfig.from_pretrained(
             "emrecan/bert-base-turkish-cased-mean-nli-stsb-tr",
-            local_files_only=os.getenv("CI") == "true",
+            local_files_only=_tt_public_getenv("CI") == "true",
         )
         self.torch_model = BertModel(config).to(torch.bfloat16)
         self.torch_model = load_torch_model(

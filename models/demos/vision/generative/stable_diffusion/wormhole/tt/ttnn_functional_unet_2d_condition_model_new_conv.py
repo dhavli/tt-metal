@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -183,7 +184,7 @@ class UNet2DConditionModel:
 
         logger.info(f"COU: height: {input_height}, width: {input_width}, dim: {2 * input_height * input_width}")
 
-        self.fallback_on_groupnorm = os.environ.get("FALLBACK_ON_GROUPNORM", "0") == "1"
+        self.fallback_on_groupnorm = _tt_public_getenv("FALLBACK_ON_GROUPNORM", "0") == "1"
         self.norm_num_groups = 32
         (
             self.gn_expected_input_sharded_memory_config,

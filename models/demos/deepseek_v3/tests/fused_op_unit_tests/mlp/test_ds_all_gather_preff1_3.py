@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 
@@ -99,7 +100,7 @@ def _run_ds_all_gather_preff1_3_test(
         tt_output_torch, ref_output, expected_pcc, expected_atol, expected_rtol
     )
 
-    if os.getenv(DEVICE_PERF_ENV_VAR) is None:
+    if _tt_public_getenv(DEVICE_PERF_ENV_VAR) is None:
         perf_profiler = BenchmarkProfiler()
         benchmark_data = BenchmarkData()
         trace_suffix = "trace" if trace_mode else "no_trace"
@@ -158,7 +159,7 @@ def _run_ds_all_gather_preff1_3_test(
                 "trace": trace_mode,
                 "program_cache_enabled": program_cache_enabled,
                 "module": "mlp",
-                "mesh_device": os.getenv("MESH_DEVICE", "TG"),
+                "mesh_device": _tt_public_getenv("MESH_DEVICE", "TG"),
                 "op_type": "all_gather",
             },
         )
@@ -284,7 +285,7 @@ def _build_all_gather_inputs(
             0.2,
             0.2,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
         ),
         pytest.param(
             "prefill",
@@ -293,7 +294,7 @@ def _build_all_gather_inputs(
             0.2,
             0.2,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
         ),
         pytest.param(
             "prefill",
@@ -302,7 +303,7 @@ def _build_all_gather_inputs(
             0.2,
             0.2,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
         ),
         pytest.param(
             "prefill",
@@ -311,7 +312,7 @@ def _build_all_gather_inputs(
             0.2,
             0.2,
             0.0,
-            marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI"),
+            marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI"),
         ),
     ],
 )
@@ -392,10 +393,10 @@ def test_ds_all_gather_preff1_3(
     [
         ("decode", 1),
         ("prefill", 128),
-        pytest.param("prefill", 1024, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 8192, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 32768, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 131072, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 1024, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 8192, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 32768, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 131072, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
     ],
 )
 def test_ds_all_gather_preff1_3_device_perf(mode, seq_len):
@@ -405,7 +406,7 @@ def test_ds_all_gather_preff1_3_device_perf(mode, seq_len):
         assert mode == "prefill", "Unsupported mode"
         maybe_skip_long_seq(seq_len, LONG_SEQ_ENV_VAR)
 
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError("Environment variable $MESH_DEVICE is not set. Please set it to T3K, DUAL, QUAD, or TG.")
     mesh_shape = system_name_to_mesh_shape(requested_system_name.upper())

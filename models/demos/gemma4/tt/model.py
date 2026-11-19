@@ -14,6 +14,7 @@ Architecture:
 Supports both prefill and decode modes with paged attention.
 Compatible with tt_transformers Generator interface.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 
 import os
@@ -279,7 +280,7 @@ class Gemma4Model:
         # Non-PLI keeps device token/pos continuity for async decode (#51186).
         # Debug/kill-switch: GEMMA4_ALWAYS_REFRESH_DECODE=1 forces host restage
         # (disables async-safe continuity; platform will also disable async).
-        force_refresh = os.environ.get("GEMMA4_ALWAYS_REFRESH_DECODE", "0").lower() in (
+        force_refresh = _tt_public_getenv("GEMMA4_ALWAYS_REFRESH_DECODE", "0").lower() in (
             "1",
             "true",
             "yes",
@@ -2202,7 +2203,7 @@ def _apply_gemma4_single_untilize_override(tt_sampling) -> None:
     Enabled on both arches; override with ``GEMMA4_SAMPLING_SINGLE_UNTILIZE``
     (1 = force on, 0 = force off) to fall back to upstream chunking.
     """
-    env = os.environ.get("GEMMA4_SAMPLING_SINGLE_UNTILIZE")
+    env = _tt_public_getenv("GEMMA4_SAMPLING_SINGLE_UNTILIZE")
     if env is not None:
         enable = env.lower() in ("1", "true", "yes")
     else:

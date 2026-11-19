@@ -24,6 +24,9 @@ Notes:
   that with identical math (see tests/.../test_gdn_phased_perchunk.py).
 * GVA (Nk<Nv) head expansion is done inside the fused op; we pass q/k with Nk heads.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
+
+import os
 
 import torch
 from loguru import logger
@@ -31,8 +34,131 @@ from loguru import logger
 import ttnn
 from models.experimental.gated_attention_gated_deltanet.tt.ttnn_delta_rule_ops import l2_norm_ttnn
 
+from . import prep_opt
+from . import upmath
+
 # The chunk size the fused op runs at (same math as 128, different internal tiling).
 _FUSED_CHUNK_SIZE = 32
+
+
+_SCAN_FID_LOGGED = set()
+
+# ---------------------------------------------------------------- patches/tt-metal/0048 (GDN fused producer pool)
+# QWEN36_GDN_FUSED_POOL=1         upstream #58891: one pool of producers (home per head + extras on the free cores)
+# QWEN36_GDN_PREP_ONEBLOCK=1      the #58926-class fix: the prep's ck-tile scratch blocks off scr1 (latent overrun)
+# Both read per call by the C++ op (banner "<FLAG> engaged"), both bit-exact by construction. `mustfail` makes the
+# kernels compute a wrong result, which this self-test must REFUSE. QWEN36_GDN_POOL_SELFTEST=0 skips it (op probes only).
+_POOL_FLAGS = ("QWEN36_GDN_FUSED_POOL", "QWEN36_GDN_PREP_ONEBLOCK")
+_POOL_SELFTEST_DONE = set()  # flag tuples that passed in this process (a served arm switch with new flags re-runs)
+
+
+def _pool_flags():
+    """The engaged 0048 flags {name: '1' | 'mustfail'} (empty when both are off)."""
+    out = {}
+    for k in _POOL_FLAGS:
+        v = _tt_public_getenv(k, "").strip()
+        if v in ("", "0"):
+            continue
+        if v not in ("1", "mustfail"):
+            raise ValueError(f"{k}={v!r}: expected unset, 0, 1 or mustfail")
+        out[k] = v
+    return out
+
+
+def _bitdiff(a, b):
+    """Differing elements between two mesh tensors, per device, compared as raw bits."""
+    n = 0
+    for x, y in zip(ttnn.get_device_tensors(a), ttnn.get_device_tensors(b)):
+        xt, yt = ttnn.to_torch(x), ttnn.to_torch(y)
+        if xt.shape != yt.shape or xt.dtype != yt.dtype:
+            n += xt.numel()
+            continue
+        iv = torch.int32 if xt.element_size() == 4 else torch.int16
+        n += int((xt.contiguous().view(iv) != yt.contiguous().view(iv)).sum())
+    return n
+
+
+def _pool_selftest(run, v, cand, desc):
+    """Fail-closed warmup self-test, once per process per flag set, on the first fused call (the eager chunk-prefill
+    warmup, before any trace capture). `run(v)` runs the op on these live inputs with value tensor v; `cand` is the
+    (o, final_state) this call already produced with the arm's flags.
+      rung 1: both 0048 flags forced off (the CONTROL program) vs `cand`: o and final state must be BITWISE equal on
+              every device;
+      rung 2 (wrong input): the arm's program on -v must DIFFER from rung 1's reference, i.e. the comparison can see a
+              wrong result; if it cannot, the self-test itself is void and the boot is refused.
+    Raises -> the boot is refused. QWEN36_GDN_FUSED_POOL / _PREP_ONEBLOCK = mustfail must end here."""
+    flags = _pool_flags()
+    key = tuple(sorted(flags.items()))
+    if key in _POOL_SELFTEST_DONE or _tt_public_getenv("QWEN36_GDN_POOL_SELFTEST", "1") == "0":
+        return
+    if upmath.mode():
+        # cfx 0058: the upstream-math program is not bitwise to the pre-0048 one (its own self-test bounds it against
+        # CONTROL), so this bitwise rung runs entirely with QWEN36_GDN_FUSED_UPMATH off: the candidate is recomputed
+        # with the arm's pool flags, the reference turns them off as below.
+        with upmath.forced(""):
+            cand = run(v)
+            try:
+                _pool_selftest_body(run, v, cand, desc, flags, key)
+            finally:
+                for t in cand:
+                    ttnn.deallocate(t)
+        return
+    _pool_selftest_body(run, v, cand, desc, flags, key)
+
+
+def _pool_selftest_body(run, v, cand, desc, flags, key):
+    saved = {k: _tt_public_getenv(k) for k in _POOL_FLAGS}
+    try:
+        for k in _POOL_FLAGS:
+            os.environ[k] = "0"
+        # cfx 0056: the prep flags require ONEBLOCK (the op TT_FATALs otherwise), and this reference turns ONEBLOCK
+        # off, so it also turns them off: the reference stays the pre-0048 program and the candidate keeps them.
+        if prep_opt.enabled():
+            with prep_opt.variant(()):
+                ref = run(v)
+        else:
+            ref = run(v)
+    finally:
+        for k, val in saved.items():
+            if val is not None:
+                os.environ[k] = val
+    vn = ttnn.neg(v, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    try:
+        wrong = run(vn)
+    finally:
+        ttnn.deallocate(vn)
+    d_cand = [_bitdiff(r, c) for r, c in zip(ref, cand)]
+    d_wrong = [_bitdiff(r, w) for r, w in zip(ref, wrong)]
+    for t in list(ref) + list(wrong):
+        ttnn.deallocate(t)
+    eng = ",".join(f"{k}={val}" for k, val in flags.items())
+    if any(d_cand) or not all(d_wrong):
+        raise RuntimeError(
+            f"QWEN36_GDN_FUSED_POOL self-test REFUSED ({eng}; {desc}): differing (o, final_state) elements vs the "
+            f"CONTROL program {d_cand} (must be 0), wrong-input rung {d_wrong} (must be > 0)"
+            + (" -- mustfail: expected" if "mustfail" in flags.values() else ""))
+    _POOL_SELFTEST_DONE.add(key)
+    logger.warning(
+        f"QWEN36_GDN_FUSED_POOL self-test exact ({eng}; {desc}): o and final state bitwise equal to the CONTROL program "
+        f"on every device; wrong-input rung differs in {d_wrong} elements")
+
+
+def _scan_cfg_kw(ref):
+    """c98 QWEN36_GDN_SCAN_FID=hifi4|hifi3|hifi2, read per call (wb set screens it without a reload): the math fidelity of
+    the fused prefill scan. fp32 DEST, no approx. hifi4 (default) passes nothing, so the op builds its own HiFi4 config
+    exactly as before. hifi3/hifi2 need an image with patches/tt-metal/0031 (vllm-tt:k2-mr-pk3n); older images TT_FATAL.
+    Numerics move (tier 2)."""
+    v = _tt_public_getenv("QWEN36_GDN_SCAN_FID", "hifi4").lower()
+    fids = {"hifi3": ttnn.MathFidelity.HiFi3, "hifi2": ttnn.MathFidelity.HiFi2}
+    if v == "hifi4":
+        return {}
+    if v not in fids:
+        raise ValueError(f"QWEN36_GDN_SCAN_FID={v!r}: expected hifi4, hifi3 or hifi2")
+    if v not in _SCAN_FID_LOGGED:
+        _SCAN_FID_LOGGED.add(v)
+        logger.info(f"QWEN36_GDN_SCAN_FID engaged: fused prefill chunk_gated_delta_rule at {v} (fp32 dest, no approx)")
+    return {"compute_kernel_config": ttnn.init_device_compute_kernel_config(
+        ref.device().arch(), math_fidelity=fids[v], math_approx_mode=False, fp32_dest_acc_en=True)}
 
 
 def fused_chunk_enabled():
@@ -101,6 +227,8 @@ def chunk_gated_delta_rule_fused_adapter(
     # host upload, illegal under trace); if None, the op builds them eagerly.
 ):
     global _logged_path
+    _prep_active = prep_opt.enabled()  # refuse invalid/simulator-only faults before launch
+    _upmath_active = upmath.mode()  # cfx 0058: strict parse (mustfail is ttsim-only) before launch
     if not _logged_path:
         logger.info(
             "[GDN] fused chunk_gated_delta_rule active: "
@@ -190,7 +318,35 @@ def chunk_gated_delta_rule_fused_adapter(
         tril=_tril,
         ones=_ones,
         masks=_masks,
+        **_scan_cfg_kw(q),
     )
+    if _pool_flags():
+        _pool_selftest(
+            lambda vv: ttnn.transformer.chunk_gated_delta_rule(
+                q, k, vv, g, beta, scale=scale, initial_state=s0, output_final_state=True,
+                chunk_size=_FUSED_CHUNK_SIZE, output_head_major=return_o_bh, eye=_eye, tril=_tril, ones=_ones,
+                masks=_masks, **_scan_cfg_kw(q)),
+            v, (o, final_state), f"T={T} Nv={Nv} Dk={Dk} Dv={Dv}")
+
+    if _prep_active:
+        # cfx 0056: the served program (this arm's pool/ONEBLOCK/WY/fidelity) with the prep edits vs the CONTROL
+        # program, bitwise on both chips, plus a wrong-g rung (gdn/prep_opt.py).
+        prep_opt.selftest(
+            lambda vv, gg: ttnn.transformer.chunk_gated_delta_rule(
+                q, k, vv, gg, beta, scale=scale, initial_state=s0, output_final_state=True,
+                chunk_size=_FUSED_CHUNK_SIZE, output_head_major=return_o_bh, eye=_eye, tril=_tril, ones=_ones,
+                masks=_masks, **_scan_cfg_kw(q)),
+            v, g, (o, final_state), f"T={T} Nv={Nv} Dk={Dk} Dv={Dv}")
+
+    if _upmath_active:
+        # cfx 0058: the upstream-math program vs the CONTROL program on these live inputs, a closeness bound on both
+        # chips (tier 2, not bitwise), plus a wrong-g rung that must land outside it (gdn/upmath.py).
+        upmath.selftest(
+            lambda vv, gg: ttnn.transformer.chunk_gated_delta_rule(
+                q, k, vv, gg, beta, scale=scale, initial_state=s0, output_final_state=True,
+                chunk_size=_FUSED_CHUNK_SIZE, output_head_major=return_o_bh, eye=_eye, tril=_tril, ones=_ones,
+                masks=_masks, **_scan_cfg_kw(q)),
+            v, g, (o, final_state), f"T={T} Nv={Nv} Dk={Dk} Dv={Dv}")
 
     if return_o_bh:
         # Op already returned head-major [B*Nv, T, Dv] in TILE — nothing to relayout.

@@ -17,6 +17,7 @@ loads weights direct-to-quant and the cache write holds the quantized tensorbins
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass
@@ -30,7 +31,7 @@ import ttnn
 # activations are not. On by default because the shipped 1080p tier is measured and VBench-gated with it
 # on; set to 0 to A/B against the weight-only preset. Keeping the SDPA input cast on this same knob means
 # a run can't narrow the linear activations while silently leaving SDPA at bf16 (or vice versa).
-LTX_QUANT_ACTIVATIONS = os.environ.get("LTX_QUANT_ACTIVATIONS", "1") in ("1", "true", "True")
+LTX_QUANT_ACTIVATIONS = _tt_public_getenv("LTX_QUANT_ACTIVATIONS", "1") in ("1", "true", "True")
 
 
 @dataclass(frozen=True)

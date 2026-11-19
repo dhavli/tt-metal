@@ -7,6 +7,7 @@ own path (``diffusers.modular_pipelines.minimax_h3`` at PR #14355): host gates a
 (drift is silent), the device VAE encode is PCC on real media. importorskips that branch."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -570,7 +571,7 @@ def _real_media() -> Path:
 
 
 def _weights_dir() -> Path:
-    directory = Path(os.environ.get("MINIMAX_H3_MODEL_PATH", ""))
+    directory = Path(_tt_public_getenv("MINIMAX_H3_MODEL_PATH", ""))
     if not directory.is_dir():
         pytest.skip("set MINIMAX_H3_MODEL_PATH to a diffusers snapshot of the checkpoint")
     return directory
@@ -702,7 +703,7 @@ def test_encode_references_matches_reference(mesh_device, case, reset_seeds):
 
 
 def _tokenizer():
-    weights = os.environ.get("MINIMAX_H3_MODEL_PATH")
+    weights = _tt_public_getenv("MINIMAX_H3_MODEL_PATH")
     if not weights or not (Path(weights) / "tokenizer").is_dir():
         pytest.skip("needs MINIMAX_H3_MODEL_PATH pointing at a diffusers snapshot with tokenizer/")
     from transformers import AutoTokenizer

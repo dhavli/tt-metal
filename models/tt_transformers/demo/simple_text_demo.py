@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import hashlib
 import json
 import math
@@ -853,7 +854,7 @@ def prepare_generator_args(
             "P150x4": (1, 4),
             "P150x8": (1, 8),
             "BHGLX": (8, 4),
-        }.get(os.environ.get("MESH_DEVICE"), get_default_mesh_device_param())
+        }.get(_tt_public_getenv("MESH_DEVICE"), get_default_mesh_device_param())
     ],
     indirect=True,
 )
@@ -887,7 +888,7 @@ def test_demo_text(
     """
     Simple demo with limited dependence on reference code.
     """
-    hf_dir = os.getenv("HF_MODEL", "")
+    hf_dir = _tt_public_getenv("HF_MODEL", "")
     num_devices = mesh_device.get_num_devices() if isinstance(mesh_device, ttnn.MeshDevice) else 1
 
     test_id = request.node.callspec.id
@@ -898,7 +899,7 @@ def test_demo_text(
             pytest.skip("CI only runs the tests with performance optimizations except for ci-token-matching case")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
     print_to_file = False  # Enable this flag to print the output of all users to a file
@@ -974,7 +975,7 @@ def test_demo_text(
         pytest.skip(f"Invalid number of DP groups: {data_parallel}, for {num_devices} devices")
 
     if is_ci_env:
-        hf_model = os.getenv("HF_MODEL", "")
+        hf_model = _tt_public_getenv("HF_MODEL", "")
         is_33_70b = "3.3-70B" in hf_model
         is_32_1b = "3.2-1B" in hf_model
         is_31_8b = "3.1-8B" in hf_model
@@ -987,7 +988,7 @@ def test_demo_text(
             pytest.skip("CI only runs hybrid Llama3 1b and 8b on T3K")
 
     if is_ci_v2_env:
-        hf_model = os.getenv("HF_MODEL", "")
+        hf_model = _tt_public_getenv("HF_MODEL", "")
         model_location = model_location_generator(hf_model, download_if_ci_v2=True, ci_v2_timeout_in_s=900)
         # update env var HF_MODEL to the model location
         os.environ["HF_MODEL"] = str(model_location)

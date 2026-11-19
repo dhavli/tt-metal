@@ -13,6 +13,7 @@ TP sharding (following gpt-oss pattern):
 - Norm weights: replicated across all devices
 - Allreduce after O_proj recombines results
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass
@@ -28,7 +29,7 @@ from models.demos.gemma4.utils.general_utils import get_cache_file_name
 # DRAM-width-sharded QKV / O-proj decode matmuls (same size as the interleaved
 # weight → no memory cost). On by default for tp>1; GEMMA4_ATTN_DRAM_SHARD=0
 # falls back to plain interleaved matmuls.
-_DRAM_SHARD_ATTN = os.environ.get("GEMMA4_ATTN_DRAM_SHARD", "1") != "0"
+_DRAM_SHARD_ATTN = _tt_public_getenv("GEMMA4_ATTN_DRAM_SHARD", "1") != "0"
 
 
 @dataclass(frozen=True)

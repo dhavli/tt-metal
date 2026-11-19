@@ -22,6 +22,7 @@ Run (craq-sim / emulator):
   TTNN_CONFIG_OVERRIDES='{"enable_fast_runtime_mode": false, "enable_logging": true}' \
   pytest -q models/demos/vision/classification/resnet50/quasar/tests/test_resnet50_layers_1_3.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -44,7 +45,7 @@ def test_resnet50_layers_1_3(device, use_pretrained_weight, model_location_gener
         pytest.skip("Test is not supported on n300 (8,7) grid")
 
     saved = {
-        k: os.environ.get(k)
+        k: _tt_public_getenv(k)
         for k in ("TT_METAL_QSR_RESNET_STOP_AFTER_LAYER3", "TT_METAL_QSR_CONV_SPLIT_PROGRAM", "RESNET_PCC_LOG")
     }
     os.environ["TT_METAL_QSR_RESNET_STOP_AFTER_LAYER3"] = "1"  # return the layer3 output; skip layer4/avgpool/fc

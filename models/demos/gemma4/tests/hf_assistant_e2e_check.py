@@ -14,17 +14,18 @@ post-norm hidden + shared_kv_states -> assistant). Two checks:
 
     python models/demos/gemma4/tests/hf_assistant_e2e_check.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 
 import torch
 from transformers import AutoTokenizer
 
-TARGET = os.getenv("HF_MODEL", "google/gemma-4-12B-it")
-ASSISTANT = os.getenv("GEMMA4_ASSISTANT_MODEL", "google/gemma-4-12B-it-assistant")
-DTYPE = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[os.getenv("GEMMA4_SPEC_DTYPE", "fp32")]
-PROMPT = os.getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
-N_GREEDY = int(os.getenv("GEMMA4_SPEC_CEILING_TOKENS", 64))
-DRAFT_LEN = int(os.getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
+TARGET = _tt_public_getenv("HF_MODEL", "google/gemma-4-12B-it")
+ASSISTANT = _tt_public_getenv("GEMMA4_ASSISTANT_MODEL", "google/gemma-4-12B-it-assistant")
+DTYPE = {"fp32": torch.float32, "bf16": torch.bfloat16, "fp16": torch.float16}[_tt_public_getenv("GEMMA4_SPEC_DTYPE", "fp32")]
+PROMPT = _tt_public_getenv("GEMMA4_SPEC_PROMPT", "Write a short paragraph about the history of the Eiffel Tower.")
+N_GREEDY = int(_tt_public_getenv("GEMMA4_SPEC_CEILING_TOKENS", 64))
+DRAFT_LEN = int(_tt_public_getenv("GEMMA4_SPEC_DRAFT_LEN", 4))
 
 
 def main():
@@ -49,7 +50,7 @@ def main():
     # TT target greedy chain. Compare to the HF self-ceiling (~1.62) and the TT
     # measured accept (~0.21): result ~0.2 => TT FEATURE precision is the wall;
     # result ~1.6 => residual TT DRAFTER forward bug.
-    if os.getenv("GEMMA4_SPEC_TT_FEATURES"):
+    if _tt_public_getenv("GEMMA4_SPEC_TT_FEATURES"):
         replay_tt_features(get_embed, asst)
         return
 
@@ -124,7 +125,7 @@ def replay_tt_features(get_embed, asst):
     target features + TT (not HF) greedy targets — so it attributes the 0.21 TT
     accept to features (HF drafter also low) vs a TT drafter bug (HF drafter high).
     """
-    path = os.environ["GEMMA4_SPEC_TT_FEATURES"]
+    path = _tt_public_getitem('GEMMA4_SPEC_TT_FEATURES')
     data = torch.load(path, weights_only=False)
     steps, greedy, K = data["steps"], data["greedy"], data["draft_len"]
     print(f"\n=== HF drafter on TT features vs TT greedy (K={K}) ===")
@@ -192,9 +193,9 @@ def acceptance_ceiling(tok, text_model, lm_head, get_embed, asst):
 
     # Replay drafter at each step; compare K drafts to the target greedy continuation.
     K = DRAFT_LEN
-    round_bf16 = os.getenv("GEMMA4_SPEC_ROUND_BF16") == "1"  # round drafter inputs to bf16 precision
+    round_bf16 = _tt_public_getenv("GEMMA4_SPEC_ROUND_BF16") == "1"  # round drafter inputs to bf16 precision
     noise = float(
-        os.getenv("GEMMA4_SPEC_NOISE", 0.0)
+        _tt_public_getenv("GEMMA4_SPEC_NOISE", 0.0)
     )  # relative gaussian noise std on seed+KV (emulate TT target fidelity)
 
     def _r(x):

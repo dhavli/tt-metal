@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -17,7 +18,7 @@ TT_DIT_TEST_GOLDEN_CACHE_DIR = "TT_DIT_TEST_GOLDEN_CACHE_DIR"
 
 def _golden_dir() -> Path | None:
     """Return the golden data directory from the environment, or None if not set."""
-    val = os.environ.get(TT_DIT_TEST_GOLDEN_CACHE_DIR)
+    val = _tt_public_getenv(TT_DIT_TEST_GOLDEN_CACHE_DIR)
     if val is None:
         return None
     return Path(val)

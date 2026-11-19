@@ -5,6 +5,7 @@
 ``models.demos.multimodal.gemma3.demo.vision_demo`` for the hybrid ShortConv/attention
 LFM2 text backbone + SigLIP2 vision tower.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import os
@@ -162,7 +163,7 @@ def _load_sample_dialogs(ocr_image):
             "N300": (1, 2),
             "P150": (1, 1),
             "P300": (1, 2),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -222,7 +223,7 @@ def test_multimodal_demo_text(
     from transformers import AutoProcessor
 
     processor = AutoProcessor.from_pretrained(
-        model_args[0].CKPT_DIR, local_files_only=os.getenv("CI") == "true", trust_remote_code=True
+        model_args[0].CKPT_DIR, local_files_only=_tt_public_getenv("CI") == "true", trust_remote_code=True
     )
 
     generator = Lfm25VlMultimodalGenerator(model, model_args, mesh_device)

@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import gc
 import inspect
 import os
@@ -99,7 +100,7 @@ class ModelArgs(TTModelArgs):
         # all HF calls (AutoConfig, tokenizer, weights) skip the refs/main lookup,
         # which is absent on some CI machines.  Left in env so sub-tests in the same
         # pytest session (e.g. siglip/test_attention.py) also get the absolute path.
-        hf_model = os.environ.get("HF_MODEL", "")
+        hf_model = _tt_public_getenv("HF_MODEL", "")
         if hf_model and not os.path.isabs(hf_model):
             snapshot = ModelArgs._resolve_hf_snapshot(hf_model)
             if snapshot:
@@ -190,8 +191,8 @@ class ModelArgs(TTModelArgs):
     @staticmethod
     def _resolve_hf_snapshot(hf_model_name):
         hf_cache = os.path.normpath(
-            os.environ.get("HF_HUB_CACHE")
-            or os.path.join(os.environ.get("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "hub")
+            _tt_public_getenv("HF_HUB_CACHE")
+            or os.path.join(_tt_public_getenv("HF_HOME", os.path.expanduser("~/.cache/huggingface")), "hub")
         )
         model_slug = "models--" + hf_model_name.replace("/", "--")
         snapshots_dir = os.path.normpath(os.path.join(hf_cache, model_slug, "snapshots"))

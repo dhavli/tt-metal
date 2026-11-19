@@ -9,6 +9,7 @@ This test suite verifies:
 2. LMHead1D matches torch.nn.Linear reference for logit computation
 3. from_model_args backward compatibility
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import math
 import os
@@ -287,7 +288,7 @@ def test_lm_head_1d_vs_reference(
 
     # Create LazyWeights (cache-backed for faster repeated runs)
     ttnn.SetDefaultDevice(ttnn_mesh_device)
-    cache_dir = Path(os.getenv("TT_CACHE_PATH", "model_cache/lm_head_1d"))
+    cache_dir = Path(_tt_public_getenv("TT_CACHE_PATH", "model_cache/lm_head_1d"))
     lazy_weights = []
     for i, split in enumerate(weight_splits):
         lazy_weights.append(

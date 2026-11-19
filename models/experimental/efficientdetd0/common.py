@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import os
 import subprocess
 
@@ -57,7 +58,7 @@ def load_torch_model_state(
         if not os.path.exists(weights_path):
             raise FileNotFoundError(f"Weights file not found at: {weights_path}")
         logger.info(f"Loading weights from provided path: {weights_path}")
-    elif model_location_generator is not None and "TT_GH_CI_INFRA" in os.environ:
+    elif model_location_generator is not None and _tt_public_contains('TT_GH_CI_INFRA'):
         # CI environment - use model_location_generator to download from S3
         model_path = model_location_generator("vision-models/efficientdetd0", model_subdir="", download_if_ci_v2=True)
         weights_path = os.path.join(model_path, "efficientdet-d0.pth")

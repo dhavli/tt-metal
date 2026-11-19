@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import re
@@ -877,7 +878,7 @@ def get_hf_model_name(model_path: str) -> str:
 
 
 def get_hf_tt_cache_path(model_path: str) -> str:
-    tt_cache_home = os.getenv("TT_CACHE_HOME", "/mnt/MLPerf/huggingface/tt_cache/")
+    tt_cache_home = _tt_public_getenv("TT_CACHE_HOME", "/mnt/MLPerf/huggingface/tt_cache/")
     if not os.path.exists(tt_cache_home):
         tt_cache_home = "model_cache"
 

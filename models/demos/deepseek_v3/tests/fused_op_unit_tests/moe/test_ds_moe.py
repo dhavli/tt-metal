@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import json
 import os
 from copy import deepcopy
@@ -56,10 +57,10 @@ def reference_model(hf_config):
     [
         ("decode", 1),
         ("prefill", 128),
-        pytest.param("prefill", 1024, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 8192, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 32768, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
-        pytest.param("prefill", 131072, marks=pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 1024, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 8192, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 32768, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
+        pytest.param("prefill", 131072, marks=pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Skip in CI")),
     ],
 )
 @pytest.mark.parametrize("weight_type", [pytest.param("real", id="real_weights")])
@@ -92,7 +93,7 @@ def test_ds_moe_forward(
     if not program_cache_enabled:
         mesh_device.disable_and_clear_program_cache()
 
-    perf_mode_enabled = os.getenv(DEVICE_PERF_ENV_VAR) is not None
+    perf_mode_enabled = _tt_public_getenv(DEVICE_PERF_ENV_VAR) is not None
     if perf_mode_enabled:
         logger.info(
             f"[{DEVICE_PERF_ENV_VAR}] Device perf mode enabled; running initial setup and correctness pass first"
@@ -233,7 +234,7 @@ def test_ds_moe_forward(
 )
 @pytest.mark.timeout(1800)
 def test_ds_moe_forward_device_perf(mode, seq_len):
-    requested_system_name = os.getenv("MESH_DEVICE")
+    requested_system_name = _tt_public_getenv("MESH_DEVICE")
     if requested_system_name is None:
         raise ValueError("Environment variable $MESH_DEVICE is not set. Please set it to T3K, DUAL, QUAD, or TG.")
     mesh_shape = system_name_to_mesh_shape(requested_system_name.upper())

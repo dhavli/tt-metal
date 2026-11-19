@@ -8,6 +8,7 @@ models (n_heads == n_kv_heads) on multi-device meshes.
 Regression test for: ShardTensor2dMesh producing incorrect weight shapes
 when n_heads == n_kv_heads on N300 (1x2 mesh).
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -22,7 +23,7 @@ import ttnn
     "mesh_device",
     [
         {"N150": (1, 1), "N300": (1, 2), "T3K": (1, 8), "TG": (8, 4)}.get(
-            os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids())
+            _tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids())
         )
     ],
     indirect=True,

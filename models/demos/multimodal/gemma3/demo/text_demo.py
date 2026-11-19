@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import hashlib
 import json
 import os
@@ -281,7 +282,7 @@ def create_tt_page_table(global_batch_size, data_parallel, paged_attention_confi
         # Use identity logical→physical mapping (slot i holds logical block i). Random
         # permutation is valid for stress but can mask or trigger paged-KV path bugs.
         # Set GEMMA3_SHUFFLE_PAGE_TABLE=1 to restore the previous randomized layout.
-        if os.environ.get("GEMMA3_SHUFFLE_PAGE_TABLE", "").lower() in ("1", "true", "yes"):
+        if _tt_public_getenv("GEMMA3_SHUFFLE_PAGE_TABLE", "").lower() in ("1", "true", "yes"):
             permutation = torch.randperm(n_blocks)
             reverse_permutation = torch.argsort(permutation)
         else:
@@ -350,7 +351,7 @@ def prepare_generator_args(
 
 
 def _gemma3_text_demo_model_key() -> str:
-    hf_model = os.getenv("HF_MODEL", "").lower()
+    hf_model = _tt_public_getenv("HF_MODEL", "").lower()
     if "4b" in hf_model:
         return "gemma-3-4b"
     return "gemma-3-27b"
@@ -808,7 +809,7 @@ def _gemma3_text_demo_device_params():
             "P300": (1, 2),
             "P150x4": (1, 4),
             "P150x8": (1, 8),
-        }.get(os.environ.get("MESH_DEVICE"), len(ttnn.get_device_ids()))
+        }.get(_tt_public_getenv("MESH_DEVICE"), len(ttnn.get_device_ids()))
     ],
     indirect=True,
 )
@@ -842,7 +843,7 @@ def test_demo_text(
         pytest.skip("CI only runs the CI-only tests")
 
     # TODO: Remove this once all batch sizes are supported on TG
-    if os.environ.get("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
+    if _tt_public_getenv("MESH_DEVICE") == "TG" and batch_size not in [1, 32]:
         pytest.skip("TG only supports batch 1 and 32")
 
     print_to_file = False  # Enable this flag to print the output of all users to a file
@@ -881,7 +882,7 @@ def test_demo_text(
 
     # Layer-by-layer decode stats: export TT_DECODE_MODULE_DIAG=1 then grep DECODE_DIAG in the log.
     # Trace must be off during capture; we force that here so one env var is enough.
-    if os.environ.get("TT_DECODE_MODULE_DIAG", "").lower() in ("1", "true", "yes"):
+    if _tt_public_getenv("TT_DECODE_MODULE_DIAG", "").lower() in ("1", "true", "yes"):
         if enable_trace:
             logger.warning(
                 "[DECODE_DIAG] TT_DECODE_MODULE_DIAG=1 → forcing enable_trace=False "
@@ -890,7 +891,7 @@ def test_demo_text(
         enable_trace = False
 
     # HF reference dumps (TT_DECODE_HF_REF=1) need the same no-trace rule as DECODE_DIAG.
-    if os.environ.get("TT_DECODE_HF_REF", "").lower() in ("1", "true", "yes"):
+    if _tt_public_getenv("TT_DECODE_HF_REF", "").lower() in ("1", "true", "yes"):
         if enable_trace:
             logger.warning(
                 "[HF_REF] TT_DECODE_HF_REF=1 → forcing enable_trace=False "
@@ -928,7 +929,7 @@ def test_demo_text(
         pytest.skip(f"Invalid number of DP groups: {data_parallel}, for {num_devices} devices")
 
     if is_ci_env:
-        llama_dir = os.getenv("LLAMA_DIR", "")
+        llama_dir = _tt_public_getenv("LLAMA_DIR", "")
         is_33_70b = "3.3-70B" in llama_dir
         is_32_1b = "3.2-1B" in llama_dir
         is_31_8b = "3.1-8B" in llama_dir

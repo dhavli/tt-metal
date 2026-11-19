@@ -16,6 +16,7 @@ This fused op tests the entire TopKRouter forward pass including:
 This is a decode-only fused op (seq_len=1).
 No CCL ops, so single device test is supported.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -464,7 +465,7 @@ def _run_router_test(
         return gpt_oss_router_ttnn(tt_hidden_states, tt_router, use_throughput_experts)
 
     # Device performance measurement mode (when env var is set)
-    if os.getenv(DEVICE_PERF_ENV_VAR) is not None:
+    if _tt_public_getenv(DEVICE_PERF_ENV_VAR) is not None:
         logger.info("Skipping e2e perf measurement during device-perf profiling.")
         from tracy import signpost
 

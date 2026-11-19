@@ -25,6 +25,7 @@ Emits a single greppable ``DG_VLLM_SERVING_SMOKE_SUCCESS ...`` line on success a
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import hashlib
@@ -67,7 +68,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--checkpoint",
-        default=os.environ.get("DG_CKPT", "/home/zni/dg_models/diffusiongemma-26B-A4B-it"),
+        default=_tt_public_getenv("DG_CKPT", "/home/zni/dg_models/diffusiongemma-26B-A4B-it"),
         help="HF checkpoint directory or model id",
     )
     parser.add_argument("--mesh", default="P150x4", help="mesh label or ROWSxCOLS (QB2 = P150x4)")
@@ -168,7 +169,7 @@ def _resolve_upfront(args):
             "--upfront requires --gumbel-mode device (the only materialized source), got "
             f"{args.gumbel_mode!r}. 'chunked'/'argmax' are not materialized full-tensor sources."
         )
-    if int(os.environ.get("DG_TRACE_REGION_SIZE", "0")) <= 0:
+    if int(_tt_public_getenv("DG_TRACE_REGION_SIZE", "0")) <= 0:
         raise ValueError("--upfront requires DG_TRACE_REGION_SIZE>0 (the mesh is opened with it reserved)")
     if args.max_denoising_steps != UPFRONT_DENOISE_STEPS:
         logger.warning(
@@ -307,12 +308,12 @@ def run(args) -> dict:
             "max_seq_len": args.max_seq_len,
             "hybrid_kv": True,
             "seed": args.seed,
-            "DG_SELFCOND_PRECHUNK_EMBED": os.environ.get("DG_SELFCOND_PRECHUNK_EMBED", "<unset>"),
+            "DG_SELFCOND_PRECHUNK_EMBED": _tt_public_getenv("DG_SELFCOND_PRECHUNK_EMBED", "<unset>"),
             "resolved_selfcond_prechunk": self_conditioning_embedding_prechunk_enabled(),
-            "DG_SELFCOND_LOGITS_L1": os.environ.get("DG_SELFCOND_LOGITS_L1", "<unset>"),
+            "DG_SELFCOND_LOGITS_L1": _tt_public_getenv("DG_SELFCOND_LOGITS_L1", "<unset>"),
             "resolved_selfcond_logits_l1": self_conditioning_logits_l1_mode(),
-            "DG_TRACE_REGION_SIZE": os.environ.get("DG_TRACE_REGION_SIZE", "<unset>"),
-            "TT_METAL_WATCHER": os.environ.get("TT_METAL_WATCHER", "<unset>"),
+            "DG_TRACE_REGION_SIZE": _tt_public_getenv("DG_TRACE_REGION_SIZE", "<unset>"),
+            "TT_METAL_WATCHER": _tt_public_getenv("TT_METAL_WATCHER", "<unset>"),
             "prompt_len": prompt_len,
             "prompt_aligned_256": bool(prompt_len % args.canvas_length == 0),
             "cache_len": cache_len,

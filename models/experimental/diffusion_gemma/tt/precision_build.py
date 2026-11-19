@@ -28,6 +28,7 @@ first bfp8 build regenerates the expert tensors from the checkpoint.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -49,8 +50,8 @@ def dg_experts_dtype_override():
     ``DG_EXPERTS_DTYPE`` (``bf16`` | ``bfp8`` | ``fp32``) takes precedence; ``DG_EXPERTS_BFP8=1``
     is shorthand for ``bfp8``. Returns ``None`` when neither is set (default bf16 behaviour).
     """
-    val = os.getenv("DG_EXPERTS_DTYPE")
-    if not val and os.getenv("DG_EXPERTS_BFP8") == "1":
+    val = _tt_public_getenv("DG_EXPERTS_DTYPE")
+    if not val and _tt_public_getenv("DG_EXPERTS_BFP8") == "1":
         val = "bfp8"
     if not val:
         return None
@@ -96,8 +97,8 @@ def create_tt_model_dg(mesh_device, **kwargs):
 
     model_path = (
         model_path
-        or os.getenv("HF_MODEL")
-        or os.getenv("GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it")
+        or _tt_public_getenv("HF_MODEL")
+        or _tt_public_getenv("GEMMA4_MODEL_PATH", "/mnt/MLPerf/tt_dnn-models/google/gemma-4-26B-A4B-it")
     )
 
     hf_config = Gemma4ModelArgs.load_hf_config(model_path)

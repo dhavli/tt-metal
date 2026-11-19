@@ -37,6 +37,7 @@ reference at ``models/tt_transformers/tests/reference_outputs/<basename(HF_MODEL
 (ground-truth real-text targets, PERF.md-comparable). The loader supports both the
 legacy half-split format and a metadata-rich format carrying ``prompt_len``.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -213,7 +214,7 @@ PERF_TOLERANCE = 0.05
 def _sampling_bucket() -> str:
     """Map SAMPLING_MODE to a perf-gate bucket. Non-topk on-device modes (e.g. force-argmax)
     fall into ``on_device_topk`` so they stay gated, never silently un-gated."""
-    return "host" if os.environ.get("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
+    return "host" if _tt_public_getenv("SAMPLING_MODE", "host").lower() == "host" else "on_device_topk"
 
 
 _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
@@ -224,7 +225,7 @@ _MESH_DEVICE_TO_SHAPE: dict[str, tuple[int, int]] = {
 
 
 def _ttnn_mesh_device_param_from_env() -> dict:
-    env = os.environ.get("MESH_DEVICE", "").strip()
+    env = _tt_public_getenv("MESH_DEVICE", "").strip()
     if not env:
         pytest.skip(
             "MESH_DEVICE must be set (e.g. N150, N300 or T3K). See module docstring.",
@@ -254,7 +255,7 @@ pytestmark = [
         "ttnn_mesh_device",
         [_ttnn_mesh_device_param_from_env()],
         indirect=True,
-        ids=[os.environ.get("MESH_DEVICE", "mesh").strip() or "mesh"],
+        ids=[_tt_public_getenv("MESH_DEVICE", "mesh").strip() or "mesh"],
     ),
 ]
 
@@ -285,7 +286,7 @@ def get_device_name(mesh_device: ttnn.MeshDevice) -> str:
 def lazy_weight_cache_dir_for_demo(mesh_device: ttnn.MeshDevice, hf_model_id: str) -> Path:
     device_name = get_device_name(mesh_device)
     hf = hf_model_id.strip("/")
-    tt_cache = os.getenv("TT_CACHE_PATH")
+    tt_cache = _tt_public_getenv("TT_CACHE_PATH")
     if tt_cache:
         root = Path(tt_cache) / device_name
     else:
@@ -426,7 +427,7 @@ def create_model(
     ``LLAMA32_1B_PERFORMANCE``) — both defined in ``llama32_1b/model.py`` and grounded
     in TTTv1's ``DecodersPrecision`` for Llama-3.2-1B-Instruct.
     """
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
 
     precision = LLAMA32_1B_PERFORMANCE if optimizations == "performance" else LLAMA32_1B_ACCURACY
@@ -578,7 +579,7 @@ def _run_dp_smoke(
     """
     _dp_tp_devices_or_skip(mesh_device, data_parallel)
 
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
     _skip_unless_heads_divide_mesh(mesh_device, hf_model)
     precision = LLAMA32_1B_PERFORMANCE if optimizations == "performance" else LLAMA32_1B_ACCURACY
 
@@ -588,7 +589,7 @@ def _run_dp_smoke(
     # One prompt per DP group (load_input_prompts pads/truncates to the requested count).
     prompts = load_input_prompts(data_parallel)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -688,7 +689,7 @@ def test_llama32_1b(test_config, mesh_device, optimizations):
     device_name = get_device_name(mesh_device)
     expected = EXPECTED_METRICS.get(optimizations, {}).get(device_name, {})
     model = None
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
 
     try:
         # ci-b1-DP-*: single-user data-parallel smoke. Builds N models itself (one per
@@ -768,7 +769,7 @@ def test_llama32_1b(test_config, mesh_device, optimizations):
 
 def _run_token_accuracy(model: Llama32_1BTransformer1D, mesh_device, expected):
     """Teacher-forcing token accuracy vs ``.refpt``."""
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
     reference_tokens, top5_tokens, prompt_len, metadata = load_reference_data(hf_model)
 
     if reference_tokens.dim() > 1:
@@ -804,7 +805,7 @@ def _run_token_accuracy(model: Llama32_1BTransformer1D, mesh_device, expected):
         prompt_len,
         metadata_aligned=has_prompt_len_metadata,
     )
-    is_ci_env = os.environ.get("CI") == "true"
+    is_ci_env = _tt_public_getenv("CI") == "true"
     profiler = BenchmarkProfiler()
     profiler.start("run")
     # run_teacher_forcing times the prefill + per-step (teacher-forced) decode loop and, given the
@@ -912,7 +913,7 @@ def _run_perf_benchmark(
     ``effective = min(requested, max_seq_len - prompt_bucket - margin)`` so the high-water
     decode position never overruns the page table (the ``batch-32-ci`` leg requests 1024).
     """
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # On-device sampling toggle for N150/N300 evidence-gathering (see sampling handoff docs):
@@ -920,7 +921,7 @@ def _run_perf_benchmark(
     #   on_device       -> greedy temp=0,k=1,p=0 => trace-captured FORCE-ARGMAX full-vocab path
     #   on_device_topk  -> temp=0,k=32,p=0.08    => trace-captured TOP-K op path (gathers only
     #                      the [*,32] tuples; PERF.md-parity recipe, faster than force-argmax)
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),
@@ -930,7 +931,7 @@ def _run_perf_benchmark(
         if sampling_mode in _on_device_params and getattr(model, "supports_on_device_sampling", False)
         else None
     )
-    pipeline_readback = os.environ.get("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
+    pipeline_readback = _tt_public_getenv("PIPELINE_READBACK", "1").lower() not in ("0", "false", "no")
     logger.info(f"[{case_name}] SAMPLING_MODE={sampling_mode} -> sampling_params={sampling_params}")
     logger.info(f"[{case_name}] PIPELINE_READBACK={pipeline_readback}")
 
@@ -972,7 +973,7 @@ def _run_perf_benchmark(
 
         # BenchmarkProfiler brackets the timed prefill/decode regions inside run_perf_benchmark
         # (default-None ⇒ byte-inert for every other caller) so we can emit CI perf telemetry.
-        is_ci_env = os.environ.get("CI") == "true"
+        is_ci_env = _tt_public_getenv("CI") == "true"
         profiler = BenchmarkProfiler()
         profiler.start("run")
         result = run_perf_benchmark(
@@ -1056,7 +1057,7 @@ def _run_eval_repeat_batch32(model: Llama32_1BTransformer1D, mesh_device):
     Honors the same ``SAMPLING_MODE`` knob as ``_run_perf_benchmark`` (default host argmax —
     deterministic and mesh-agnostic, the recommended default for the determinism assert).
     """
-    hf_model = os.environ.get("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+    hf_model = _tt_public_getenv("HF_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
     tokenizer = model.demo_tokenizer
 
     # Batched-prefill A/B knob (parity caveat #12): DISABLE_BATCHED_PREFILL=1 forces the pure
@@ -1091,7 +1092,7 @@ def _run_eval_repeat_batch32(model: Llama32_1BTransformer1D, mesh_device):
     def tokenize_fn(ps):
         return tokenize_prompts(ps, tokenizer)
 
-    sampling_mode = os.environ.get("SAMPLING_MODE", "host").lower()
+    sampling_mode = _tt_public_getenv("SAMPLING_MODE", "host").lower()
     _on_device_params = {
         "on_device": SamplingParams(temperature=0.0, top_k=1, top_p=0.0),
         "on_device_topk": SamplingParams(temperature=0.0, top_k=32, top_p=0.08),

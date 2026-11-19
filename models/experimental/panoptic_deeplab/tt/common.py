@@ -7,6 +7,7 @@ Common utilities for Panoptic DeepLab.
 This module provides functions used across the Panoptic DeepLab model,
 including model creation, pipeline setup, input/output processing, and validation.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 from typing import Callable, Tuple, List, Optional, Union
 from loguru import logger
@@ -98,7 +99,7 @@ def get_panoptic_deeplab_resource_path(resource_type, model_location_generator=N
     base_dir = _get_base_directory(test_file_path)
 
     # Environment-based path resolution
-    if model_location_generator is None or "TT_GH_CI_INFRA" not in os.environ:
+    if model_location_generator is None or (not _tt_public_contains('TT_GH_CI_INFRA')):
         # Local environment
         resource_path = os.path.join(base_dir, config["local_subdir"])
         if config["filename"]:

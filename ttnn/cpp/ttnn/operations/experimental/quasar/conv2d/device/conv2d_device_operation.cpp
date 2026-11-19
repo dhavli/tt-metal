@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2025 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -70,8 +71,8 @@ tt::tt_metal::TensorSpec Conv2dDeviceOperation::compute_output_specs(
     // tilized shape here for block-sharded created a spec-vs-fused-Program-A mismatch -> TILE_COUNTERS. Keep
     // this HEIGHT_SHARDED-only; block-sharded falls back to the fused conv.
     const auto& in_mem = tensor_args.a.memory_config();
-    if (((std::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) ||
-         (std::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") != nullptr)) &&
+    if (((tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") != nullptr) ||
+         (tt_stack_public::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") != nullptr)) &&
         in_mem.is_sharded() && in_mem.memory_layout() == TensorMemoryLayout::HEIGHT_SHARDED) {
         const uint32_t m_ntiles = args.parallelization_config.per_core_out_matrix_height_ntile;
         // FULL im2col K, in tiles = the PREPARED weights' K-height (b.padded_shape()[2] / TILE_HEIGHT). This is
@@ -189,8 +190,8 @@ void Conv2dDeviceOperation::validate_on_program_cache_miss(
     // OPTION B / Program A (TT_METAL_QSR_CONV_SPLIT_PROGRAM): the op output is the tilized activation
     // (width = act_block_w_ntiles = K), NOT the conv output (width = per_core_out_matrix_width_ntile = N),
     // so the N-width / out_subblock checks below do not apply. Skip them for the split-program path.
-    if (args.memory_config.is_sharded() && std::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") == nullptr &&
-        std::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") == nullptr) {
+    if (args.memory_config.is_sharded() && tt_stack_public::getenv("TT_METAL_QSR_CONV_SPLIT_PROGRAM") == nullptr &&
+        tt_stack_public::getenv("TT_METAL_QSR_CONV_UNPACK_TILIZE") == nullptr) {
         uint32_t per_core_out_matrix_width_ntiles = args.parallelization_config.per_core_out_matrix_width_ntile;
         uint32_t out_width_ntiles =
             compute_output_specs(args, tensor_args).padded_shape()[-1] / tt::constants::TILE_WIDTH;

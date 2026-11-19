@@ -7,6 +7,7 @@ Device cache is bfloat8_b, while the golden is fp32.
 """
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from pathlib import Path
@@ -153,12 +154,12 @@ def dflash_kv_cache_pcc_check(
     ``record_only``, and returns 1.0 (unmeasured) when no golden is available. Host-side counterpart of
     ``dflash_kv_table_pcc_check`` below. ``rope_convention`` reindexes the golden K to the device's stored-K
     convention (see :func:`_load_golden_kv`)."""
-    golden_dir = Path(golden_dir or os.environ.get(GOLDEN_KV_ENV) or GOLDEN_KV_DEFAULT)
+    golden_dir = Path(golden_dir or _tt_public_getenv(GOLDEN_KV_ENV) or GOLDEN_KV_DEFAULT)
     if not golden_dir.is_dir():
         logger.info(f"[dflash-pcc] SKIPPED: golden dir {golden_dir} not present (set {GOLDEN_KV_ENV})")
         return 1.0
     if threshold is None:
-        threshold = float(os.environ.get(PCC_ENV, DEFAULT_PCC))
+        threshold = float(_tt_public_getenv(PCC_ENV, DEFAULT_PCC))
 
     golden_k, golden_v = _load_golden_kv(
         golden_dir,
@@ -262,7 +263,7 @@ def dflash_kv_table_pcc_check(
     cfg_ids = {"k": ids[0], "v": ids[1]}
     num_kv_heads = len(ids[0])
 
-    golden_dir = golden_dir or os.environ.get(GOLDEN_KV_ENV, "").strip()
+    golden_dir = golden_dir or _tt_public_getenv(GOLDEN_KV_ENV, "").strip()
     if not golden_dir:
         logger.info(
             f"[dflash-pcc] table carries the drafter caches ({num_kv_heads} kv-heads x K/V) but "

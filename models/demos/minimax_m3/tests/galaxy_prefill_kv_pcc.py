@@ -38,6 +38,7 @@ Run (after weights are present on disk):
     PREFILL_TRACE_DIR=$HF_MODEL/golden/longbook_10240 \
     python3 models/demos/minimax_m3/tests/galaxy_prefill_kv_pcc.py
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import json
 import math
@@ -104,7 +105,7 @@ def check_kv_pcc(runtime, kv_cache, golden_dir, n_tokens, num_layers, hf_config)
 
     from models.common.utility_functions import comp_pcc
 
-    threshold = float(os.environ.get("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
+    threshold = float(_tt_public_getenv("PREFILL_STANDALONE_CHUNKED_PCC", "0.88"))
     head_dim = hf_config.head_dim
     rotary_dim = getattr(hf_config, "rotary_dim", head_dim)
     half = rotary_dim // 2
@@ -155,7 +156,7 @@ def main():
 
     # Perf CI only: same guard as Kimi/GLM no_pcc / ring-joint SDPA (pytest skipif is_high_power).
     # Accuracy/KV-PCC leaves PREFILL_REQUIRE_HIGH_POWER unset so bh_sc1 hosts are fine.
-    if os.getenv("PREFILL_REQUIRE_HIGH_POWER", "0") == "1":
+    if _tt_public_getenv("PREFILL_REQUIRE_HIGH_POWER", "0") == "1":
         from models.demos.deepseek_v3_d_p.utils.smbus_telemetry import get_tdp_limit_max, is_high_power
 
         if not is_high_power():
@@ -167,15 +168,15 @@ def main():
             )
             return 0
 
-    golden_dir = os.environ.get("PREFILL_TRACE_DIR")
+    golden_dir = _tt_public_getenv("PREFILL_TRACE_DIR")
     if not golden_dir:
         print("ERROR: set PREFILL_TRACE_DIR to a golden trace dir", file=sys.stderr)
         return 1
     token_ids = list(json.load(open(Path(golden_dir) / "metadata.json"))["token_ids"])
     n_tokens = len(token_ids)
-    chunked = os.getenv("PREFILL_CHUNKED", "0") == "1"
-    chunk_size = int(os.getenv("PREFILL_CHUNK_SIZE", "5120"))
-    tps_iters = int(os.getenv("PREFILL_TPS_ITERS", "1"))
+    chunked = _tt_public_getenv("PREFILL_CHUNKED", "0") == "1"
+    chunk_size = int(_tt_public_getenv("PREFILL_CHUNK_SIZE", "5120"))
+    tps_iters = int(_tt_public_getenv("PREFILL_TPS_ITERS", "1"))
 
     rows, cols = 8, 4  # SP=8 (rows), TP=4 (cols), EP=32
     n_chunks, chunk, total = plan(n_tokens, chunk_size, chunked)
@@ -214,7 +215,7 @@ def main():
         model_args = ModelArgs(mesh_device=mesh)  # HF_MODEL
         hf_config = model_args.hf_config
         num_layers = hf_config.num_hidden_layers
-        nl_override = os.getenv("PREFILL_NUM_LAYERS")
+        nl_override = _tt_public_getenv("PREFILL_NUM_LAYERS")
         if nl_override:
             num_layers = int(nl_override)
             hf_config.num_hidden_layers = num_layers  # build/run only the first N decoder layers
@@ -224,7 +225,7 @@ def main():
             os.environ.setdefault("M3_LOAD_NLAYERS", str(num_layers))
             print(
                 f"[prefill-pcc] PREFILL_NUM_LAYERS={num_layers}: first {num_layers} layers only "
-                f"(M3_LOAD_NLAYERS={os.environ['M3_LOAD_NLAYERS']})",
+                f"(M3_LOAD_NLAYERS={_tt_public_getitem('M3_LOAD_NLAYERS')})",
                 flush=True,
             )
 
@@ -239,13 +240,13 @@ def main():
         # EXPERT_DTYPE selects the MoE routed-expert weight dtype (bf4 default / bf8). The tilized
         # cache holds both, so either stays on the fast cache path. Same knob name as the generate
         # harnesses (galaxy_generate_m3*.py). It feeds TtPrefillRuntimeConfig.expert_weight_dtype below.
-        expert_dtype = ttnn.bfloat8_b if os.getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
+        expert_dtype = ttnn.bfloat8_b if _tt_public_getenv("EXPERT_DTYPE", "bf4") == "bf8" else ttnn.bfloat4_b
         print(
-            f"[prefill-pcc] expert_dtype={expert_dtype} (EXPERT_DTYPE={os.getenv('EXPERT_DTYPE', 'bf4')})", flush=True
+            f"[prefill-pcc] expert_dtype={expert_dtype} (EXPERT_DTYPE={_tt_public_getenv('EXPERT_DTYPE', 'bf4')})", flush=True
         )
-        force_load = os.getenv("M3_FORCE_LOAD_WEIGHTS") == "1"
+        force_load = _tt_public_getenv("M3_FORCE_LOAD_WEIGHTS") == "1"
         cache_complete = weight_cache_is_complete(cache_path, hf_config, num_layers, expert_dtype)
-        cache_only = not force_load and (os.getenv("M3_WEIGHTS_FROM_CACHE") == "1" or cache_complete)
+        cache_only = not force_load and (_tt_public_getenv("M3_WEIGHTS_FROM_CACHE") == "1" or cache_complete)
         if cache_only:
             print(
                 "[prefill-pcc] tilized weight cache complete -> loading from cache, "
@@ -347,10 +348,10 @@ def main():
         )
 
         # --- perf gate: whole-sequence tok/s vs PREFILL_EXPECTED_TPS +/- PREFILL_PERF_MARGIN ---
-        expected_tps_env = os.environ.get("PREFILL_EXPECTED_TPS")
+        expected_tps_env = _tt_public_getenv("PREFILL_EXPECTED_TPS")
         if expected_tps_env is not None:
             expected_tps = float(expected_tps_env)
-            margin = float(os.environ.get("PREFILL_PERF_MARGIN", "0.05"))
+            margin = float(_tt_public_getenv("PREFILL_PERF_MARGIN", "0.05"))
             low = expected_tps * (1.0 - margin)
             high = expected_tps * (1.0 + margin)
             print(
@@ -365,7 +366,7 @@ def main():
 
         # --- accuracy: per-layer KV PCC vs golden (skipped in perf-only mode; synthetic
         # traces carry only metadata.json, so there is no golden KV cache to compare against) ---
-        if os.environ.get("PREFILL_SKIP_PCC") == "1":
+        if _tt_public_getenv("PREFILL_SKIP_PCC") == "1":
             print("[prefill-pcc] PREFILL_SKIP_PCC=1 -> skipping per-layer KV PCC", flush=True)
         else:
             check_kv_pcc(runtime, kv_cache, golden_dir, n_tokens, num_layers, hf_config)

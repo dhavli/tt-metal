@@ -4,6 +4,7 @@
 """Hugging Face product adaptor for Qwen2.5-Coder-32B-Instruct."""
 
 from __future__ import annotations
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ DEFAULT_HF_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"
 
 def _local_files_only() -> bool:
     return any(
-        os.getenv(name, "").lower() in {"1", "true", "yes"} for name in ("CI", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+        _tt_public_getenv(name, "").lower() in {"1", "true", "yes"} for name in ("CI", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
     )
 
 
@@ -183,8 +184,8 @@ def _trace_seq_lens(num_devices: int, max_prefill_chunk_size: int, max_seq_len: 
 def _cache_path(hf_model: str, mesh_device, cache_dir: Path | str | None) -> Path:
     if cache_dir is not None:
         path = Path(cache_dir)
-    elif os.getenv("TT_CACHE_PATH"):
-        path = Path(os.environ["TT_CACHE_PATH"])
+    elif _tt_public_getenv("TT_CACHE_PATH"):
+        path = Path(_tt_public_getitem('TT_CACHE_PATH'))
     else:
         path = Path("model_cache") / hf_model / "T3K"
     path.mkdir(parents=True, exist_ok=True)
@@ -358,7 +359,7 @@ def from_pretrained(
         max_batch_size=max_batch_size,
         cluster_shape=list(mesh_device.shape),
         kv_cache_dtype=precision.kv_cache_dtype,
-        batched_prefill_batched_extract=not os.environ.get("DISABLE_BATCHED_EXTRACT"),
+        batched_prefill_batched_extract=not _tt_public_getenv("DISABLE_BATCHED_EXTRACT"),
     )
     tokenizer = load_tokenizer(hf_model, hf_revision)
     return Qwen25Coder32BForCausalLM(

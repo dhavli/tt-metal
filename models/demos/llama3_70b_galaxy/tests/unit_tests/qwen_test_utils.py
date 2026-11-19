@@ -8,6 +8,7 @@ The attention, MLP, decoder, prefill and e2e-accuracy tests all select their exe
 (Wormhole prefetcher vs Blackhole no-prefetcher) and fabric config from the detected architecture.
 Keeping the detection here avoids the test files drifting apart.
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 import ttnn
@@ -26,7 +27,7 @@ def is_blackhole_galaxy():
             return False
     except Exception:
         pass
-    arch = os.environ.get("ARCH_NAME", "")
+    arch = _tt_public_getenv("ARCH_NAME", "")
     if not arch:
         try:
             arch = ttnn.get_arch_name()

@@ -1,3 +1,4 @@
+#include "tt-metalium/tt_stack_public_defaults.hpp"
 // SPDX-FileCopyrightText: © 2024 Tenstorrent USA, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
@@ -897,14 +898,14 @@ const NativeTuning& native_tuning() {
     static const NativeTuning tuning = [] {
         // Unset, empty and "0" all mean OFF -- the A/B reference arm depends on =0 meaning off.
         const auto env_bool = [](const char* name) {
-            const char* v = std::getenv(name);
+            const char* v = tt_stack_public::getenv(name);
             return v != nullptr && v[0] != '\0' && v[0] != '0';
         };
         // max_value is per-knob and required: strtol returns long, so 4294967296 passes `> 0` and then
         // truncates to 0, and std::lcm(0, x) makes the gate divide by zero. Depth 40 is a normal sweep
         // point; 40 reader threads is not -- hence different bounds.
         const auto env_u32 = [](const char* name, uint32_t fallback, uint32_t max_value) {
-            const char* v = std::getenv(name);
+            const char* v = tt_stack_public::getenv(name);
             if (v == nullptr || v[0] == '\0') {
                 return fallback;
             }

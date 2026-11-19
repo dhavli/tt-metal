@@ -28,7 +28,8 @@ struct MatmulDeviceOperation {
         MatmulMeshWorkloadMultiCoreReuseMcast1DProgramFactory,  // gather_in0 legacy path
         MatmulMultiCoreReuseMcast2DProgramFactory,
         MatmulMultiCoreReuseMultiCastDRAMShardedProgramFactory,
-        MatmulMultiCoreReuseBatchedHSDRAMShardedProgramFactory>;
+        MatmulMultiCoreReuseBatchedHSDRAMShardedProgramFactory,
+        MatmulDRAMShardedMulticoreProgramFactory>;  // tt-stack 0040 (#58922), cores_per_bank > 0 only
 
     static program_factory_t select_program_factory(
         const operation_attributes_t& operation_attributes, const tensor_args_t& tensor_args);

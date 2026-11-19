@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 import math
 import os
 import re
@@ -84,7 +85,7 @@ def _reset_op_log():
 
 
 def _log_op(name, t):
-    if os.environ.get("RESNET_PCC_LOG") != "1":
+    if _tt_public_getenv("RESNET_PCC_LOG") != "1":
         return t
     global _PCC_OP_IDX
     _PCC_OP_IDX += 1
@@ -108,7 +109,7 @@ def _log_op(name, t):
                 f"[GOLDENPCC] op{idx:03d} {name} pcc={pcc:.6f} finite={finite_frac:.6f} "
                 f"dev={tuple(tt.shape)} gold={tuple(g.shape)}" + ("  <<< DIVERGES" if not (pcc >= 0.98) else "")
             )
-        dump = os.environ.get("RESNET_PCC_DUMP")
+        dump = _tt_public_getenv("RESNET_PCC_DUMP")
         if dump:
             # Sanitize path components before touching the filesystem (path-traversal / SAST): the op
             # `name` becomes a filename, so strip anything that isn't a safe filename char (no path
@@ -1082,7 +1083,7 @@ class resnet50:
         # Log the raw folded weight/bias finiteness so a rerun tells us whether the inf is in the
         # WEIGHTS (preprocessing padding garbage) or the device conv COMPUTE (uninitialized output
         # tiles). Complements the on_device=False host A/B (same fold output + weights, no device conv).
-        if os.environ.get("RESNET_PCC_LOG") == "1":
+        if _tt_public_getenv("RESNET_PCC_LOG") == "1":
             try:
                 _wt = ttnn.to_torch(self.conv1_weight_tensor).float()
                 _msg = (
@@ -1420,7 +1421,7 @@ class resnet50:
         # bugs), so this lets the e2e run end-to-end through the WORKING height-sharded layers 1-3 (stem host-fold
         # + host maxpool + layers 1-3 on the split path) for validation on the 2-core emulator. Remove once layer4
         # has a working path (LLK fix or bigger grid num_cores_c>=4).
-        if os.environ.get("TT_METAL_QSR_RESNET_STOP_AFTER_LAYER3") == "1":
+        if _tt_public_getenv("TT_METAL_QSR_RESNET_STOP_AFTER_LAYER3") == "1":
             return x
 
         # [#48552] Quasar: layer4 runs HEIGHT_SHARDED through the SPLIT path (Program A gather+tilize ->

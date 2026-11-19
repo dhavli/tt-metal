@@ -28,6 +28,7 @@ Usage:
     python models/tt_dit/utils/sweep_mm_block_sizes.py \\
         --device-config bh_4x8_sp1_tp0 --shape 9472,3456,5120
 """
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import argparse
 import csv
@@ -1324,7 +1325,7 @@ def test_mm_sweep_worker(device_config, shape):
     cluster_size = cfg["mesh_shape"][cfg["cluster_axis"]]
     M_per_core, K_per_device, N_per_core = get_per_core_dims(shape, cluster_size)
 
-    explicit_combos_str = os.environ.get("MM_SWEEP_EXPLICIT_COMBOS")
+    explicit_combos_str = _tt_public_getenv("MM_SWEEP_EXPLICIT_COMBOS")
     if explicit_combos_str:
         # Each entry: [m_blk, k_blk, n_blk, sb_h, sb_w]
         combos = [tuple(c) for c in json.loads(explicit_combos_str)]
@@ -1373,7 +1374,7 @@ def test_mm_sweep_worker(device_config, shape):
             pytest.skip("All combos failed during warmup")
 
         # Write valid combos (full tuples) so orchestrator can line up CSV rows
-        combos_file = os.environ.get("MM_SWEEP_VALID_COMBOS_FILE")
+        combos_file = _tt_public_getenv("MM_SWEEP_VALID_COMBOS_FILE")
         if combos_file:
             with open(combos_file, "w") as f:
                 json.dump([list(c) for c in valid_combos], f)
@@ -1390,7 +1391,7 @@ def test_mm_sweep_worker(device_config, shape):
 
 
 @pytest.mark.timeout(7200)  # 2 hours — one subprocess per shape
-@pytest.mark.skipif(os.environ.get("CI") == "true", reason="Performance sweep - skip on CI")
+@pytest.mark.skipif(_tt_public_getenv("CI") == "true", reason="Performance sweep - skip on CI")
 @pytest.mark.parametrize("device_config", list(DEVICE_CONFIGS.keys()))
 @pytest.mark.parametrize("shape", SHAPES, ids=SHAPE_IDS)
 def test_mm_sweep(device_config, shape):
@@ -1421,7 +1422,7 @@ def test_mm_sweep(device_config, shape):
     os.environ["TT_METAL_PROFILER_MID_RUN_DUMP"] = "1"
     # Quiet tt-metal C++ warnings during the sweep — only show errors. Worker
     # also reconfigures loguru to ERROR-only.
-    saved_logger_level = os.environ.get("TT_LOGGER_LEVEL")
+    saved_logger_level = _tt_public_getenv("TT_LOGGER_LEVEL")
     os.environ["TT_LOGGER_LEVEL"] = "Error"
 
     # `-s` so the worker's print/tqdm output flows through to the user's terminal.

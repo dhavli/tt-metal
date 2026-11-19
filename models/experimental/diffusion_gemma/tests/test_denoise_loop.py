@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """Critical reference trajectory, drift, halt, and device-parity denoise gates."""
+from models.demos.blackhole.qwen36.public_defaults import getenv as _tt_public_getenv, contains as _tt_public_contains, getitem as _tt_public_getitem
 
 import os
 
@@ -90,7 +91,7 @@ def test_decision_level_fields_distinguish_drifted_trajectories():
 
 
 requires_device = pytest.mark.skipif(
-    os.environ.get("DG_RUN_DEVICE") != "1",
+    _tt_public_getenv("DG_RUN_DEVICE") != "1",
     reason="set DG_RUN_DEVICE=1 to run on a Tenstorrent device",
 )
 
